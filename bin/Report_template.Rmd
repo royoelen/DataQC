@@ -1,0 +1,122 @@
+---
+title: "Data QC report"
+date: "`r format(Sys.time(), '%d/%m/%y')`"
+output: html_document
+params:
+    dataset_name: "unknown"
+    platform: "unknown"
+---
+
+# Dataset
+
+This report is for cohort: **`r params$dataset_name`**.
+
+Expression platform for this cohort is: **`r params$platform`**.
+
+## Genotype QC report
+
+### Overview of the QC steps
+
+```{r, message = FALSE, warning = FALSE}
+library(data.table)
+library(knitr)
+library(ggplot2)
+
+overview_table <- fread("outputfolder_gen/data/summary_table.txt")
+knitr::kable(overview_table)
+```
+
+### PCA on target data
+
+#### Outlier samples
+
+On the next two plots you can see the "outlierness" statistic based on which the samples are declared genetic outliers and removed from the analysis. You should check based on the histogram if the default value is appropriate. If not, adjust it in the pipeline argument and re-run.
+
+![Statistic of outlierness with used threshold.](outputfolder_gen/plots/PC_dist_outliers_S.png)  
+
+![PCA with all samples, outliers outlined.](outputfolder_gen/plots/PCA_outliers.png)  
+
+![PCA with all samples, outliers removed.](outputfolder_gen/plots/Target_PCs_postQC.png)  
+
+#### Loadings of PCs
+
+<!-- ![Loadings of PCs.](outputfolder_gen/plots/Target_PCs_postQC_Loadings.png)  -->
+
+#### Genotype data projected to 1000G superpopulations
+
+1. If you observe a few samples which are different anchestry compared to the majority of samples (e.g. majority of the samples are of EUR ancestry and there are few samples from AFR or SAS), then remove ethnic outliers and re-run the GenotypeQc pipeline without those samples.
+2. If you observe many (>100) samples which are different anchestry compared to the majority of samples (your dataset consists of individuals from several ancestries) then please split your genotype data based on ancestry and rerun this and following pipelines on those datasets separately.
+
+The file `1000G_PC_projections.txt` has been written to the your output folder under `data`. This can be used to manually extract the outlier samples based on their PC projections into 1000G superpopulations. You can use plink/plink 1.9/plink 2.0 to filter samples from initial .bed/.bim/.fam files.
+
+![Genotype samples projected to 1000G superpopulations](outputfolder_gen/plots/SamplesPCsProjectedTo1000G.png)  
+
+#### Assign population for each sample
+
+Based on first 3 genotype PCs, assign the most likely population to each sample, outline those samples which are clearly different.
+
+```{r, fig.height = 7, fig.width = 7, fig.align = "center", echo = FALSE}
+library(dplyr)
+pops <- fread("outputfolder_gen/data/PopAssignResults.txt")
+
+pops <- melt(pops)
+colnames(pops) <- c("Sample", "Superpopulation", "dist") 
+
+pops <- pops %>% 
+group_by(Sample) %>% 
+arrange(dist, .by_group = TRUE) %>% 
+mutate(SamplePopAssign = head(Superpopulation, 1)) %>%
+mutate(Difference = dist[2]/dist[1]) %>%
+mutate(Confidence = case_when(Difference > 2 ~ "confident", Difference <= 2 ~ "not_confient"))
+
+res <- unique(pops[, c(1, 4, 5, 6)])
+
+# Visualise
+ggplot(pops, aes(x = Superpopulation, y = dist, fill = Superpopulation)) + 
+geom_point() + 
+geom_violin(draw_quantiles = 0.5) + 
+theme_bw() + 
+scale_fill_manual(values = c("Target" = "black", 
+"EUR" = "blue", 
+"EAS" = "goldenrod", 
+"AMR" = "lightgrey", 
+"SAS" = "orange", 
+"AFR" = "red"))
+
+```
+
+`r nrow(res[res$SamplePopAssign == "EUR",])` samples in the data are most similar to EUR superpopulation.
+
+`r nrow(res[res$SamplePopAssign == "AMR",])` samples in the data are most similar to AMR superpopulation.
+
+`r nrow(res[res$SamplePopAssign == "EAS",])` samples in the data are most similar to EAS superpopulation.
+
+`r nrow(res[res$SamplePopAssign == "SAS",])` samples in the data are most similar to SAS superpopulation.
+
+`r nrow(res[res$SamplePopAssign == "AFR",])` samples in the data are most similar to AFR superpopulation.
+
+`r res %>% filter(Confidence != "confident") %>% nrow()` samples assignement to the data is not very confident (<2 times difference with second most similar superpopulation).
+
+## Gene expression QC report
+
+### Overview of the QC steps
+
+```{r, message = FALSE, warning = FALSE}
+overview_table <- fread("outputfolder_exp/exp_data_summary/summary_table.txt")
+knitr::kable(overview_table)
+```
+
+### PCA on preprocessed expression data
+
+![PCA scree plot for normalised and log-transformed expression matrix.](outputfolder_exp/exp_plots/PCA_raw_scree_plot.png)
+
+![PCA scree plot for normalised, log-transformed, Z-transformed and inverse normal transformed expression matrix. Outlier samples were removed before re-calculating PCA.](outputfolder_exp/exp_plots/PCA_final_scree_plot.png)
+
+![PCA with all samples, outliers outlined.](outputfolder_exp/exp_plots/PCA_before_and_after.png)  
+
+Explained variance of final PCs (normalised, log-transformed, Z-transformed and inverse normal transformed expression matrix).
+
+```{r, message = FALSE, warning = FALSE}
+overview_pcs <- fread("outputfolder_exp/exp_data_summary/summary_pcs.txt")
+knitr::kable(overview_pcs)
+```

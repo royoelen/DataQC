@@ -1,0 +1,21 @@
+name: eQTLGenPopAssign
+channels:
+  - conda-forge
+  - bioconda
+  - r
+  - defaults
+dependencies:
+  - gcc_linux-64=7.3.0
+  - conda-forge::cairo=1.16.0
+  - conda-forge::r-data.table=1.14.0
+  - conda-forge::r-dplyr=1.0.7
+  - conda-forge::r-ggplot2=3.3.5
+  - conda-forge::r-optparse=1.6.6
+  - conda-forge::r-patchwork=1.1.1
+  - conda-forge::mscorefonts=0.0.1
+  - conda-forge::r-rmarkdown=2.10
+  - conda-forge::r-cairo=1.5_12.2
+  #- bioconda::bioconductor-preprocesscore=1.52.1
+  - bioconda::bioconductor-edger=3.32.1
+
+
