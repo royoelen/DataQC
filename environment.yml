@@ -17,5 +17,7 @@ dependencies:
   - conda-forge::r-cairo=1.5_12.2
   #- bioconda::bioconductor-preprocesscore=1.52.1
   - bioconda::bioconductor-edger=3.32.1
+  - conda-forge::r-hexbin=1.28.1
+  
 
 

@@ -7,6 +7,14 @@ library(patchwork)
 
 setDTthreads(8)
 
+# TODO: check the proper normalization: for original QTL pipeline, probe centering and sample Z-transform was probably used instead of probe Z-transform.
+
+# TODO: for gene QC report, include the following metrics from GTEx:
+# Genes were selected based on expression thresholds of >0.1 TPM in at least 20% of samples and ≥6 reads in at least 20% of samples.
+# Gene length: for 19,960 genes extract the total length of gene CDs, based on latest ENSEMBL
+# https://gist.github.com/slowkow/c6ab0348747f86e2748b
+
+
 # Argument parser
 option_list <- list(
     make_option(c("-e", "--expression_matrix"), type = "character",
@@ -52,7 +60,7 @@ INT_transform <- function(x){
 comp_cv <- function(x){sd(x) / mean(x)}
 shap_test <- function(x){shapiro.test(x)$p.value}
 
-illumina_HT12v3_preprocess <- function(exp, gte, gen){
+illumina_array_preprocess <- function(exp, gte, gen){
     # Leave in only probes for which there is empirical probe mapping info and convert data into matrix
     emp <- fread(args$emp_probe_mapping)
     emp <- emp[, c(1, 2), with = FALSE]
@@ -88,6 +96,36 @@ illumina_HT12v3_preprocess <- function(exp, gte, gen){
     return(and_n)
 }
 
+RNAseq_preprocess <- function(exp, gte, gen){
+    # Leave in only probes for which there is empirical probe mapping info and convert data into matrix
+    colnames(exp)[1] <- "Probe"
+
+    exp$Probe <- as.character(exp$Probe)
+    
+    exp <- as.data.frame(exp)
+    rownames(exp) <- exp$Probe
+    exp <- exp[, -1]
+    exp <- as.matrix(exp)
+
+    # Remove samples which are not in the gte or in genotype data
+    gte <- fread(args$genotype_to_expression_linking, header = FALSE)
+    geno_fam <- fread(args$genotype_samples, header = FALSE)
+    gte <- gte[gte$V1 %in% geno_fam$V2,]
+    
+    message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data"))
+
+    exp <- exp[, colnames(exp) %in% gte$V2]
+    
+    # TMM-normalized counts
+    exp_n <- calcNormFactors(exp, method = "TMM")
+    exp_n <- cpm(exp_n, log = FALSE)
+
+    # log2 transformation (+ add 0.25 for solving issues with log2(0))
+    and_n <- log2(and_n + 0.25)
+
+    return(and_n)
+}
+
 exp_summary <- function(x){
 
     per_gene_mean <- apply(x, 1, mean)
@@ -117,21 +155,24 @@ message(paste("Initially:", nrow(and), "genes/probes and ", ncol(and), "samples"
 
 summary_table <- data.table(Stage = "Unprocessed matrix", Nr_of_features = nrow(and), Nr_of_samples = ncol(and))
 
-
 if (!args$platform %in% c("HT12v3", "HT12v4", "RNAseq", "AffyU291", "AffyHuEx")){stop("Platform has to be one of HT12v3, HT12v4, RNAseq, AffyU291, AffyHuExs")}
 
 # 1.1 data is already appropriately processed ----
 
 # 1.2 Raw Illumina HT12v3 expression array -----
-if (args$platform == "HT12v3"){
-and_p <- illumina_HT12v3_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-}
+if (args$platform %in% c("HT12v3", "HT12v4")){
+and_p <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
 
 summary_table_temp <- data.table(Stage = "After inital preprocessing", Nr_of_features = nrow(and_p), Nr_of_samples = ncol(and_p))
 summary_table <- rbind(summary_table, summary_table_temp)
-
+}
 # 1.3 Raw RNA-seq count matrix ----
+if (args$platform %in% c("RNAseq")){
+and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
 
+summary_table_temp <- data.table(Stage = "After inital preprocessing", Nr_of_features = nrow(and_p), Nr_of_samples = ncol(and_p))
+summary_table <- rbind(summary_table, summary_table_temp)
+}
 
 # QC ----
 ## Calculate PCs and visualise
@@ -147,7 +188,7 @@ summary_pcs$PC <- factor(summary_pcs$PC, levels = paste0("PC", 1:50))
 fwrite(summary_pcs, paste0(args$output, "/exp_data_summary/", "summary_raw_pcs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
 
 p <- ggplot(summary_pcs, aes(x = PC, y = explained_variance)) + geom_bar(stat = "identity") + theme_bw()
-ggsave(paste0(args$output, "/exp_plots/PCA_raw_scree_plot.png"), height = 6, width = 17, units = "in", dpi = 400, type = "cairo")
+ggsave(paste0(args$output, "/exp_plots/PCA_raw_scree_plot.png"), height = 6, width = 17, units = "in", dpi = 300, type = "cairo")
 
 ## Remove outliers (PC 1 and 2, remove what lays out 3 SDs)
 PCs$outlier <- "no"
@@ -160,6 +201,9 @@ PCs2_sd <- sd(PCs$PC2)
 PCs[(PCs$PC2 > PCs2_med + 3 * PCs2_sd) | (PCs$PC2 < PCs2_med - 3 * PCs2_sd)]$outlier <- "yes"
 
 p1 <- ggplot(PCs, aes(x = PC1, y = PC2, colour = outlier)) + geom_point(alpha = 0.3) + theme_bw() + scale_colour_manual(values = c("no" = "black", "yes" = "red")) + ggtitle("Before outlier removal\nnormalised\nlog-transformed")
+p2 <- ggplot(PCs, aes(x = PC3, y = PC4, colour = outlier)) + geom_point(alpha = 0.3) + theme_bw() + scale_colour_manual(values = c("no" = "black", "yes" = "red")) + ggtitle("Before outlier removal\nnormalised\nlog-transformed")
+p3 <- ggplot(PCs, aes(x = PC5, y = PC6, colour = outlier)) + geom_point(alpha = 0.3) + theme_bw() + scale_colour_manual(values = c("no" = "black", "yes" = "red")) + ggtitle("Before outlier removal\nnormalised\nlog-transformed")
+p4 <- ggplot(PCs, aes(x = PC7, y = PC8, colour = outlier)) + geom_point(alpha = 0.3) + theme_bw() + scale_colour_manual(values = c("no" = "black", "yes" = "red")) + ggtitle("Before outlier removal\nnormalised\nlog-transformed")
 
 # Remove outliers from primary data
 non_outliers <- PCs[!PCs$outlier %in% c("yes"), ]$sample
@@ -169,7 +213,7 @@ and <- and[, colnames(and) %in% c(non_outliers, "Feature"), with = FALSE]
 and_p <- illumina_HT12v3_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
 and_p <- apply(and_p, 1, Z_transform)
 and_p <- apply(and_p, 2, INT_transform)
-and_p <- t(abi_p)
+and_p <- t(and_p)
 
 summary_table_temp <- data.table(Stage = "After removal of expression outliers", Nr_of_features = nrow(and_p), Nr_of_samples = ncol(and_p))
 summary_table <- rbind(summary_table, summary_table_temp)
@@ -177,10 +221,16 @@ summary_table <- rbind(summary_table, summary_table_temp)
 pcs <- prcomp(t(and_p), center = FALSE, scale. = FALSE)
 PCs <- data.table(Sample = rownames(pcs$x), pcs$x)
 
-p2 <- ggplot(PCs, aes(x = PC1, y = PC2)) + geom_point(alpha = 0.3) + theme_bw() + ggtitle("After outlier removal\nnormalised\nlog-transformed\nZ-transformed\ninverse normal transformed")
+p5 <- ggplot(PCs, aes(x = PC1, y = PC2)) + geom_point(alpha = 0.3) + theme_bw() + ggtitle("After outlier removal\nnormalised\nlog-transformed\nZ-transformed\ninverse normal transformed")
+p6 <- ggplot(PCs, aes(x = PC3, y = PC4)) + geom_point(alpha = 0.3) + theme_bw() + ggtitle("After outlier removal\nnormalised\nlog-transformed\nZ-transformed\ninverse normal transformed")
+p7 <- ggplot(PCs, aes(x = PC5, y = PC6)) + geom_point(alpha = 0.3) + theme_bw() + ggtitle("After outlier removal\nnormalised\nlog-transformed\nZ-transformed\ninverse normal transformed")
+p8 <- ggplot(PCs, aes(x = PC7, y = PC8)) + geom_point(alpha = 0.3) + theme_bw() + ggtitle("After outlier removal\nnormalised\nlog-transformed\nZ-transformed\ninverse normal transformed")
 
-p <- p1 + p2
-ggsave(paste0(args$output, "/exp_plots/PCA_before_and_after.png"), height = 8, width = 15, units = "in", dpi = 400, type = "cairo")
+p <- p1 | p2 / p3 | p4
+ggsave(paste0(args$output, "/exp_plots/PCA_before.png"), height = 15, width = 15, units = "in", dpi = 300, type = "cairo")
+
+p <- p5 | p6 / p7 | p8
+ggsave(paste0(args$output, "/exp_plots/PCA_after.png"), height = 15, width = 15, units = "in", dpi = 300, type = "cairo")
 
 fwrite(and_p, paste0(args$output, "/exp_data_QCd/exp_data_preprocessed.txt"), sep = "\t", quote = FALSE)
 
@@ -193,7 +243,7 @@ fwrite(PCs[, c(1:51)], paste0(args$output, "/exp_PCs/exp_PCs.txt"), sep = "\t", 
 fwrite(summary_pcs, paste0(args$output, "/exp_data_summary/", "summary_pcs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
 
 p <- ggplot(summary_pcs, aes(x = PC, y = explained_variance)) + geom_bar(stat = "identity") + theme_bw()
-ggsave(paste0(args$output, "/exp_plots/PCA_final_scree_plot.png"), height = 6, width = 17, units = "in", dpi = 400, type = "cairo")
+ggsave(paste0(args$output, "/exp_plots/PCA_final_scree_plot.png"), height = 6, width = 17, units = "in", dpi = 300, type = "cairo")
 
 # Summary statistics ----
 # Per gene, calculate mean, median, min, max, sd, skewness, centrality and shapiro test P-value

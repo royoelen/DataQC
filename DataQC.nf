@@ -13,7 +13,7 @@ def helpMessage() {
     nextflow run DataQC.nf \
         --bfile EstBB_HT12v3\
         --expfile EstBB_HT12v3_exp.txt\
-        --gte EstBB_HT12v3.gte\
+        --gte gte_EstBB_HT12v3.txt\
         --exp_platform HT12v3\
         --cohort_name EstBB_HT12v3\
         --outdir EstBB_HT12v3_PreImputationQCd\
@@ -68,8 +68,6 @@ params.sthresh = 0.4
 params.exp_platform = ''
 params.cohort_name = ''
 params.outdir = ''
-
-
 
 // Header log info
 log.info """=======================================================
@@ -127,7 +125,7 @@ process GenotypeQC {
 
     output:
       path ('outputfolder_gen') into output_ch_genotypes
-      file 'outputfolder_gen/QCd_data/*_ToImputation.fam' into gen_samples
+      file 'outputfolder_gen/gen_data_QCd/*_ToImputation.fam' into gen_samples
 
       """
       Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
@@ -179,6 +177,16 @@ process GeneExpressionQC {
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_Illumina_HT12v4_20170808.txt \
       --output outputfolder_exp
       """
+      else if (exp_platform == 'RNAseq')
+      """
+      Rscript --vanilla $baseDir/bin/ProcessExpression.R  \
+      --expression_matrix ${exp_mat} \
+      --genotype_to_expression_linking ${gte} \
+      --genotype_samples ${gen_samples} \
+      --platform ${exp_platform} \
+      --emp_probe_mapping NULL \
+      --output outputfolder_exp
+      """
 }
 
 process RenderReport {
@@ -205,6 +213,10 @@ process RenderReport {
       path ('Report_DataQc.html') into report_ch2
 
       """
+      # Make combined covariate file
+      R --vanilla $baseDir/bin/MakeCovariateFile.R
+
+      # Make report
       cp -L ${report} notebook.Rmd
 
       R -e 'library(rmarkdown);rmarkdown::render("notebook.Rmd", "html_document", 

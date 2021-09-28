@@ -81,20 +81,23 @@ Pipeline makes the following output (most relevant files outlined):
         |--exp_plots
             |--...
     |--outputfolder_gen
-        |--QCd_data
+        |--gen_data_QCd
             |--*_ToImputation.bed
             |--*_ToImputation.bim
             |--*_ToImputation.fam
             |--*_ToImputation.log
-        |--data
+        |--gen_PCs
+            |--GenotypePCs.txt
+        |--gen_data_summary
             |--1000G_PC_projections.txt
             |--...
-        |--plots
+        |--gen_plots
             |--...
     |--pipeline_info
         |--DataQc_report.html
         |--...
     |--Report_DataQc.html
+    |--CovariatesPCs.txt
 ```
 
 #### Steps to take
@@ -103,12 +106,15 @@ Pipeline makes the following output (most relevant files outlined):
 
 2. If data had any quality issues, re-run the pipeline when issues are removed, check the `Report_DataQc.html` again.
 
-
 When all issues are solved:
 
-3. Files: `output/outputfolder_gen/QCd_data/*_ToImputation.bed`, `output/outputfolder_gen/QCd_data/*_ToImputation.bim`, `output/outputfolder_gen/QCd_data/*_ToImputation.fam` are the filtered and QCd genotype files which need to be the input for imputation pipeline `https://gitlab.com/eqtlgen-group/eqtlgen-imputation-pipeline`
+3. Files: `output/outputfolder_gen/gen_data_QCd/*_ToImputation.bed`, `output/outputfolder_gen/gen_data_QCd/*_ToImputation.bim`, `output/outputfolder_gen/gen_data_QCd/*_ToImputation.fam` are the filtered and QCd genotype files which need to be the input for imputation pipeline `https://gitlab.com/eqtlgen-group/eqtlgen-imputation-pipeline`
 
 4. File: `output/outputfolder_exp/exp_data_QCd/exp_data_preprocessed.txt` is the filtered, QCd and preprocessed file which needs to be the input for per-cohort preparations and encoding pipeline `https://gitlab.com/eqtlgen-group/PerCohortPreparations`.
+
+5. File: `output/` is the covariate file which contains 10 first genotype PCs and 50 first gene expression PCs. This should be used as an input for per-cohort preparations and encoding pipeline `https://gitlab.com/eqtlgen-group/PerCohortPreparations`.
+
+**TODO!** Combine with cell metric PGS calculation pipeline/output.
 
 5. Share with central site the following files:
 

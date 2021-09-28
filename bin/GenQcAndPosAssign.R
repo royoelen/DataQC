@@ -39,10 +39,10 @@ bed_simplepath <- stringr::str_replace(args$target_bed, ".bed", "")
 
 # Make output folder structure
 dir.create(args$output)
-dir.create(paste0(args$output, "/plots"))
-dir.create(paste0(args$output, "/QCd_data"))
-dir.create(paste0(args$output, "/PCs"))
-dir.create(paste0(args$output, "/data"))
+dir.create(paste0(args$output, "/gen_plots"))
+dir.create(paste0(args$output, "/gen_data_QCd"))
+dir.create(paste0(args$output, "/gen_PCs"))
+dir.create(paste0(args$output, "/gen_data_summary"))
 
 # Remove the check of parallel blas
 options(bigstatsr.check.parallel.blas = FALSE)
@@ -121,8 +121,8 @@ p2 <- ggplot() +
   labs(x = "Statistic of outlierness", y = "Frequency (sqrt-scale)") +
   geom_vline(aes(xintercept = Sthresh), colour = "red", linetype = 2)
 
-p <- p1 / p2
-ggsave(paste0(args$output, "/plots/PC_dist_outliers_S.png"), type = "cairo", height = 7, width = 9, units = "in", dpi = 300)
+p <- p2
+ggsave(paste0(args$output, "/gen_plots/PC_dist_outliers_S.png"), type = "cairo", height = 7 / 2, width = 9, units = "in", dpi = 300)
 
 # Visualise PCs, outline outlier samples
 PCs <- predict(target_pca)
@@ -142,7 +142,7 @@ p5 <- ggplot(PCs, aes(x = PC9, y = PC10, colour = outlier)) + theme_bw() + geom_
 
 p <- p1 + p2 + p3 + p4 + p5 + plot_layout(nrow = 3)
 
-ggsave(paste0(args$output, "/plots/PCA_outliers.png"), type = "cairo", height = 10 * 1.5, width = 9 * 1.5, units = "in", dpi = 300)
+ggsave(paste0(args$output, "/gen_plots/PCA_outliers.png"), type = "cairo", height = 10 * 1.5, width = 9 * 1.5, units = "in", dpi = 300)
 
 # Filter out related samples and outlier samples, write out QCd data
 ind.row <- ind.norel[S < Sthresh]
@@ -153,11 +153,11 @@ summary_table <- rbind(summary_table, temp_QC)
 
 snp_plinkRmSamples(plink.path = "plink/plink2",
 bedfile.in = paste0(bed_simplepath, "_QC.bed"),
-bedfile.out = paste0(args$output, "/QCd_data/", bed_simplepath, "_ToImputation.bed"),
+bedfile.out = paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.bed"),
 df.or.files = samples_to_include)
 
 # Rerun PCA on QCd data
-bed_qc <- bed(paste0(args$output, "/QCd_data/", bed_simplepath, "_ToImputation.bed"))
+bed_qc <- bed(paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.bed"))
 target_pca_qcd <- bed_autoSVD(bed_qc, k = 10, ncores = 4)
 
 PCsQ <- predict(target_pca_qcd)
@@ -175,15 +175,15 @@ p4 <- ggplot(PCsQ, aes(x = PC7, y = PC8)) + theme_bw() + geom_point()
 p5 <- ggplot(PCsQ, aes(x = PC9, y = PC10)) + theme_bw() + geom_point()
 p <- p1 + p2 + p3 + p4 + p5 + plot_layout(nrow = 3)
 
-ggsave(paste0(args$output, "/plots/Target_PCs_postQC.png"), type = "cairo", height = 10 * 1.5, width = 9 * 1.5, units = "in", dpi = 300)
+ggsave(paste0(args$output, "/gen_plots/Target_PCs_postQC.png"), type = "cairo", height = 10 * 1.5, width = 9 * 1.5, units = "in", dpi = 300)
 
 # Write out
-fwrite(PCsQ, paste0(args$output, "/PCs/GenotypePCs.txt"), row.names = TRUE, sep = "\t", quote = FALSE)
+fwrite(PCsQ, paste0(args$output, "/gen_PCs/GenotypePCs.txt"), row.names = TRUE, sep = "\t", quote = FALSE)
 
 # Visualise loadings
-#plot(target_pca_qcd, type = "loadings", loadings = 1:10, coeff = 0.6)
+plot(target_pca_qcd, type = "loadings", loadings = 1:10, coeff = 0.6)
 
-#ggsave(paste0(args$output, "/plots/Target_PCs_postQC_Loadings.png"), type = "cairo", height = 7 * 1.5, width = 9 * 1.5, units = "in", dpi = 300)
+ggsave(paste0(args$output, "/gen_plots/Target_PCs_postQC_Loadings.png"), type = "cairo", height = 5 * 7, width = 7, units = "in", dpi = 300)
 
 # Project the data on QCd 1000G reference
 unrelated_ref_samples <- fread(args$sample_list)
@@ -262,10 +262,10 @@ scale_alpha_manual(values = c("Target" = 1, "1000G" = 0.2))
 
 p <- p1 + p2 + p3 + p4 + p5 + plot_layout(nrow = 3)
 
-ggsave(paste0(args$output, "/plots/SamplesPCsProjectedTo1000G.png"), type = "cairo", height = 11 * 1.5, width = 9 * 1.5, units = "in", dpi = 300)
+ggsave(paste0(args$output, "/gen_plots/SamplesPCsProjectedTo1000G.png"), type = "cairo", height = 11 * 1.5, width = 9 * 1.5, units = "in", dpi = 300)
 
-fwrite(summary_table, paste0(args$output, "/data/summary_table.txt"), sep = "\t", quote = FALSE)
-fwrite(abi[, -c(2, 3, ncol(abi))], paste0(args$output, "/data/1000G_PC_projections.txt"), sep = "\t", quote = FALSE )
+fwrite(summary_table, paste0(args$output, "/gen_data_summary/summary_table.txt"), sep = "\t", quote = FALSE)
+fwrite(abi[, -c(2, 3, ncol(abi))], paste0(args$output, "/gen_data_summary/1000G_PC_projections.txt"), sep = "\t", quote = FALSE )
 
 ## Assign each sample to the superpopulation
 ### Calculate distance of each sample to all samples per each population
@@ -312,4 +312,4 @@ print(paste("distance:", population))
 
 colnames(population_assign_res)[3:ncol(population_assign_res)] <- c("EUR", "EAS", "AMR", "SAS", "AFR")
 
-fwrite(population_assign_res[, -1], paste0(args$output, "/data/PopAssignResults.txt"), sep = "\t", quote = FALSE )
+fwrite(population_assign_res[, -1], paste0(args$output, "/gen_data_summary/PopAssignResults.txt"), sep = "\t", quote = FALSE )

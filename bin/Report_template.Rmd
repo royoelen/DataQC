@@ -22,7 +22,7 @@ library(data.table)
 library(knitr)
 library(ggplot2)
 
-overview_table <- fread("outputfolder_gen/data/summary_table.txt")
+overview_table <- fread("outputfolder_gen/gen_data_summary/summary_table.txt")
 knitr::kable(overview_table)
 ```
 
@@ -32,24 +32,32 @@ knitr::kable(overview_table)
 
 On the next two plots you can see the "outlierness" statistic based on which the samples are declared genetic outliers and removed from the analysis. You should check based on the histogram if the default value is appropriate. If not, adjust it in the pipeline argument and re-run.
 
-![Statistic of outlierness with used threshold.](outputfolder_gen/plots/PC_dist_outliers_S.png)  
+If you observe bimodal distribution, this could indicate that you have substantial number of samples from multiple ancestries in your data. If you have >100 samples from either anchestries, you should split the data and re-run the current and following pipelines on those subsets. This assumes that you know this information about your genotype data: in case of doubt please contact urmo.vosa@gmail.com for advice and we will investigate further.
 
-![PCA with all samples, outliers outlined.](outputfolder_gen/plots/PCA_outliers.png)  
+![Statistic of outlierness with threshold used to remove ethnic outliers.](outputfolder_gen/gen_plots/PC_dist_outliers_S.png)  
 
-![PCA with all samples, outliers removed.](outputfolder_gen/plots/Target_PCs_postQC.png)  
+Here we visualise genetic principal components to check if genetic outliers were removed.
+
+![PCA with all samples, outliers outlined with red.](outputfolder_gen/gen_plots/PCA_outliers.png)  
+
+![PCA with all samples, outliers removed.](outputfolder_gen/gen_plots/Target_PCs_postQC.png)  
 
 #### Loadings of PCs
 
-<!-- ![Loadings of PCs.](outputfolder_gen/plots/Target_PCs_postQC_Loadings.png)  -->
+Visualise the loadings of 10 first PCs. Because in PC calculation command removed long-range LD, you should not see any peaks on the plots any more, those would indicate that PC is still driven by LD.
+
+![Loadings of 10 first PCs.](outputfolder_gen/gen_plots/Target_PCs_postQC_Loadings.png)
 
 #### Genotype data projected to 1000G superpopulations
 
-1. If you observe a few samples which are different anchestry compared to the majority of samples (e.g. majority of the samples are of EUR ancestry and there are few samples from AFR or SAS), then remove ethnic outliers and re-run the GenotypeQc pipeline without those samples.
-2. If you observe many (>100) samples which are different anchestry compared to the majority of samples (your dataset consists of individuals from several ancestries) then please split your genotype data based on ancestry and rerun this and following pipelines on those datasets separately.
+Here we project your genotype samples into 1000G p3v5 superpopulations to check if all samples come from one ethnicity. 
 
-The file `1000G_PC_projections.txt` has been written to the your output folder under `data`. This can be used to manually extract the outlier samples based on their PC projections into 1000G superpopulations. You can use plink/plink 1.9/plink 2.0 to filter samples from initial .bed/.bim/.fam files.
+1. If you observe a few samples which are different ancestry compared to the majority of samples (e.g. majority of the samples are of EUR ancestry and there are few samples from AFR or SAS), then remove ethnic outliers and re-run the GenotypeQc pipeline without those samples.
+2. If you observe many (>100) samples which are different ancestry compared to the majority of samples (your dataset consists of individuals from several ancestries) then please split your genotype data based on ancestry and rerun this and following pipelines on those datasets separately.
 
-![Genotype samples projected to 1000G superpopulations](outputfolder_gen/plots/SamplesPCsProjectedTo1000G.png)  
+The file `1000G_PC_projections.txt` has been written to the your output folder under `gen_data_summary`. This can be used to manually extract the outlier samples based on their PC projections into 1000G superpopulations. You can use plink/plink 1.9/plink 2.0 to filter samples from initial .bed/.bim/.fam files.
+
+![Genotype samples projected to 1000G superpopulations](outputfolder_gen/gen_plots/SamplesPCsProjectedTo1000G.png)  
 
 #### Assign population for each sample
 
@@ -57,7 +65,7 @@ Based on first 3 genotype PCs, assign the most likely population to each sample,
 
 ```{r, fig.height = 7, fig.width = 7, fig.align = "center", echo = FALSE}
 library(dplyr)
-pops <- fread("outputfolder_gen/data/PopAssignResults.txt")
+pops <- fread("outputfolder_gen/gen_data_summary/PopAssignResults.txt")
 
 pops <- melt(pops)
 colnames(pops) <- c("Sample", "Superpopulation", "dist") 
@@ -67,7 +75,7 @@ group_by(Sample) %>%
 arrange(dist, .by_group = TRUE) %>% 
 mutate(SamplePopAssign = head(Superpopulation, 1)) %>%
 mutate(Difference = dist[2]/dist[1]) %>%
-mutate(Confidence = case_when(Difference > 2 ~ "confident", Difference <= 2 ~ "not_confient"))
+mutate(Confidence = case_when(Difference > 2 ~ "confident", Difference <= 2 ~ "not confident"))
 
 res <- unique(pops[, c(1, 4, 5, 6)])
 
@@ -82,7 +90,6 @@ scale_fill_manual(values = c("Target" = "black",
 "AMR" = "lightgrey", 
 "SAS" = "orange", 
 "AFR" = "red"))
-
 ```
 
 `r nrow(res[res$SamplePopAssign == "EUR",])` samples in the data are most similar to EUR superpopulation.
@@ -112,9 +119,15 @@ knitr::kable(overview_table)
 
 ![PCA scree plot for normalised, log-transformed, Z-transformed and inverse normal transformed expression matrix. Outlier samples were removed before re-calculating PCA.](outputfolder_exp/exp_plots/PCA_final_scree_plot.png)
 
-![PCA with all samples, outliers outlined.](outputfolder_exp/exp_plots/PCA_before_and_after.png)  
+On the following plots, 10 first PCs are calculated on normalised and log[2]-transformed expression matrix. Samples are declared as outliers based on first PC, when they deviate from the mean value by 3 standard deviations (SDs).
 
-Explained variance of final PCs (normalised, log-transformed, Z-transformed and inverse normal transformed expression matrix).
+![PCA with all samples, outliers outlined.](outputfolder_exp/exp_plots/PCA_before.png)
+
+These are 10 first expression PCs, calculated on fully processed data after removal of outlier samples. You should not see any clear outliers any more.
+
+![PCA with all samples, outliers removed.](outputfolder_exp/exp_plots/PCA_after.png) 
+
+Explained variance of final 50 PCs which are used as covariates in the analysis (normalised, log[2]-transformed, Z-transformed and inverse normal transformed expression matrix).
 
 ```{r, message = FALSE, warning = FALSE}
 overview_pcs <- fread("outputfolder_exp/exp_data_summary/summary_pcs.txt")
