@@ -210,7 +210,7 @@ non_outliers <- PCs[!PCs$outlier %in% c("yes"), ]$sample
 and <- and[, colnames(and) %in% c(non_outliers, "Feature"), with = FALSE]
 
 ## Re-process, re-calculate PCs, re-visualise and write out
-and_p <- illumina_HT12v3_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+and_p <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
 and_p <- apply(and_p, 1, Z_transform)
 and_p <- apply(and_p, 2, INT_transform)
 and_p <- t(and_p)
