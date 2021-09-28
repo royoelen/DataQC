@@ -211,6 +211,7 @@ process RenderReport {
       path ('outputfolder_gen/*') into output_ch2
       path ('outputfolder_exp/*') into output_ch3
       path ('Report_DataQc.html') into report_ch2
+      path ('CovariatePCs.txt') into combined_covariates
 
       """
       # Make combined covariate file

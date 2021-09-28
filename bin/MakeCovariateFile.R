@@ -8,4 +8,4 @@ colnames(exp_cov) <- c("SampleID", paste0("ExpPC", 1:50))
 
 cov <- merge(gen_cov, exp_cov, by = "SampleID")
 
-fwrite(cov, "CovariatesPCs.txt", sep = "\t", quote = FALSE, row.names = FALSE)
+fwrite(cov, "CovariatePCs.txt", sep = "\t", quote = FALSE, row.names = FALSE)

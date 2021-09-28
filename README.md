@@ -112,7 +112,7 @@ When all issues are solved:
 
 4. File: `output/outputfolder_exp/exp_data_QCd/exp_data_preprocessed.txt` is the filtered, QCd and preprocessed file which needs to be the input for per-cohort preparations and encoding pipeline `https://gitlab.com/eqtlgen-group/PerCohortPreparations`.
 
-5. File: `output/` is the covariate file which contains 10 first genotype PCs and 50 first gene expression PCs. This should be used as an input for per-cohort preparations and encoding pipeline `https://gitlab.com/eqtlgen-group/PerCohortPreparations`.
+5. File: `output/CovariatePCs.txt` is the covariate file which contains 10 first genotype PCs and 50 first gene expression PCs. This should be used as an input for per-cohort preparations and encoding pipeline `https://gitlab.com/eqtlgen-group/PerCohortPreparations`.
 
 **TODO!** Combine with cell metric PGS calculation pipeline/output.
 
