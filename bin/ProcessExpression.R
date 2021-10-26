@@ -93,7 +93,7 @@ illumina_array_preprocess <- function(exp, gte, gen){
     gte <- fread(args$genotype_to_expression_linking, header = FALSE)
     geno_fam <- fread(args$genotype_samples, header = FALSE)
     gte <- gte[gte$V1 %in% geno_fam$V2,]
-    
+
     message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
 
     exp <- exp[, colnames(exp) %in% gte$V2]
@@ -263,7 +263,7 @@ and <- and[, colnames(and) %in% c("Feature", gte$V2), with = FALSE]
 
 summary_table <- data.table(Stage = "Samples with available genotype info", Nr_of_features = nrow(and), Nr_of_samples = ncol(and))
 
-if (!args$platform %in% c("HT12v3", "HT12v4", "RNAseq", "AffyU291", "AffyHuEx")){stop("Platform has to be one of HT12v3, HT12v4, RNAseq, AffyU291, AffyHuExs")}
+if (!args$platform %in% c("HT12v3", "HT12v4", "RNAseq", "AffyU291", "AffyHuEx")){stop("Platform has to be one of HT12v3, HT12v4, RNAseq, AffyU291, AffyHuEx")}
 
 iterative_outliers <- IterativeOutlierDetection(and, sd_threshold = args$sd) # TODO: add possibility to specify SD threshold
 
