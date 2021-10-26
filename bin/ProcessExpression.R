@@ -9,9 +9,9 @@ setDTthreads(8)
 
 # TODO: check the proper normalization: for original QTL pipeline, probe centering and sample Z-transform was probably used instead of probe Z-transform.
 
-# TODO: for gene QC report, include the following metrics from GTEx:
+# TODO: for gene QC report on RNA-seq, consider including the following metrics from GTEx:
 # Genes were selected based on expression thresholds of >0.1 TPM in at least 20% of samples and ≥6 reads in at least 20% of samples.
-# Gene length: for 19,960 genes extract the total length of gene CDs, based on latest ENSEMBL
+# For calculation of TPM: for 19,942 genes extract the total length of gene CDs, based on latest ENSEMBL
 # https://gist.github.com/slowkow/c6ab0348747f86e2748b
 
 
@@ -27,6 +27,8 @@ option_list <- list(
     help = "Gene expression platform. This determines the normalization method and replaces probes with best-matching genes based on empirical probe mapping. One of: HT12v3, HT12v4, RNAseq, AffyU291, AffyHuEx."),
     make_option(c("-m", "--emp_probe_mapping"), type = "character",
     help = "Empirical probe matching file. Used to link the best array probe to each blood-expressed gene."),
+    make_option(c("-s", "--sd"), type = "double", default = 3,
+    help = "Standard deviation threshold for removing expression samples. By default, samples away 3 SDs from the median of PC1 are removed."),
     make_option(c("-o", "--output"), type = "character",
     help = "Output folder where to put preprocessed data matrix, expression PCs, etc.")
     )
@@ -38,7 +40,9 @@ args <- parse_args(parser)
 print(args$expression_matrix)
 print(args$genotype_to_expression_linking)
 print(args$genotype_samples)
+print(args$platform)
 print(args$emp_probe_mapping)
+print(args$sd)
 print(args$output)
 
 # Make output folder structure
@@ -48,15 +52,24 @@ dir.create(paste0(args$output, "/exp_data_QCd"))
 dir.create(paste0(args$output, "/exp_PCs"))
 dir.create(paste0(args$output, "/exp_data_summary"))
 
-# functions
+#############
+# functions #
+#############
 Z_transform <- function(x){
     z <- (x - mean(x))/sd(x)
-    return(z)}
+    return(z)
+    }
+
+center_data <- function(x){
+    z <- (x - mean(x))
+    return(z)
+    }
 
 INT_transform <- function(x){
-    int <- qnorm((rank(x, na.last = "keep")-0.5)/sum(!is.na(x)))
+    int <- qnorm((rank(x, na.last = "keep") - 0.5) / sum(!is.na(x)))
     return(int)
-}
+    }
+
 comp_cv <- function(x){sd(x) / mean(x)}
 shap_test <- function(x){shapiro.test(x)$p.value}
 
@@ -81,7 +94,7 @@ illumina_array_preprocess <- function(exp, gte, gen){
     geno_fam <- fread(args$genotype_samples, header = FALSE)
     gte <- gte[gte$V1 %in% geno_fam$V2,]
     
-    message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data"))
+    message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
 
     exp <- exp[, colnames(exp) %in% gte$V2]
 
@@ -90,8 +103,8 @@ illumina_array_preprocess <- function(exp, gte, gen){
     colnames(and_n) <- colnames(exp)
     rownames(and_n) <- rownames(exp)
 
-    # log2 transformation
-    and_n <- log2(and_n)
+    # log2 transformation (not needed because INT is applied)
+    # and_n <- log2(and_n)
 
     return(and_n)
 }
@@ -101,7 +114,7 @@ RNAseq_preprocess <- function(exp, gte, gen){
     colnames(exp)[1] <- "Probe"
 
     exp$Probe <- as.character(exp$Probe)
-    
+
     exp <- as.data.frame(exp)
     rownames(exp) <- exp$Probe
     exp <- exp[, -1]
@@ -112,7 +125,7 @@ RNAseq_preprocess <- function(exp, gte, gen){
     geno_fam <- fread(args$genotype_samples, header = FALSE)
     gte <- gte[gte$V1 %in% geno_fam$V2,]
     
-    message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data"))
+    message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
 
     exp <- exp[, colnames(exp) %in% gte$V2]
     
@@ -120,8 +133,8 @@ RNAseq_preprocess <- function(exp, gte, gen){
     exp_n <- calcNormFactors(exp, method = "TMM")
     exp_n <- cpm(exp_n, log = FALSE)
 
-    # log2 transformation (+ add 0.25 for solving issues with log2(0))
-    and_n <- log2(and_n + 0.25)
+    # log2 transformation (+ add 0.25 for solving issues with log2(0)) (not needed because INT is applied)
+    # and_n <- log2(and_n + 0.25)
 
     return(and_n)
 }
@@ -148,6 +161,92 @@ exp_summary <- function(x){
     return(gene_summary)
 }
 
+IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c("HT12v3", "HT12v4", "RNAseq", "AffyU291", "AffyHuEx")) {
+  and <- input_exp
+  list_ggplots <- list()
+  summary_pcs <- list()
+  platform <- match.arg(platform)
+  message(paste("Expression platform is", platform, ", preprocessing the data..."))
+
+  if (platform %in% c("HT12v3", "HT12v4")){
+    and_p <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+    and_p <- log2(and_p)
+
+  } else if(platform %in% c("RNAseq")){
+    and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+    and_p <- log2(and_p + 0.25)
+  } ## TODO: if needed. Add methods for Affymetrix arrays.
+  message("Data preprocessed!")
+  message(paste("Removing samples which deviate more than", sd_threshold, "SDs from the mean values of PC1 or PC2."))
+  message("Starting iterative outlier detection...")
+  it_round <- 0
+  plot_it_round <- 0
+  while (nr_outliers > 0) {
+    it_round <- it_round + 1
+    pcs <- prcomp(t(and), center = FALSE, scale. = FALSE)
+
+    PCs <- as.data.table(pcs$x)
+    PCs$sample <- rownames(pcs$x)
+
+    importance <- pcs$sdev^2 / sum(pcs$sdev^2)
+    summary_pcs[[it_round]] <- data.table(PC = paste0("PC", 1:50), explained_variance = importance[1:50])
+
+    PCs$outlier <- "no"
+    PCs1_med <- median(PCs$PC1)
+    PCs1_sd <- sd(PCs$PC1)
+    PCs[(PCs$PC1 > PCs1_med + sd_threshold * PCs1_sd) | (PCs$PC1 < PCs1_med - sd_threshold * PCs1_sd)]$outlier <- "yes"
+
+    PCs2_med <- median(PCs$PC2)
+    PCs2_sd <- sd(PCs$PC2)
+    PCs[(PCs$PC2 > PCs2_med + sd_threshold * PCs2_sd) | (PCs$PC2 < PCs2_med - sd_threshold * PCs2_sd)]$outlier <- "yes"
+
+    plot_it_round <- plot_it_round + 1
+    list_ggplots[[plot_it_round]] <- ggplot(PCs, aes(x = PC1, y = PC2, colour = outlier)) +
+      geom_point(alpha = 0.3) +
+      theme_bw() +
+      scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
+      ggtitle(paste(it_round, "iteration round"))
+    
+    plot_it_round <- plot_it_round + 1
+    list_ggplots[[plot_it_round]] <- ggplot(PCs, aes(x = PC3, y = PC4, colour = outlier)) +
+      geom_point(alpha = 0.3) +
+      theme_bw() +
+      scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
+      ggtitle(paste(it_round, "iteration round"))
+    
+    plot_it_round <- plot_it_round + 1
+    list_ggplots[[plot_it_round]] <- ggplot(PCs, aes(x = PC5, y = PC6, colour = outlier)) +
+      geom_point(alpha = 0.3) +
+      theme_bw() +
+      scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
+      ggtitle(paste(it_round, "iteration round"))
+    
+    plot_it_round <- plot_it_round + 1
+    list_ggplots[[plot_it_round]] <- ggplot(PCs, aes(x = PC7, y = PC8, colour = outlier)) +
+      geom_point(alpha = 0.3) +
+      theme_bw() +
+      scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
+      ggtitle(paste(it_round, "iteration round"))
+
+    non_outliers <- PCs[!PCs$outlier %in% c("yes"), ]$sample
+  
+    # Remove outlier samples from the unprocessed data
+    and <- and[, colnames(and) %in% c(non_outliers, "Feature")]
+
+    nr_outliers <- length(PCs[PCs$outlier %in% c("yes"), ]$sample)
+    if (nr_outliers > 0) {
+      message(paste0("Iteration round ", it_round, ". Removed ", nr_outliers, " outlier(s). Re-processing the data and running another round of PCA."))
+      summary_table_temp <- data.table(Stage = paste("After removal of expression outliers in ", it_round, " iteration."), Nr_of_features = nrow(and), Nr_of_samples = ncol(and))
+    } else if (nr_outliers == 0) {
+      message(paste0("Iteration round ", it_round, ". No outliers detected. Finalizing interactive outlier detection."))
+    }
+  }
+  return(list(exp_mat = and, plots = list_ggplots, summary_pcs = summary_pcs))
+}
+
+############
+# Analysis #
+############
 # Read in raw expression matrix
 and <- fread(args$expression_matrix)
 colnames(and)[1] <- "Feature"
@@ -155,99 +254,71 @@ message(paste("Initially:", nrow(and), "genes/probes and ", ncol(and), "samples"
 
 summary_table <- data.table(Stage = "Unprocessed matrix", Nr_of_features = nrow(and), Nr_of_samples = ncol(and))
 
+# Remove samples which are not in the gte or in genotype data
+gte <- fread(args$genotype_to_expression_linking, header = FALSE)
+geno_fam <- fread(args$genotype_samples, header = FALSE)
+gte <- gte[gte$V1 %in% geno_fam$V2,]
+
+and <- and[, colnames(and) %in% c("Feature", gte$V2), with = FALSE]
+
+summary_table <- data.table(Stage = "Samples with available genotype info", Nr_of_features = nrow(and), Nr_of_samples = ncol(and))
+
 if (!args$platform %in% c("HT12v3", "HT12v4", "RNAseq", "AffyU291", "AffyHuEx")){stop("Platform has to be one of HT12v3, HT12v4, RNAseq, AffyU291, AffyHuExs")}
 
-# 1.1 data is already appropriately processed ----
+iterative_outliers <- IterativeOutlierDetection(and, sd_threshold = args$sd) # TODO: add possibility to specify SD threshold
 
-# 1.2 Raw Illumina HT12v3 expression array -----
+# Keep in the original data only non-outlier samples
+
+and <- and[, colnames(and) %in% c("Feature", colnames(iterative_outliers$exp_mat)), with = FALSE]
+
+# Final re-process, re-calculate PCs, re-visualise and write out
 if (args$platform %in% c("HT12v3", "HT12v4")){
 and_p <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-
-summary_table_temp <- data.table(Stage = "After inital preprocessing", Nr_of_features = nrow(and_p), Nr_of_samples = ncol(and_p))
-summary_table <- rbind(summary_table, summary_table_temp)
 }
-# 1.3 Raw RNA-seq count matrix ----
 if (args$platform %in% c("RNAseq")){
 and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-
-summary_table_temp <- data.table(Stage = "After inital preprocessing", Nr_of_features = nrow(and_p), Nr_of_samples = ncol(and_p))
-summary_table <- rbind(summary_table, summary_table_temp)
 }
 
-# QC ----
-## Calculate PCs and visualise
-
-pcs <- prcomp(t(and_p), center = FALSE, scale. = FALSE)
-PCs <- as.data.table(pcs$x)
-PCs$sample <- rownames(pcs$x)
-
-importance <- pcs$sdev^2/sum(pcs$sdev^2)
-summary_pcs <- data.table(PC = paste0("PC", 1:50), explained_variance = importance[1:50])
-
-summary_pcs$PC <- factor(summary_pcs$PC, levels = paste0("PC", 1:50))
-fwrite(summary_pcs, paste0(args$output, "/exp_data_summary/", "summary_raw_pcs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
-
-p <- ggplot(summary_pcs, aes(x = PC, y = explained_variance)) + geom_bar(stat = "identity") + theme_bw()
-ggsave(paste0(args$output, "/exp_plots/PCA_raw_scree_plot.png"), height = 6, width = 17, units = "in", dpi = 300, type = "cairo")
-
-## Remove outliers (PC 1 and 2, remove what lays out 3 SDs)
-PCs$outlier <- "no"
-PCs1_med <- median(PCs$PC1)
-PCs1_sd <- sd(PCs$PC1)
-PCs[(PCs$PC1 > PCs1_med + 3 * PCs1_sd) | (PCs$PC1 < PCs1_med - 3 * PCs1_sd)]$outlier <- "yes"
-
-PCs2_med <- median(PCs$PC2)
-PCs2_sd <- sd(PCs$PC2)
-PCs[(PCs$PC2 > PCs2_med + 3 * PCs2_sd) | (PCs$PC2 < PCs2_med - 3 * PCs2_sd)]$outlier <- "yes"
-
-p1 <- ggplot(PCs, aes(x = PC1, y = PC2, colour = outlier)) + geom_point(alpha = 0.3) + theme_bw() + scale_colour_manual(values = c("no" = "black", "yes" = "red")) + ggtitle("Before outlier removal\nnormalised\nlog-transformed")
-p2 <- ggplot(PCs, aes(x = PC3, y = PC4, colour = outlier)) + geom_point(alpha = 0.3) + theme_bw() + scale_colour_manual(values = c("no" = "black", "yes" = "red")) + ggtitle("Before outlier removal\nnormalised\nlog-transformed")
-p3 <- ggplot(PCs, aes(x = PC5, y = PC6, colour = outlier)) + geom_point(alpha = 0.3) + theme_bw() + scale_colour_manual(values = c("no" = "black", "yes" = "red")) + ggtitle("Before outlier removal\nnormalised\nlog-transformed")
-p4 <- ggplot(PCs, aes(x = PC7, y = PC8, colour = outlier)) + geom_point(alpha = 0.3) + theme_bw() + scale_colour_manual(values = c("no" = "black", "yes" = "red")) + ggtitle("Before outlier removal\nnormalised\nlog-transformed")
-
-# Remove outliers from primary data
-non_outliers <- PCs[!PCs$outlier %in% c("yes"), ]$sample
-and <- and[, colnames(and) %in% c(non_outliers, "Feature"), with = FALSE]
-
-## Re-process, re-calculate PCs, re-visualise and write out
-and_p <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-and_p <- apply(and_p, 1, Z_transform)
-and_p <- apply(and_p, 2, INT_transform)
+# Apply inverse normal transformation to normalised data.
+#and_p <- apply(and_p, 1, Z_transform) # No Z-transform as data will be forced to normal distribution anyway
+and_p <- apply(and_p, 1, INT_transform)
+and_p <- t(and_p)
+and_p <- apply(and_p, 1, center_data)
 and_p <- t(and_p)
 
-summary_table_temp <- data.table(Stage = "After removal of expression outliers", Nr_of_features = nrow(and_p), Nr_of_samples = ncol(and_p))
+summary_table_temp <- data.table(Stage = "After removal of all expression outliers", Nr_of_features = nrow(and_p), Nr_of_samples = ncol(and_p))
 summary_table <- rbind(summary_table, summary_table_temp)
 
 pcs <- prcomp(t(and_p), center = FALSE, scale. = FALSE)
 PCs <- data.table(Sample = rownames(pcs$x), pcs$x)
 
-p5 <- ggplot(PCs, aes(x = PC1, y = PC2)) + geom_point(alpha = 0.3) + theme_bw() + ggtitle("After outlier removal\nnormalised\nlog-transformed\nZ-transformed\ninverse normal transformed")
-p6 <- ggplot(PCs, aes(x = PC3, y = PC4)) + geom_point(alpha = 0.3) + theme_bw() + ggtitle("After outlier removal\nnormalised\nlog-transformed\nZ-transformed\ninverse normal transformed")
-p7 <- ggplot(PCs, aes(x = PC5, y = PC6)) + geom_point(alpha = 0.3) + theme_bw() + ggtitle("After outlier removal\nnormalised\nlog-transformed\nZ-transformed\ninverse normal transformed")
-p8 <- ggplot(PCs, aes(x = PC7, y = PC8)) + geom_point(alpha = 0.3) + theme_bw() + ggtitle("After outlier removal\nnormalised\nlog-transformed\nZ-transformed\ninverse normal transformed")
+p5 <- ggplot(PCs, aes(x = PC1, y = PC2)) + geom_point(alpha = 0.3) + theme_bw()
+p6 <- ggplot(PCs, aes(x = PC3, y = PC4)) + geom_point(alpha = 0.3) + theme_bw()
+p7 <- ggplot(PCs, aes(x = PC5, y = PC6)) + geom_point(alpha = 0.3) + theme_bw()
+p8 <- ggplot(PCs, aes(x = PC7, y = PC8)) + geom_point(alpha = 0.3) + theme_bw()
 
-p <- p1 | p2 / p3 | p4
-ggsave(paste0(args$output, "/exp_plots/PCA_before.png"), height = 15, width = 15, units = "in", dpi = 300, type = "cairo")
+p <- (iterative_outliers$plots[[1]] | iterative_outliers$plots[[2]]) / (iterative_outliers$plots[[3]] | iterative_outliers$plots[[4]])
+ggsave(paste0(args$output, "/exp_plots/PCA_before.png"), height = 10, width = 11, units = "in", dpi = 300, type = "cairo")
 
-p <- p5 | p6 / p7 | p8
-ggsave(paste0(args$output, "/exp_plots/PCA_after.png"), height = 15, width = 15, units = "in", dpi = 300, type = "cairo")
+p <- (p5 | p6) / (p7 | p8)
+ggsave(paste0(args$output, "/exp_plots/PCA_after.png"), height = 10, width = 10, units = "in", dpi = 300, type = "cairo")
 
 fwrite(and_p, paste0(args$output, "/exp_data_QCd/exp_data_preprocessed.txt"), sep = "\t", quote = FALSE)
 
-# Write out importance of PCs
+# Write out importance of final PCs
 importance <- pcs$sdev^2/sum(pcs$sdev^2)
 summary_pcs <- data.table(PC = paste0("PC", 1:50), explained_variance = importance[1:50])
 summary_pcs$PC <- factor(summary_pcs$PC, levels = paste0("PC", 1:50))
 
-fwrite(PCs[, c(1:51)], paste0(args$output, "/exp_PCs/exp_PCs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
+fwrite(PCs[, c(1:151)], paste0(args$output, "/exp_PCs/exp_PCs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
 fwrite(summary_pcs, paste0(args$output, "/exp_data_summary/", "summary_pcs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
 
 p <- ggplot(summary_pcs, aes(x = PC, y = explained_variance)) + geom_bar(stat = "identity") + theme_bw()
 ggsave(paste0(args$output, "/exp_plots/PCA_final_scree_plot.png"), height = 6, width = 17, units = "in", dpi = 300, type = "cairo")
 
 # Summary statistics ----
-# Per gene, calculate mean, median, min, max, sd, skewness, centrality and shapiro test P-value
-# before preporcessing
+# Per gene, calculate mean, median, min, max, sd, and shapiro test P-value
+# before preprocessing
 and <- as.data.frame(and)
 colnames(and)[1] <- "gene"
 and$gene <- as.character(and$gene)

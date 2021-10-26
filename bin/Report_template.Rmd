@@ -17,7 +17,7 @@ Expression platform for this cohort is: **`r params$platform`**.
 
 ### Overview of the QC steps
 
-```{r, message = FALSE, warning = FALSE}
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
 library(data.table)
 library(knitr)
 library(ggplot2)
@@ -44,7 +44,7 @@ Here we visualise genetic principal components to check if genetic outliers were
 
 #### Loadings of PCs
 
-Visualise the loadings of 10 first PCs. Because in PC calculation command removed long-range LD, you should not see any peaks on the plots any more, those would indicate that PC is still driven by LD.
+Visualise the loadings of 10 first PCs. Because PC calculation command removed long-range LD, you should not see any peaks on the plots any more, those would indicate that PC is still driven by LD.
 
 ![Loadings of 10 first PCs.](outputfolder_gen/gen_plots/Target_PCs_postQC_Loadings.png)
 
@@ -63,7 +63,7 @@ The file `1000G_PC_projections.txt` has been written to the your output folder u
 
 Based on first 3 genotype PCs, assign the most likely population to each sample, outline those samples which are clearly different.
 
-```{r, fig.height = 7, fig.width = 7, fig.align = "center", echo = FALSE}
+```{r, fig.height = 7, fig.width = 7, fig.align = "center", echo = FALSE, message = FALSE, warning = FALSE}
 library(dplyr)
 pops <- fread("outputfolder_gen/gen_data_summary/PopAssignResults.txt")
 
@@ -108,28 +108,53 @@ scale_fill_manual(values = c("Target" = "black",
 
 ### Overview of the QC steps
 
-```{r, message = FALSE, warning = FALSE}
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
 overview_table <- fread("outputfolder_exp/exp_data_summary/summary_table.txt")
 knitr::kable(overview_table)
 ```
 
 ### PCA on preprocessed expression data
 
+On the following plots, 8 first PCs are calculated on normalised and log~2~-transformed expression matrix. Samples are declared as outliers based on first two PCs, when they deviate from the mean value by 3 standard deviations (SDs). Analysis was run iteratively, data was pre-processed and PCA calculated until there were no further expression otliers to remove.
+
+![PCA on all samples, outliers from first iteration outlined.](outputfolder_exp/exp_plots/PCA_before.png)
+
+These are 10 first expression PCs, calculated on fully processed expression data (normalised, log~2~-transformed, Z-transformed, INT-transformed) after removal of outlier samples. You should not see any clear outliers any more.
+
+![PCA on all samples, outliers removed.](outputfolder_exp/exp_plots/PCA_after.png) 
+
+#### Explained variance of expression PCs
+
 ![PCA scree plot for normalised and log-transformed expression matrix.](outputfolder_exp/exp_plots/PCA_raw_scree_plot.png)
 
-![PCA scree plot for normalised, log-transformed, Z-transformed and inverse normal transformed expression matrix. Outlier samples were removed before re-calculating PCA.](outputfolder_exp/exp_plots/PCA_final_scree_plot.png)
+![PCA scree plot for normalised, inverse normal transformed and centered expression matrix. Outlier samples were removed before re-calculating PCA.](outputfolder_exp/exp_plots/PCA_final_scree_plot.png)
 
-On the following plots, 10 first PCs are calculated on normalised and log[2]-transformed expression matrix. Samples are declared as outliers based on first PC, when they deviate from the mean value by 3 standard deviations (SDs).
-
-![PCA with all samples, outliers outlined.](outputfolder_exp/exp_plots/PCA_before.png)
-
-These are 10 first expression PCs, calculated on fully processed data after removal of outlier samples. You should not see any clear outliers any more.
-
-![PCA with all samples, outliers removed.](outputfolder_exp/exp_plots/PCA_after.png) 
-
-Explained variance of final 50 PCs which are used as covariates in the analysis (normalised, log[2]-transformed, Z-transformed and inverse normal transformed expression matrix).
+Explained variance of final 50 PCs which are used as covariates in the analysis (normalised, log~2~-transformed, Z-transformed and inverse normal transformed expression matrix).
 
 ```{r, message = FALSE, warning = FALSE}
 overview_pcs <- fread("outputfolder_exp/exp_data_summary/summary_pcs.txt")
+
+overview_pcs_cumulative <- overview_pcs
+
+overview_pcs_cumulative$cumulative <- cumsum(overview_pcs$explained_variance)
+
+p <- ggplot(overview_pcs_cumulative, aes(x = PC, y = cumulative)) + 
+geom_bar(stat = "identity") + 
+theme_bw() + 
+scale_y_continuous(limits = c(0, 1))
+
+p
+```
+First 5 PCs explain cumulatively `r overview_pcs_cumulative$cumulative[5]`% of variance.
+
+First 10 PCs explain cumulatively `r overview_pcs_cumulative$cumulative[10]`% of variance.
+
+First 20 PCs explain cumulatively `r overview_pcs_cumulative$cumulative[20]`% of variance.
+
+First 50 PCs explain cumulatively `r overview_pcs_cumulative$cumulative[50]`% of variance.
+
+First 100 PCs explain cumulatively `r overview_pcs_cumulative$cumulative[100]`% of variance.
+
+```{r, message = FALSE, warning = FALSE}
 knitr::kable(overview_pcs)
 ```

@@ -175,7 +175,7 @@ p4 <- ggplot(PCsQ, aes(x = PC7, y = PC8)) + theme_bw() + geom_point()
 p5 <- ggplot(PCsQ, aes(x = PC9, y = PC10)) + theme_bw() + geom_point()
 p <- p1 + p2 + p3 + p4 + p5 + plot_layout(nrow = 3)
 
-ggsave(paste0(args$output, "/gen_plots/Target_PCs_postQC.png"), type = "cairo", height = 10 * 1.5, width = 9 * 1.5, units = "in", dpi = 300)
+ggsave(paste0(args$output, "/gen_plots/Target_PCs_postQC.png"), type = "cairo", height = 10 * 1.5, width = 9 * 1.3, units = "in", dpi = 300)
 
 # Write out
 fwrite(PCsQ, paste0(args$output, "/gen_PCs/GenotypePCs.txt"), row.names = TRUE, sep = "\t", quote = FALSE)
@@ -183,7 +183,7 @@ fwrite(PCsQ, paste0(args$output, "/gen_PCs/GenotypePCs.txt"), row.names = TRUE, 
 # Visualise loadings
 plot(target_pca_qcd, type = "loadings", loadings = 1:10, coeff = 0.6)
 
-ggsave(paste0(args$output, "/gen_plots/Target_PCs_postQC_Loadings.png"), type = "cairo", height = 5 * 7, width = 7, units = "in", dpi = 300)
+ggsave(paste0(args$output, "/gen_plots/Target_PCs_postQC_Loadings.png"), type = "cairo", height = (5 * 7) * 0.7, width = (5 * 7) * 0.7, units = "in", dpi = 300)
 
 # Project the data on QCd 1000G reference
 unrelated_ref_samples <- fread(args$sample_list)

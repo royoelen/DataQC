@@ -17,7 +17,7 @@ def helpMessage() {
         --exp_platform HT12v3\
         --cohort_name EstBB_HT12v3\
         --outdir EstBB_HT12v3_PreImputationQCd\
-        -profile eqtlgen\
+        -profile slurm\
         -resume
 
     Mandatory arguments:
@@ -26,6 +26,8 @@ def helpMessage() {
       --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. 
       --exp_platform                Indicator indicating the gene expression platform. HT12v3, HT12v4, RNAseq, AffyU219, AffyExon.
       --outdir                      Path to the output directory.
+      --Sthresh                     "Outlierness" score threshold for excluding ethnic outliers. Defaults to 4 but should be adjusted according to visual inspection.
+      --ExpSdThreshold              Standard deviation threhshold for excluding gene expression outliers. By default, samples away by 3 SDs from the median of PC1 are removed.
 
     """.stripIndent()
 }
@@ -113,12 +115,6 @@ process GenotypeQC {
 
     tag {GenotypeQC}
 
-    cpus 4
-    memory '15 GB'
-    time '12h'
-    executor 'slurm'
-    clusterOptions '--job-name=GenotypeQC'
-
     input:
       set file(bfile), file(bim), file(fam) from bfile_ch
       val s_stat from params.sthresh
@@ -140,12 +136,6 @@ process GenotypeQC {
 process GeneExpressionQC {
 
     tag {GeneExpressionQC}
-
-    cpus 8
-    memory '25 GB'
-    time '12h'
-    executor 'slurm'
-    clusterOptions '--job-name=GeneExpressionQC'
 
     input:
       file exp_mat from expfile_ch
@@ -192,12 +182,6 @@ process GeneExpressionQC {
 process RenderReport {
 
     tag {RenderReport}
-
-    cpus 1
-    memory '5 GB'
-    time '1h'
-    executor 'slurm'
-    clusterOptions '--job-name=RenderReport'
 
     publishDir "${params.outdir}", mode: 'copy', overwrite: true
 
