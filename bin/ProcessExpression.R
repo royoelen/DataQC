@@ -307,10 +307,10 @@ fwrite(and_p, paste0(args$output, "/exp_data_QCd/exp_data_preprocessed.txt"), se
 
 # Write out importance of final PCs
 importance <- pcs$sdev^2/sum(pcs$sdev^2)
-summary_pcs <- data.table(PC = paste0("PC", 1:50), explained_variance = importance[1:50])
-summary_pcs$PC <- factor(summary_pcs$PC, levels = paste0("PC", 1:50))
+summary_pcs <- data.table(PC = paste0("PC", 1:100), explained_variance = importance[1:100])
+summary_pcs$PC <- factor(summary_pcs$PC, levels = paste0("PC", 1:100))
 
-fwrite(PCs[, c(1:151)], paste0(args$output, "/exp_PCs/exp_PCs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
+fwrite(PCs[, c(1:101)], paste0(args$output, "/exp_PCs/exp_PCs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
 fwrite(summary_pcs, paste0(args$output, "/exp_data_summary/", "summary_pcs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
 
 p <- ggplot(summary_pcs, aes(x = PC, y = explained_variance)) + geom_bar(stat = "identity") + theme_bw()
