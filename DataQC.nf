@@ -199,7 +199,7 @@ process RenderReport {
 
       """
       # Make combined covariate file
-      R --vanilla $baseDir/bin/MakeCovariateFile.R
+      Rscript --vanilla $baseDir/bin/MakeCovariateFile.R
 
       # Make report
       cp -L ${report} notebook.Rmd

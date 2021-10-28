@@ -7,8 +7,6 @@ library(patchwork)
 
 setDTthreads(8)
 
-# TODO: check the proper normalization: for original QTL pipeline, probe centering and sample Z-transform was probably used instead of probe Z-transform.
-
 # TODO: for gene QC report on RNA-seq, consider including the following metrics from GTEx:
 # Genes were selected based on expression thresholds of >0.1 TPM in at least 20% of samples and ≥6 reads in at least 20% of samples.
 # For calculation of TPM: for 19,942 genes extract the total length of gene CDs, based on latest ENSEMBL
@@ -91,12 +89,21 @@ illumina_array_preprocess <- function(exp, gte, gen){
 
     # Remove samples which are not in the gte or in genotype data
     gte <- fread(args$genotype_to_expression_linking, header = FALSE)
+    gte$V1 <- as.character(gte$V1)
+    gte$V2 <- as.character(gte$V2)
+
     geno_fam <- fread(args$genotype_samples, header = FALSE)
     gte <- gte[gte$V1 %in% geno_fam$V2,]
 
     message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
 
     exp <- exp[, colnames(exp) %in% gte$V2]
+    exp <- exp[, order(colnames(exp))]
+    gte <- gte[order(gte$V2), ]
+
+    if(!all(colnames(exp) == gte$V2)){stop("Something went wrong in matching genotype and expression IDs. Please debug!")}
+
+    colnames(exp) <- gte$V1
 
     # quantile normalization
     and_n <- normalize.quantiles(exp, copy = FALSE)
@@ -122,12 +129,21 @@ RNAseq_preprocess <- function(exp, gte, gen){
 
     # Remove samples which are not in the gte or in genotype data
     gte <- fread(args$genotype_to_expression_linking, header = FALSE)
+    gte$V1 <- as.character(gte$V1)
+    gte$V2 <- as.character(gte$V2)
+
     geno_fam <- fread(args$genotype_samples, header = FALSE)
     gte <- gte[gte$V1 %in% geno_fam$V2,]
-    
+
     message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
 
     exp <- exp[, colnames(exp) %in% gte$V2]
+    exp <- exp[, order(colnames(exp))]
+    gte <- gte[order(gte$V2), ]
+
+    if(!all(colnames(exp) == gte$V2)){stop("Something went wrong in matching genotype and expression IDs. Please debug!")}
+
+    colnames(exp) <- gte$V1
     
     # TMM-normalized counts
     exp_n <- calcNormFactors(exp, method = "TMM")
@@ -168,22 +184,34 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
   platform <- match.arg(platform)
   message(paste("Expression platform is", platform, ", preprocessing the data..."))
 
-  if (platform %in% c("HT12v3", "HT12v4")){
-    and_p <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-    and_p <- log2(and_p)
-
-  } else if(platform %in% c("RNAseq")){
-    and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-    and_p <- log2(and_p + 0.25)
-  } ## TODO: if needed. Add methods for Affymetrix arrays.
-  message("Data preprocessed!")
-  message(paste("Removing samples which deviate more than", sd_threshold, "SDs from the mean values of PC1 or PC2."))
-  message("Starting iterative outlier detection...")
   it_round <- 0
   plot_it_round <- 0
+  nr_outliers <- 1
+
+  message(paste("Removing samples which deviate more than", sd_threshold, "SDs from the mean values of PC1 or PC2."))
+  message("Starting iterative outlier detection...")
+
   while (nr_outliers > 0) {
+
+    if (platform %in% c("HT12v3", "HT12v4")){
+      and_p <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+      and_p <- apply(and_p, 1, INT_transform)
+      and_p <- t(and_p)
+      and_p <- apply(and_p, 1, center_data)
+      and_p <- t(and_p)
+
+    } else if(platform %in% c("RNAseq")){
+      and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+      and_p <- apply(and_p, 1, INT_transform)
+      and_p <- t(and_p)
+      and_p <- apply(and_p, 1, center_data)
+      and_p <- t(and_p)
+    } ## TODO: if needed. Add methods for Affymetrix arrays.
+    message("Data preprocessed!")
+
     it_round <- it_round + 1
-    pcs <- prcomp(t(and), center = FALSE, scale. = FALSE)
+    pcs <- prcomp(t(and_p), center = FALSE, scale. = FALSE)
+    message("PCA calculation finished!")
 
     PCs <- as.data.table(pcs$x)
     PCs$sample <- rownames(pcs$x)
@@ -192,13 +220,13 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
     summary_pcs[[it_round]] <- data.table(PC = paste0("PC", 1:50), explained_variance = importance[1:50])
 
     PCs$outlier <- "no"
-    PCs1_med <- median(PCs$PC1)
+    PCs1_mean <- mean(PCs$PC1)
     PCs1_sd <- sd(PCs$PC1)
-    PCs[(PCs$PC1 > PCs1_med + sd_threshold * PCs1_sd) | (PCs$PC1 < PCs1_med - sd_threshold * PCs1_sd)]$outlier <- "yes"
+    PCs[(PCs$PC1 > PCs1_mean + sd_threshold * PCs1_sd) | (PCs$PC1 < PCs1_mean - sd_threshold * PCs1_sd)]$outlier <- "yes"
 
-    PCs2_med <- median(PCs$PC2)
+    PCs2_mean <- mean(PCs$PC2)
     PCs2_sd <- sd(PCs$PC2)
-    PCs[(PCs$PC2 > PCs2_med + sd_threshold * PCs2_sd) | (PCs$PC2 < PCs2_med - sd_threshold * PCs2_sd)]$outlier <- "yes"
+    PCs[(PCs$PC2 > PCs2_mean + sd_threshold * PCs2_sd) | (PCs$PC2 < PCs2_mean - sd_threshold * PCs2_sd)]$outlier <- "yes"
 
     plot_it_round <- plot_it_round + 1
     list_ggplots[[plot_it_round]] <- ggplot(PCs, aes(x = PC1, y = PC2, colour = outlier)) +
@@ -231,12 +259,15 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
     non_outliers <- PCs[!PCs$outlier %in% c("yes"), ]$sample
   
     # Remove outlier samples from the unprocessed data
-    and <- and[, colnames(and) %in% c(non_outliers, "Feature")]
+    message(class(and))
+    and <- and[, colnames(and) %in% c(non_outliers, "Feature"), with = FALSE]
 
     nr_outliers <- length(PCs[PCs$outlier %in% c("yes"), ]$sample)
+
     if (nr_outliers > 0) {
       message(paste0("Iteration round ", it_round, ". Removed ", nr_outliers, " outlier(s). Re-processing the data and running another round of PCA."))
       summary_table_temp <- data.table(Stage = paste("After removal of expression outliers in ", it_round, " iteration."), Nr_of_features = nrow(and), Nr_of_samples = ncol(and))
+      summary_table <- rbind(summary_table, summary_table_temp)
     } else if (nr_outliers == 0) {
       message(paste0("Iteration round ", it_round, ". No outliers detected. Finalizing interactive outlier detection."))
     }
@@ -261,7 +292,8 @@ gte <- gte[gte$V1 %in% geno_fam$V2,]
 
 and <- and[, colnames(and) %in% c("Feature", gte$V2), with = FALSE]
 
-summary_table <- data.table(Stage = "Samples with available genotype info", Nr_of_features = nrow(and), Nr_of_samples = ncol(and))
+summary_table_temp <- data.table(Stage = "Samples with available genotype info", Nr_of_features = nrow(and), Nr_of_samples = ncol(and))
+summary_table <- rbind(summary_table, summary_table_temp)
 
 if (!args$platform %in% c("HT12v3", "HT12v4", "RNAseq", "AffyU291", "AffyHuEx")){stop("Platform has to be one of HT12v3, HT12v4, RNAseq, AffyU291, AffyHuEx")}
 
