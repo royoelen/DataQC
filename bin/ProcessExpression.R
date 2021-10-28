@@ -25,7 +25,7 @@ option_list <- list(
     help = "Gene expression platform. This determines the normalization method and replaces probes with best-matching genes based on empirical probe mapping. One of: HT12v3, HT12v4, RNAseq, AffyU291, AffyHuEx."),
     make_option(c("-m", "--emp_probe_mapping"), type = "character",
     help = "Empirical probe matching file. Used to link the best array probe to each blood-expressed gene."),
-    make_option(c("-s", "--sd"), type = "double", default = 3,
+    make_option(c("-s", "--sd"), type = "double", default = 4,
     help = "Standard deviation threshold for removing expression samples. By default, samples away 3 SDs from the median of PC1 are removed."),
     make_option(c("-o", "--output"), type = "character",
     help = "Output folder where to put preprocessed data matrix, expression PCs, etc.")
