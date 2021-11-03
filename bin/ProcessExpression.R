@@ -308,6 +308,7 @@ iterative_outliers <- IterativeOutlierDetection(and, sd_threshold = args$sd)
 # Keep in the original data only non-outlier samples
 
 exp_non_outliers <- colnames(iterative_outliers$exp_mat)
+# print(head(exp_non_outliers))
 exp_non_outliers <- gte[gte$V1 %in% exp_non_outliers, ]$V2
 and <- and[, colnames(and) %in% c("Feature", exp_non_outliers), with = FALSE]
 
@@ -320,8 +321,11 @@ and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genoty
 }
 
 # Apply inverse normal transformation and scaling to normalised data.
+#and_p <- apply(and_p, 1, Z_transform) # No Z-transform as data will be forced to normal distribution anyway
 and_p <- apply(and_p, 1, INT_transform)
 and_p <- t(and_p)
+#and_p <- apply(and_p, 1, center_data)
+#and_p <- t(and_p)
 
 summary_table_temp <- data.table(Stage = "After removal of all expression outliers", Nr_of_features = nrow(and_p), Nr_of_samples = ncol(and_p))
 summary_table <- rbind(summary_table, summary_table_temp)
@@ -352,7 +356,8 @@ summary_pcs$PC <- factor(summary_pcs$PC, levels = paste0("PC", 1:100))
 fwrite(PCs[, c(1:101)], paste0(args$output, "/exp_PCs/exp_PCs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
 fwrite(summary_pcs, paste0(args$output, "/exp_data_summary/", "summary_pcs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
 
-p <- ggplot(summary_pcs, aes(x = PC, y = explained_variance)) + geom_bar(stat = "identity") + theme_bw()
+p <- ggplot(summary_pcs, aes(x = PC, y = explained_variance)) + geom_bar(stat = "identity") + theme_bw() +
+theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 ggsave(paste0(args$output, "/exp_plots/PCA_final_scree_plot.png"), height = 6, width = 17, units = "in", dpi = 300, type = "cairo")
 
 # Summary statistics ----
