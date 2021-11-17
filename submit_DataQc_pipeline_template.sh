@@ -31,7 +31,7 @@ ${nextflow_path}/nextflow run DataQC.nf \
 --expfile ${exp_path} \
 --gte ${gte_path} \
 --exp_platform ${exp_platform} \
---cohort_name [MyCohortName] \
+--cohort_name ${cohort_name} \
 --outdir ${output_path}  \
 -profile slurm \
 -resume
