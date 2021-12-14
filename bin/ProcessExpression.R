@@ -99,8 +99,8 @@ illumina_array_preprocess <- function(exp, gte, gen){
     message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
 
     exp <- exp[, colnames(exp) %in% gte$V2]
-    exp <- exp[, order(colnames(exp))]
-    gte <- gte[order(gte$V2), ]
+    exp <- exp[, base::order(colnames(exp))]
+    gte <- gte[base::order(gte$V2), ]
 
     if(!all(colnames(exp) == gte$V2)){stop("Something went wrong in matching genotype and expression IDs. Please debug!")}
     colnames(exp) <- gte$V1
@@ -140,8 +140,8 @@ RNAseq_preprocess <- function(exp, gte, gen){
     message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
 
     exp <- exp[, colnames(exp) %in% gte$V2]
-    exp <- exp[, order(colnames(exp))]
-    gte <- gte[order(gte$V2), ]
+    exp <- exp[, base::order(colnames(exp))]
+    gte <- gte[base::order(gte$V2), ]
 
     if(!all(colnames(exp) == gte$V2)){stop("Something went wrong in matching genotype and expression IDs. Please debug!")}
 
@@ -153,9 +153,9 @@ RNAseq_preprocess <- function(exp, gte, gen){
 
     # log2 transformation (+ add 0.25 for solving issues with log2(0)) (not needed because INT is applied)
     # and_n <- log2(and_n + 0.25)
-    message(paste(ncol(and_n), "samples in normalised expression matrix."))
+    # message(paste(ncol(and_n), "samples in normalised expression matrix."))
 
-    return(and_n)
+    return(exp_n)
 }
 
 exp_summary <- function(x){
@@ -303,12 +303,12 @@ summary_table <- rbind(summary_table, summary_table_temp)
 
 if (!args$platform %in% c("HT12v3", "HT12v4", "RNAseq", "AffyU291", "AffyHuEx")){stop("Platform has to be one of HT12v3, HT12v4, RNAseq, AffyU291, AffyHuEx")}
 
-iterative_outliers <- IterativeOutlierDetection(and, sd_threshold = args$sd) 
+iterative_outliers <- IterativeOutlierDetection(and, sd_threshold = args$sd, platform = args$platform) 
 
 # Keep in the original data only non-outlier samples
 
 exp_non_outliers <- colnames(iterative_outliers$exp_mat)
-# print(head(exp_non_outliers))
+#print(head(exp_non_outliers))
 exp_non_outliers <- gte[gte$V1 %in% exp_non_outliers, ]$V2
 and <- and[, colnames(and) %in% c("Feature", exp_non_outliers), with = FALSE]
 

@@ -54,12 +54,12 @@ Channel
 
 Channel
     .from(params.expfile)
-    .map { study -> [file("${study}.txt")]}
+    .map { study -> [file("${study}")]}
     .set { expfile_ch }
 
 Channel
     .from(params.gte)
-    .map { study -> [file("${study}.txt")]}
+    .map { study -> [file("${study}")]}
     .set { gte_ch }
 
 Channel
