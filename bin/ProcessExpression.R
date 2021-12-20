@@ -125,12 +125,17 @@ illumina_array_preprocess <- function(exp, gte, gen){
 
 RNAseq_preprocess <- function(exp, gte, gen){
     # Leave in only probes for which there is empirical probe mapping info and convert data into matrix
+    emp <- fread(args$emp_probe_mapping)
+    emp <- emp[, c(1, 2), with = FALSE]
     colnames(exp)[1] <- "Probe"
 
     exp$Probe <- as.character(exp$Probe)
+    emp$Probe <- as.character(emp$Probe)
 
+    exp <- merge(exp, emp, by = "Probe")
     exp <- as.data.frame(exp)
-    rownames(exp) <- exp$Probe
+    rownames(exp) <- exp[, ncol(exp)]
+    exp <- exp[, -ncol(exp)]
     exp <- exp[, -1]
     exp <- as.matrix(exp)
 
