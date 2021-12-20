@@ -69,7 +69,13 @@ INT_transform <- function(x){
     }
 
 comp_cv <- function(x){sd(x) / mean(x)}
-shap_test <- function(x){shapiro.test(x)$p.value}
+shap_test <- function(x){
+    if (length(unique(x)) > 1) {
+        return(shapiro.test(x)$p.value)
+    } else {
+        return(NA)
+    }
+}
 
 illumina_array_preprocess <- function(exp, gte, gen){
     # Leave in only probes for which there is empirical probe mapping info and convert data into matrix
@@ -146,10 +152,20 @@ RNAseq_preprocess <- function(exp, gte, gen){
     if(!all(colnames(exp) == gte$V2)){stop("Something went wrong in matching genotype and expression IDs. Please debug!")}
 
     colnames(exp) <- gte$V1
-    
+
+    exp_obj <- DGEList(counts = exp)
+
     # TMM-normalized counts
-    exp_n <- calcNormFactors(exp, method = "TMM")
-    exp_n <- cpm(exp_n, log = FALSE)
+    exp_obj <- calcNormFactors(exp_obj, method = "TMM")
+
+    exp_n <- cpm(exp_obj, log = FALSE)
+
+    print("RNAseq_preprocess")
+    print(str(exp_n))
+
+    print(min(exp_n))
+    print(max(exp_n))
+    print(any(is.na(exp_n)))
 
     # log2 transformation (+ add 0.25 for solving issues with log2(0)) (not needed because INT is applied)
     # and_n <- log2(and_n + 0.25)
@@ -198,7 +214,7 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
 
     if (platform %in% c("HT12v3", "HT12v4")){
       and_p <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-      and_p <- log2(and_p)
+      and_p <- log2(and_p + .Machine$double.eps)
       #and_p <- apply(and_p, 1, INT_transform)
       #and_p <- t(and_p)
       #and_p <- apply(and_p, 1, center_data)
@@ -206,7 +222,7 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
 
     } else if(platform %in% c("RNAseq")){
       and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-      and_p <- log2(and_p)
+      and_p <- log2(and_p + .Machine$double.eps)
       #and_p <- apply(and_p, 1, INT_transform)
       #and_p <- t(and_p)
       #and_p <- apply(and_p, 1, center_data)
@@ -218,8 +234,12 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
     pcs <- prcomp(t(and_p), center = FALSE, scale. = FALSE)
     message("PCA calculation finished!")
 
+    print(str(pcs))
+
     PCs <- as.data.table(pcs$x)
     PCs$sample <- rownames(pcs$x)
+
+    print(PCs)
 
     importance <- pcs$sdev^2 / sum(pcs$sdev^2)
     summary_pcs[[it_round]] <- data.table(PC = paste0("PC", 1:50), explained_variance = importance[1:50])
@@ -261,10 +281,15 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
       scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
       ggtitle(paste0(it_round, ". iteration round"))
 
+    print(str(PCs))
+
     non_outliers <- PCs[!PCs$outlier %in% c("yes"), ]$sample
+
+    print(str(non_outliers))
 
     non_outliers <- gte[as.character(gte$V1) %in% non_outliers, ]$V2
   
+    print(str(non_outliers))
     # Remove outlier samples from the unprocessed data
     and <- and[, colnames(and) %in% c(non_outliers, "Feature"), with = FALSE]
 
@@ -278,7 +303,7 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
       message(paste0("Iteration round ", it_round, ". No outliers detected. Finalizing interactive outlier detection."))
     }
   }
-  return(list(exp_mat = and_p, plots = list_ggplots, summary_pcs = summary_pcs))
+  return(list(exp_mat = and, plots = list_ggplots, summary_pcs = summary_pcs))
 }
 
 ############
@@ -305,12 +330,17 @@ if (!args$platform %in% c("HT12v3", "HT12v4", "RNAseq", "AffyU291", "AffyHuEx"))
 
 iterative_outliers <- IterativeOutlierDetection(and, sd_threshold = args$sd, platform = args$platform) 
 
+print(str(and))
+
 # Keep in the original data only non-outlier samples
 
 exp_non_outliers <- colnames(iterative_outliers$exp_mat)
-#print(head(exp_non_outliers))
-exp_non_outliers <- gte[gte$V1 %in% exp_non_outliers, ]$V2
+print("!!!!!!!!!!!!!!!!!!!!!!!!!")
+print(head(exp_non_outliers))
+#exp_non_outliers <- gte[gte$V1 %in% exp_non_outliers, ]$V2
 and <- and[, colnames(and) %in% c("Feature", exp_non_outliers), with = FALSE]
+
+print(str(and))
 
 # Final re-process, re-calculate PCs, re-visualise and write out
 if (args$platform %in% c("HT12v3", "HT12v4")){
@@ -376,6 +406,8 @@ colnames(and)[1] <- "gene"
 and$gene <- as.character(and$gene)
 rownames(and) <- and$gene
 and <- and[, -1]
+
+print(str(and))
 
 gene_summary <- exp_summary(and)
 
