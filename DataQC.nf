@@ -174,7 +174,7 @@ process GeneExpressionQC {
       --genotype_to_expression_linking ${gte} \
       --genotype_samples ${gen_samples} \
       --platform ${exp_platform} \
-      --emp_probe_mapping NULL \
+      --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_RNAseq.txt \
       --output outputfolder_exp
       """
 }
