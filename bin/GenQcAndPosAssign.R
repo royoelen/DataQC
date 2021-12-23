@@ -156,6 +156,11 @@ bedfile.in = paste0(bed_simplepath, "_QC.bed"),
 bedfile.out = paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.bed"),
 df.or.files = samples_to_include)
 
+# Reorder the samples and write out the sample file
+rows <- sample(nrow(samples_to_include))
+samples_to_include2 <- samples_to_include[rows, ]
+fwrite(samples_to_include2, "ShuffledSampleOrder.txt", sep = "\t", quote = FALSE, row.names = = FALSE, col.names = FALSE)
+
 # Rerun PCA on QCd data
 bed_qc <- bed(paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.bed"))
 target_pca_qcd <- bed_autoSVD(bed_qc, k = 10, ncores = 4)

@@ -116,7 +116,7 @@ process GenotypeQC {
     tag {GenotypeQC}
 
     input:
-      set file(bfile), file(bim), file(fam) from bfile_ch
+      set file(bfile), file(bim), file(fam) from bfile_ch 
       val s_stat from params.sthresh
 
     output:
@@ -130,6 +130,15 @@ process GenotypeQC {
       --pops $baseDir/data/1000G_pops.txt \
       --S_threshold ${s_stat} \
       --output outputfolder_gen
+
+      plink/plink2 \
+      --bfile outputfolder_gen/gen_data_QCd/${bfile}.simpleName \
+      --indiv-sort f ShuffledSampleOrder.txt \
+      --make-bed \
+      --out outputfolder_gen/gen_data_QCd/${bfile}.simpleName_ToImputation
+
+      rm outputfolder_gen/gen_data_QCd/*~
+
       """
 }
 
