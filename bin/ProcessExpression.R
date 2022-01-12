@@ -171,13 +171,6 @@ RNAseq_preprocess <- function(exp, gte, gen){
 
     exp_n <- cpm(exp_obj, log = FALSE)
 
-    print("RNAseq_preprocess")
-    print(str(exp_n))
-
-    print(min(exp_n))
-    print(max(exp_n))
-    print(any(is.na(exp_n)))
-
     # log2 transformation (+ add 0.25 for solving issues with log2(0)) (not needed because INT is applied)
     # and_n <- log2(and_n + 0.25)
     # message(paste(ncol(and_n), "samples in normalised expression matrix."))
@@ -225,7 +218,7 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
 
     if (platform %in% c("HT12v3", "HT12v4")){
       and_p <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-      and_p <- log2(and_p + .Machine$double.eps)
+      and_p <- log2(and_p + 0.25)
       #and_p <- apply(and_p, 1, INT_transform)
       #and_p <- t(and_p)
       #and_p <- apply(and_p, 1, center_data)
