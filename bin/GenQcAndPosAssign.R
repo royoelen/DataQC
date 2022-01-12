@@ -134,11 +134,21 @@ PCs$S <- S
 PCs$outlier <- "no"
 PCs[PCs$S > Sthresh, ]$outlier <- "yes"
 
-p1 <- ggplot(PCs, aes(x = PC1, y = PC2, colour = outlier)) + theme_bw() + geom_point() + scale_color_manual(values = c("no" = "black", "yes" = "red"))
-p2 <- ggplot(PCs, aes(x = PC3, y = PC4, colour = outlier)) + theme_bw() + geom_point() + scale_color_manual(values = c("no" = "black", "yes" = "red"))
-p3 <- ggplot(PCs, aes(x = PC5, y = PC6, colour = outlier)) + theme_bw() + geom_point() + scale_color_manual(values = c("no" = "black", "yes" = "red"))
-p4 <- ggplot(PCs, aes(x = PC7, y = PC8, colour = outlier)) + theme_bw() + geom_point() + scale_color_manual(values = c("no" = "black", "yes" = "red"))
-p5 <- ggplot(PCs, aes(x = PC9, y = PC10, colour = outlier)) + theme_bw() + geom_point() + scale_color_manual(values = c("no" = "black", "yes" = "red"))
+plotLabels <- F
+uniqueShapes <- intToUtf8(c(97:122, 65:90), multiple = T)
+PCs$thisLabel <- ""
+
+if (sum(PCs$outlier == "yes", na.rm = T) <= length(uniqueShapes) && plotLabels) {
+  PCs[PCs$outlier == "yes", ]$thisLabel <- as.character(uniqueShapes[1:sum(PCs$outlier == "yes", na.rm = T)])
+}
+
+print(PCs[PCs$outlier == "yes", ])
+
+p1 <- ggplot(PCs, aes(x = PC1, y = PC2, colour = outlier, label = thisLabel)) + theme_bw() + geom_point() + geom_text(hjust = 0, nudge_x = 1, size = 4, show.legend = F) + scale_color_manual(values = c("no" = "black", "yes" = "red"))
+p2 <- ggplot(PCs, aes(x = PC3, y = PC4, colour = outlier, label = thisLabel)) + theme_bw() + geom_point() + geom_text(hjust = 0, nudge_x = 1, size = 4, show.legend = F) + scale_color_manual(values = c("no" = "black", "yes" = "red"))
+p3 <- ggplot(PCs, aes(x = PC5, y = PC6, colour = outlier, label = thisLabel)) + theme_bw() + geom_point() + geom_text(hjust = 0, nudge_x = 1, size = 4, show.legend = F) + scale_color_manual(values = c("no" = "black", "yes" = "red"))
+p4 <- ggplot(PCs, aes(x = PC7, y = PC8, colour = outlier, label = thisLabel)) + theme_bw() + geom_point() + geom_text(hjust = 0, nudge_x = 1, size = 4, show.legend = F) + scale_color_manual(values = c("no" = "black", "yes" = "red"))
+p5 <- ggplot(PCs, aes(x = PC9, y = PC10, colour = outlier, label = thisLabel)) + theme_bw() + geom_point() + geom_text(hjust = 0, nudge_x = 1, size = 4, show.legend = F) + scale_color_manual(values = c("no" = "black", "yes" = "red"))
 
 p <- p1 + p2 + p3 + p4 + p5 + plot_layout(nrow = 3)
 

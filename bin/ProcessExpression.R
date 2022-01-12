@@ -132,8 +132,14 @@ RNAseq_preprocess <- function(exp, gte, gen){
     exp$Probe <- as.character(exp$Probe)
     emp$Probe <- as.character(emp$Probe)
 
+    print(str(emp))
+    print(str(exp))
+
     exp <- merge(exp, emp, by = "Probe")
     exp <- as.data.frame(exp)
+
+    print(exp)
+
     rownames(exp) <- exp[, ncol(exp)]
     exp <- exp[, -ncol(exp)]
     exp <- exp[, -1]
@@ -227,7 +233,7 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
 
     } else if(platform %in% c("RNAseq")){
       and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-      and_p <- log2(and_p + .Machine$double.eps)
+      and_p <- log2(and_p + 0.25)
       #and_p <- apply(and_p, 1, INT_transform)
       #and_p <- t(and_p)
       #and_p <- apply(and_p, 1, center_data)
@@ -324,7 +330,11 @@ summary_table <- data.table(Stage = "Unprocessed matrix", Nr_of_features = nrow(
 # Remove samples which are not in the gte or in genotype data
 gte <- fread(args$genotype_to_expression_linking, header = FALSE)
 geno_fam <- fread(args$genotype_samples, header = FALSE)
+print(str(geno_fam))
+
 gte <- gte[gte$V1 %in% geno_fam$V2, ]
+
+print(str(gte))
 
 and <- and[, colnames(and) %in% c("Feature", gte$V2), with = FALSE]
 
@@ -332,6 +342,8 @@ summary_table_temp <- data.table(Stage = "Samples with available genotype info",
 summary_table <- rbind(summary_table, summary_table_temp)
 
 if (!args$platform %in% c("HT12v3", "HT12v4", "RNAseq", "AffyU291", "AffyHuEx")){stop("Platform has to be one of HT12v3, HT12v4, RNAseq, AffyU291, AffyHuEx")}
+
+print(str(and))
 
 iterative_outliers <- IterativeOutlierDetection(and, sd_threshold = args$sd, platform = args$platform) 
 
