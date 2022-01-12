@@ -218,7 +218,7 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
 
     if (platform %in% c("HT12v3", "HT12v4")){
       and_p <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-      and_p <- log2(and_p + 0.25)
+      and_p <- log2(and_p)
       #and_p <- apply(and_p, 1, INT_transform)
       #and_p <- t(and_p)
       #and_p <- apply(and_p, 1, center_data)
