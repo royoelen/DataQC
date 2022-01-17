@@ -26,7 +26,7 @@ def helpMessage() {
       --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. 
       --exp_platform                Indicator indicating the gene expression platform. HT12v3, HT12v4, RNAseq, AffyU219, AffyExon.
       --outdir                      Path to the output directory.
-      --Sthresh                     "Outlierness" score threshold for excluding ethnic outliers. Defaults to 4 but should be adjusted according to visual inspection.
+      --Sthresh                     "Outlierness" score threshold for excluding ethnic outliers. Defaults to 0.4 but should be adjusted according to visual inspection.
       --ExpSdThreshold              Standard deviation threhshold for excluding gene expression outliers. By default, samples away by 3 SDs from the median of PC1 are removed.
 
     """.stripIndent()
@@ -45,6 +45,9 @@ if( !(workflow.runName ==~ /[a-z]+_[a-z]+/) ){
   custom_runName = workflow.runName
 }
 
+// Define location of Report_template.Rmd
+params.report_template = "$baseDir/bin/Report_template.Rmd"
+
 
 // Define input channels
 Channel
@@ -54,19 +57,19 @@ Channel
 
 Channel
     .from(params.expfile)
-    .map { study -> [file("${study}.txt")]}
+    .map { study -> [file("${study}")]}
     .set { expfile_ch }
 
 Channel
     .from(params.gte)
-    .map { study -> [file("${study}.txt")]}
+    .map { study -> [file("${study}")]}
     .set { gte_ch }
 
 Channel
-    .fromPath('bin/Report_template.Rmd')
+    .fromPath(params.report_template)
     .set { report_ch }
 
-params.sthresh = 0.4
+params.Sthresh = 0.4
 params.exp_platform = ''
 params.cohort_name = ''
 params.outdir = ''
@@ -85,7 +88,7 @@ summary['Pipeline Name']            = 'DataQC'
 summary['Pipeline Version']         = workflow.manifest.version
 summary['Run Name']                 = custom_runName ?: workflow.runName
 summary['PLINK bfile']              = params.bfile
-summary['S threshold']              = params.sthresh
+summary['S threshold']              = params.Sthresh
 summary['Expression matrix']        = params.expfile
 summary['GTE file']                 = params.gte
 summary['Max Memory']               = params.max_memory
@@ -117,11 +120,11 @@ process GenotypeQC {
 
     input:
       set file(bfile), file(bim), file(fam) from bfile_ch 
-      val s_stat from params.sthresh
+      val s_stat from params.Sthresh
 
     output:
       path ('outputfolder_gen') into output_ch_genotypes
-      file 'outputfolder_gen/gen_data_QCd/*_ToImputation.fam' into gen_samples
+      file 'outputfolder_gen/gen_data_QCd/SexCheck.txt' into sexcheck
 
       """
       Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
@@ -130,14 +133,6 @@ process GenotypeQC {
       --pops $baseDir/data/1000G_pops.txt \
       --S_threshold ${s_stat} \
       --output outputfolder_gen
-
-      plink/plink2 \
-      --bfile outputfolder_gen/gen_data_QCd/${bfile}.simpleName \
-      --indiv-sort f ShuffledSampleOrder.txt \
-      --make-bed \
-      --out outputfolder_gen/gen_data_QCd/${bfile}.simpleName_ToImputation
-
-      rm outputfolder_gen/gen_data_QCd/*~
 
       """
 }
@@ -149,7 +144,7 @@ process GeneExpressionQC {
     input:
       file exp_mat from expfile_ch
       file gte from gte_ch
-      file gen_samples from gen_samples
+      file sexcheck from sexcheck
       val exp_platform from params.exp_platform
 
     output:
@@ -161,9 +156,9 @@ process GeneExpressionQC {
       Rscript --vanilla $baseDir/bin/ProcessExpression.R  \
       --expression_matrix ${exp_mat} \
       --genotype_to_expression_linking ${gte} \
-      --genotype_samples ${gen_samples} \
+      --sex_info ${sexcheck} \
       --platform ${exp_platform} \
-      --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_Illumina_HT12v3_20170808.txt \
+      --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_Illumina_HT12v3_20220111.txt \
       --output outputfolder_exp
       """
       else if (exp_platform == 'HT12v4')
@@ -171,7 +166,7 @@ process GeneExpressionQC {
       Rscript --vanilla $baseDir/bin/ProcessExpression.R  \
       --expression_matrix ${exp_mat} \
       --genotype_to_expression_linking ${gte} \
-      --genotype_samples ${gen_samples} \
+      --sex_info ${sexcheck} \
       --platform ${exp_platform} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_Illumina_HT12v4_20170808.txt \
       --output outputfolder_exp
@@ -181,7 +176,7 @@ process GeneExpressionQC {
       Rscript --vanilla $baseDir/bin/ProcessExpression.R  \
       --expression_matrix ${exp_mat} \
       --genotype_to_expression_linking ${gte} \
-      --genotype_samples ${gen_samples} \
+      --sex_info ${sexcheck} \
       --platform ${exp_platform} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_RNAseq.txt \
       --output outputfolder_exp

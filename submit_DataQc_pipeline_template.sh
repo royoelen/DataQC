@@ -33,5 +33,5 @@ ${nextflow_path}/nextflow run DataQC.nf \
 --exp_platform ${exp_platform} \
 --cohort_name ${cohort_name} \
 --outdir ${output_path}  \
--profile slurm \
+-profile slurm,singularity \
 -resume

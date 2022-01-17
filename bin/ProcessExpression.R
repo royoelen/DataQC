@@ -19,14 +19,14 @@ option_list <- list(
     help = "Unprocessed gene expression matrix from array or RNA-seq experiment. Samples in columns, genes/probes in the rows."),
     make_option(c("-l", "--genotype_to_expression_linking"), type = "character",
     help = "Genotype-to-expression linking file. No header. First column- sample IDs in the genotype file, second column- corresponding sample IDs in the gene expression matrix."),
-    make_option(c("-g", "--genotype_samples"), type = "character",
-    help = ".fam file with the samples for which there is genotype data available. Used for filtering those in."),
     make_option(c("-p", "--platform"), type = "character",
     help = "Gene expression platform. This determines the normalization method and replaces probes with best-matching genes based on empirical probe mapping. One of: HT12v3, HT12v4, RNAseq, AffyU291, AffyHuEx."),
     make_option(c("-m", "--emp_probe_mapping"), type = "character",
     help = "Empirical probe matching file. Used to link the best array probe to each blood-expressed gene."),
     make_option(c("-s", "--sd"), type = "double", default = 4,
-    help = "Standard deviation threshold for removing expression samples. By default, samples away 3 SDs from the median of PC1 are removed."),
+    help = "Standard deviation threshold for removing expression samples. By default, samples away 4 SDs from the median of PC1 are removed."),
+    make_option(c("-i", "--sex_info"), type = "character",
+    help = "File with sex information. Plink2 --check-sex filtered output."),
     make_option(c("-o", "--output"), type = "character",
     help = "Output folder where to put preprocessed data matrix, expression PCs, etc.")
     )
@@ -92,15 +92,15 @@ illumina_array_preprocess <- function(exp, gte, gen){
     gte$V1 <- as.character(gte$V1)
     gte$V2 <- as.character(gte$V2)
 
-    geno_fam <- fread(args$genotype_samples, header = FALSE)
+    geno_fam <- fread(args$sex_info, header = FALSE)
     gte <- gte[gte$V1 %in% geno_fam$V2,]
     gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
 
     message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
 
     exp <- exp[, colnames(exp) %in% gte$V2]
-    exp <- exp[, order(colnames(exp))]
-    gte <- gte[order(gte$V2), ]
+    exp <- exp[, base::order(colnames(exp))]
+    gte <- gte[base::order(gte$V2), ]
 
     if(!all(colnames(exp) == gte$V2)){stop("Something went wrong in matching genotype and expression IDs. Please debug!")}
     colnames(exp) <- gte$V1
@@ -133,34 +133,41 @@ RNAseq_preprocess <- function(exp, gte, gen){
     exp <- exp[, -1]
     exp <- as.matrix(exp)
 
+
     # Remove samples which are not in the gte or in genotype data
     gte <- fread(args$genotype_to_expression_linking, header = FALSE)
     gte$V1 <- as.character(gte$V1)
     gte$V2 <- as.character(gte$V2)
 
-    geno_fam <- fread(args$genotype_samples, header = FALSE)
+    geno_fam <- fread(args$sex_info, header = FALSE)
     gte <- gte[gte$V1 %in% geno_fam$V2,]
     gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
 
     message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
 
     exp <- exp[, colnames(exp) %in% gte$V2]
-    exp <- exp[, order(colnames(exp))]
-    gte <- gte[order(gte$V2), ]
+    exp <- exp[, base::order(colnames(exp))]
+    gte <- gte[base::order(gte$V2), ]
 
     if(!all(colnames(exp) == gte$V2)){stop("Something went wrong in matching genotype and expression IDs. Please debug!")}
 
     colnames(exp) <- gte$V1
+
+    # Remove genes with no variance
+    gene_variance <- data.frame(gene = rownames(exp), gene_variance = apply(exp, 1, var))
+    exp <- exp[!rownames(exp) %in% gene_variance[gene_variance$gene_variance == 0, ]$gene, ]
+
     
     # TMM-normalized counts
-    exp_n <- calcNormFactors(exp, method = "TMM")
+    exp_n <- DGEList(counts = exp)
+    exp_n <- calcNormFactors(exp_n, method = "TMM")
     exp_n <- cpm(exp_n, log = FALSE)
 
-    # log2 transformation (+ add 0.25 for solving issues with log2(0)) (not needed because INT is applied)
+    # log2 transformation (+ add 0.25 for solving issues with log2(0)) (not needed because INT will be applied)
     # and_n <- log2(and_n + 0.25)
-    message(paste(ncol(and_n), "samples in normalised expression matrix."))
+    message(paste(ncol(exp_n), "samples in normalised expression matrix."))
 
-    return(and_n)
+    return(exp_n)
 }
 
 exp_summary <- function(x){
@@ -189,6 +196,7 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
   and <- input_exp
   list_ggplots <- list()
   summary_pcs <- list()
+  outliers <- c()
   platform <- match.arg(platform)
   message(paste0("Expression platform is ", platform, ", preprocessing the data..."))
 
@@ -211,7 +219,7 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
 
     } else if(platform %in% c("RNAseq")){
       and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-      and_p <- log2(and_p)
+      and_p <- log2(and_p + 0.25)
       #and_p <- apply(and_p, 1, INT_transform)
       #and_p <- t(and_p)
       #and_p <- apply(and_p, 1, center_data)
@@ -279,11 +287,16 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
       message(paste0("Iteration round ", it_round, ". Removed ", nr_outliers, " outlier(s). Re-processing the data and running another round of PCA."))
       summary_table_temp <- data.table(Stage = paste("After removal of expression outliers in ", it_round, " iteration."), Nr_of_features = nrow(and), Nr_of_samples = ncol(and))
       summary_table <- rbind(summary_table, summary_table_temp)
+
+      outliers <- c(outliers, PCs[PCs$outlier %in% c("yes"), ]$sample)
     } else if (nr_outliers == 0) {
       message(paste0("Iteration round ", it_round, ". No outliers detected. Finalizing interactive outlier detection."))
     }
   }
-  return(list(exp_mat = and_p, plots = list_ggplots, summary_pcs = summary_pcs))
+  if (it_round == 1){
+    PCs_it1 <- PCs
+  } else {PCs_it1[PCs_it1$sample %in% outliers, ]$outlier <- "yes"}
+  return(list(exp_mat = and_p, plots = list_ggplots, summary_pcs = summary_pcs, PCs_first = PCs_it1))
 }
 
 ############
@@ -298,7 +311,7 @@ summary_table <- data.table(Stage = "Unprocessed matrix", Nr_of_features = nrow(
 
 # Remove samples which are not in the gte or in genotype data
 gte <- fread(args$genotype_to_expression_linking, header = FALSE)
-geno_fam <- fread(args$genotype_samples, header = FALSE)
+geno_fam <- fread(args$sex_info, header = FALSE)
 gte <- gte[gte$V1 %in% geno_fam$V2, ]
 
 and <- and[, colnames(and) %in% c("Feature", gte$V2), with = FALSE]
@@ -308,32 +321,77 @@ summary_table <- rbind(summary_table, summary_table_temp)
 
 if (!args$platform %in% c("HT12v3", "HT12v4", "RNAseq", "AffyU291", "AffyHuEx")){stop("Platform has to be one of HT12v3, HT12v4, RNAseq, AffyU291, AffyHuEx")}
 
-iterative_outliers <- IterativeOutlierDetection(and, sd_threshold = args$sd) 
+iterative_outliers <- IterativeOutlierDetection(and, sd_threshold = args$sd, platform = args$platform) 
+
 
 # Keep in the original data only non-outlier samples
-
 exp_non_outliers <- colnames(iterative_outliers$exp_mat)
-# print(head(exp_non_outliers))
 exp_non_outliers <- gte[gte$V1 %in% exp_non_outliers, ]$V2
+
 and <- and[, colnames(and) %in% c("Feature", exp_non_outliers), with = FALSE]
 
 # Final re-process, re-calculate PCs, re-visualise and write out
 if (args$platform %in% c("HT12v3", "HT12v4")){
-and_p <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+and_pp <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+and_pp <- log2(and_pp)
 }
 if (args$platform %in% c("RNAseq")){
-and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+and_pp <- log2(and_pp + 0.25)
 }
 
-# Apply inverse normal transformation and scaling to normalised data.
+# Visualise the expression of X-specific and y-specific genes
+xist <- and_pp[rownames(and_pp) == "ENSG00000229807", ]
+y_genes <- c("ENSG00000234795", "ENSG00000237048", "ENSG00000275866", "ENSG00000239225", "ENSG00000169789", "ENSG00000129862", "ENSG00000273693", "ENSG00000243040", "ENSG00000198692",
+"ENSG00000233699", "ENSG00000254488", "ENSG00000236424", "ENSG00000234414", "ENSG00000099715", "ENSG00000180910", "ENSG00000280969", "ENSG00000215560", "ENSG00000229236",
+"ENSG00000223637", "ENSG00000131007", "ENSG00000176728", "ENSG00000012817", "ENSG00000182415", "ENSG00000099725", "ENSG00000184895", "ENSG00000129824", "ENSG00000067646",
+"ENSG00000183878", "ENSG00000154620", "ENSG00000241859", "ENSG00000099721", "ENSG00000092377", "ENSG00000205944", "ENSG00000168757", "ENSG00000197038", "ENSG00000232808",
+"ENSG00000233803", "ENSG00000229549", "ENSG00000242389", "ENSG00000165246", "ENSG00000215580", "ENSG00000131002")
+y_genes <- and_pp[rownames(and_pp) %in% y_genes, ]
+
+y_mean <- apply(y_genes, 2, mean)
+y_genes <- data.frame(sample = colnames(y_genes), xist = xist, y_genes = y_mean)
+
+print(head(geno_fam))
+geno_fam_f <- geno_fam[, c(2, 4), with = FALSE]
+colnames(geno_fam_f) <- c("sample", "Sex")
+geno_fam_f$Sex <- as.character(geno_fam_f$Sex)
+
+y_genes <- merge(y_genes, geno_fam_f, by = "sample")
+print(head(y_genes))
+max_exp <- max(y_genes$y_genes, y_genes$xist)
+
+y_genes$mismatch <- "no"
+
+if (nrow(y_genes[(y_genes$y_genes > y_genes$xist & y_genes$Sex == 2) | (y_genes$y_genes < y_genes$xist & y_genes$Sex == 1), ]) > 0){
+y_genes[(y_genes$y_genes > y_genes$xist & y_genes$Sex == 2) | (y_genes$y_genes < y_genes$xist & y_genes$Sex == 1), ]$mismatch <- "yes"
+}
+
+p <- ggplot(y_genes, aes(x = xist, y = y_genes, col = mismatch, shape = Sex)) +
+geom_point() + 
+theme_bw() +
+scale_colour_manual(values = c("no" = "darkgray", "yes" = "red")) +
+ylab("mean of Y genes") +
+xlab("XIST") +
+geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue")
+
+ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.png"), height = 5, width = 6, units = "in", dpi = 300, type = "cairo")
+
+summary_table_temp <- data.table(Stage = "After removal of all expression outliers", Nr_of_features = nrow(and_pp), Nr_of_samples = ncol(and_pp))
+summary_table <- rbind(summary_table, summary_table_temp)
+
+# Filter out potential sex mismatches
+and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$mismatch == "no", ]$sample]
+
+summary_table_temp <- data.table(Stage = "Samples after removal of sex errors", Nr_of_features = nrow(and_pp), Nr_of_samples = ncol(and_pp))
+summary_table <- rbind(summary_table, summary_table_temp)
+
+# Apply inverse normal transformation to normalised data.
 #and_p <- apply(and_p, 1, Z_transform) # No Z-transform as data will be forced to normal distribution anyway
-and_p <- apply(and_p, 1, INT_transform)
+and_p <- apply(and_pp, 1, INT_transform)
 and_p <- t(and_p)
 #and_p <- apply(and_p, 1, center_data)
 #and_p <- t(and_p)
-
-summary_table_temp <- data.table(Stage = "After removal of all expression outliers", Nr_of_features = nrow(and_p), Nr_of_samples = ncol(and_p))
-summary_table <- rbind(summary_table, summary_table_temp)
 
 pcs <- prcomp(t(and_p), center = FALSE, scale. = FALSE)
 PCs <- data.table(Sample = rownames(pcs$x), pcs$x)
@@ -343,11 +401,31 @@ p6 <- ggplot(PCs, aes(x = PC3, y = PC4)) + geom_point(alpha = 0.3) + theme_bw()
 p7 <- ggplot(PCs, aes(x = PC5, y = PC6)) + geom_point(alpha = 0.3) + theme_bw()
 p8 <- ggplot(PCs, aes(x = PC7, y = PC8)) + geom_point(alpha = 0.3) + theme_bw()
 
-p <- (iterative_outliers$plots[[1]] | iterative_outliers$plots[[2]]) / (iterative_outliers$plots[[3]] | iterative_outliers$plots[[4]])
+p1 <- ggplot(iterative_outliers[[PCs_first]], aes(x = PC1, y = PC2, colour = outlier)) +
+      geom_point(alpha = 0.3) +
+      theme_bw() +
+      scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
+      ggtitle(paste0(it_round, ". iteration round"))
+p2 <- ggplot(iterative_outliers[[PCs_first]], aes(x = PC3, y = PC4, colour = outlier)) +
+      geom_point(alpha = 0.3) +
+      theme_bw() +
+      scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
+      ggtitle(paste0(it_round, ". iteration round"))
+p3 <- ggplot(iterative_outliers[[PCs_first]], aes(x = PC5, y = PC6, colour = outlier)) +
+      geom_point(alpha = 0.3) +
+      theme_bw() +
+      scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
+      ggtitle(paste0(it_round, ". iteration round"))
+p4 <- ggplot(iterative_outliers[[PCs_first]], aes(x = PC7, y = PC8, colour = outlier)) +
+      geom_point(alpha = 0.3) +
+      theme_bw() +
+      scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
+      ggtitle(paste0(it_round, ". iteration round"))
+
 ggsave(paste0(args$output, "/exp_plots/PCA_before.png"), height = 10, width = 11, units = "in", dpi = 300, type = "cairo")
 
 p <- (p5 | p6) / (p7 | p8)
-ggsave(paste0(args$output, "/exp_plots/PCA_after.png"), height = 10, width = 10, units = "in", dpi = 300, type = "cairo")
+ggsave(paste0(args$output, "/exp_plots/PCA_after.png"), height = 6, width = 6, units = "in", dpi = 300, type = "cairo")
 
 and_p2 <- as.data.table(and_p)
 and_p2 <- data.table(`-` = rownames(and_p), and_p2)
@@ -366,7 +444,7 @@ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 ggsave(paste0(args$output, "/exp_plots/PCA_final_scree_plot.png"), height = 6, width = 17, units = "in", dpi = 300, type = "cairo")
 
 # Summary statistics ----
-message("Calculating descriptive summary statistiscs for every gene...")
+message("Calculating descriptive summary statistics for every gene...")
 # Per gene, calculate mean, median, min, max, sd, and shapiro test P-value
 # before preprocessing
 message("Before normalisation.")
@@ -397,7 +475,7 @@ fwrite(gene_summary, paste0(args$output, "/exp_data_summary/", "raw_gene_summary
 # on fully processed expression matrix
 message("After normalization.")
 
-gene_summary <- exp_summary(as.data.table(and_p))
+gene_summary <- exp_summary(as.data.table(and_pp))
 fwrite(gene_summary, paste0(args$output, "/exp_data_summary/", "processed_gene_summary.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
 
 # Write out summary table about features and samples
