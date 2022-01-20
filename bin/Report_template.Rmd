@@ -8,6 +8,10 @@ output:
 params:
     dataset_name: "unknown"
     platform: "unknown"
+    N: 100
+    S: 0.4
+    SD: 3
+    SD_exp: 4
 ---
 
 # Dataset
@@ -15,6 +19,16 @@ params:
 This report is for cohort: **`r params$dataset_name`**.
 
 Expression platform for this cohort is: **`r params$platform`**.
+
+Post-QC sample size for this cohort is: **`r library(data.table); exp <- fread(params$N); ncol(exp) - 1`**
+
+**Settings used for sample outlier detection:**
+
+Used LOF S-threhold for ancestry outliers: `r params$S`
+
+Threshold of SD difference from mean genetic PC1 and PC2 is: `r params$SD`
+
+Threshold of SD difference from mean gene expression PC1 and PC2 is: `r params$SD_exp`
 
 ## Genotype QC report
 
@@ -43,22 +57,22 @@ Next plot summarises the heterozygosity of the input samples. Samples showing ex
 
 ![**Fig 2. Distribution of heterozygosity rate.** Thresholds for declaring excess/depleted heterozygosity for sample (mean+/-3SD) are shown as vertical lines. ](outputfolder_gen/gen_plots/HetCheck.png)  
 
-### Ethnic outliers
+### Ancestry outliers
 
 #### Genotype data projected into 1000G superpopulations
 
-Here we project your genotype samples into 1000G p3v5 superpopulations to check if all samples come from one ethnicity. 
+Here we project your genotype samples into 1000G p3v5 superpopulations to check if all samples come from one ancestry. 
 
-1. If you observe a few samples which are different ancestry compared to the majority of samples (e.g. majority of the samples are of EUR ancestry and there are few samples from AFR or SAS), then remove ethnic outliers and re-run the DataQc pipeline without those samples.
-2. If you observe many (>100) samples which are different ancestry compared to the majority of samples (your dataset consists of individuals from several ancestries) then please split your genotype data based on ancestry and rerun this and following pipelines on those datasets separately. This assumes that you know the ancestry information for your genotype data.
+1. If you observe a few samples which are different ancestry compared to the majority of samples (e.g. majority of the samples are of EUR ancestry and there are few samples from AFR or SAS), then remove ancestry outliers and re-run the DataQc pipeline without those samples.
+2. If you observe many (>100) samples which are different ancestry compared to the majority of samples (your dataset consists of individuals from several ancestries) then please split your genotype data based on ancestry and rerun this and following pipelines on those datasets separately.
 
-The file `1000G_PC_projections.txt` has been written to the your output folder under `gen_data_summary`. This can be used to manually extract the outlier samples based on their PC projections into 1000G superpopulations. You can use plink/plink 1.9/plink 2.0 to filter samples from initial .bed/.bim/.fam files.
+The file `AssignedPopulations.txt` and `1000G_PC_projections.txt` has been written to the your output folder under `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. You can use plink/plink 1.9/plink 2.0 to filter samples from initial .bed/.bim/.fam files.
 
-![**Fig 7. Genotype samples projected to 1000G superpopulations.**](outputfolder_gen/gen_plots/SamplesPCsProjectedTo1000G.png)  
+![**Fig 7. Genotype samples projected to 1000G superpopulations.** First two plots show only target dataset in the 1000G PC space. Rest of the plots visualise target dataset, as well as samples from 1000G superpopulations by plotting first 10 genotype PCs.](outputfolder_gen/gen_plots/SamplesPCsProjectedTo1000G.png)  
 
-#### Assign population for each sample
+#### Assign superpopulation for each sample
 
-Based on first 3 genotype PCs, here we assign the most likely population to each sample and outline those samples which are clearly different. Again, all samples should be the most similar to one ancestry and samples resembling other ancestries should be removed or treated as a separate dataset (in case of N>100).
+Based on first 3 genotype PCs, here we assign the most likely population to each sample and outline those samples which are clearly different. Again, all the samples in the dataset should be the most similar to only one ancestry and samples resembling other ancestries should be removed or treated as a separate dataset (in case of N>100).
 
 ```{r, fig.height = 7, fig.width = 7, fig.align = "center", echo = FALSE, message = FALSE, warning = FALSE}
 library(dplyr)
@@ -87,6 +101,8 @@ scale_fill_manual(values = c("Target" = "black",
 "AMR" = "lightgrey", 
 "SAS" = "orange", 
 "AFR" = "red"))
+
+fwrite(res, "outputfolder_gen/gen_data_summary/AssignedPopulations.txt", sep = "\t", quote = FALSE, row.names = FALSE)
 ```
 
 **Fig 6. Euclidean distance between target samples and samples from each 1000G superpopulation.** 
@@ -105,10 +121,10 @@ scale_fill_manual(values = c("Target" = "black",
 
 Again, please follow the following instructions:
 
-1. If you observe a few samples which are different ancestry compared to the majority of samples (e.g. majority of the samples are of EUR ancestry and there are few samples from AFR or SAS), then remove ethnic outliers and re-run the DataQc pipeline without those samples.
+1. If you observe a few samples which are different ancestry compared to the majority of samples (e.g. majority of the samples are of EUR ancestry and there are few samples from AFR or SAS), then remove ancestry outliers and re-run the DataQc pipeline without those samples.
 2. If you observe many (>100) samples which are different ancestry compared to the majority of samples (your dataset consists of individuals from several ancestries) then please split your genotype data, based on ancestry and rerun this and following pipelines on those datasets separately. This assumes that you know the ancestry information for your genotype data.
 
-The file `1000G_PC_projections.txt` has been written to the your output folder under `gen_data_summary`. This can be used to manually extract the outlier samples based on their PC projections into 1000G superpopulations. You can use plink/plink 1.9/plink 2.0 to filter samples from initial .bed/.bim/.fam files.
+The file `AssignedPopulations.txt` and `1000G_PC_projections.txt` has been written to the your output folder under `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. You can use plink/plink 1.9/plink 2.0 to filter samples from initial .bed/.bim/.fam files.
 
 
 ### Individual genetic outliers in the target population
@@ -117,17 +133,27 @@ Here we conduct PCA on the genotypes of eQTL samples only and investigate if the
 
 #### Outlier samples
 
-On the next plot you can see the distribution of Probabilistic Local Outlier Factor "outlierness" statistic, based on which the samples are declared genetic outliers and removed from the analysis. You should check based on the histogram if the default value is appropriate. If not, adjust it in the pipeline argument and re-run.
+On the next plot you can see the distribution of Probabilistic Local Outlier Factor "outlierness" statistic ([Kriegel et al., 2009](https://dl.acm.org/doi/10.1145/1645953.1646195), [Privé et al., 2020](https://academic.oup.com/bioinformatics/article/36/16/4449/5838185)), based on which the samples are declared genetic outliers and removed from the analysis. You should check based on the histogram if the default value is appropriate. If not, adjust it in the pipeline argument and re-run.
 
-If you observe bimodal distribution on the histogram or unsolved sub-clusters on PCA plots, this might indicate that you have large fraction of samples (>10%) from somewhat different ancestry and algorithm does not assign those as outliers. Here it might be reasonable to split the data as for multi-anchestry dataset. In case of doubt please contact urmo.vosa@gmail.com for advice and we will investigate further.
+If you observe bimodal distribution on the histogram then it might indicate substratification in the genotype data. Check the following section, Figure 4 and 5. 
 
 ![**Fig 3. Statistic of outlierness with threshold used to remove ethnic outliers.**](outputfolder_gen/gen_plots/PC_dist_outliers_S.png)  
 
-On the next two plots we visualise genetic principal components to check if genetic outliers were removed. If you observe 
+On the next two plots we visualise genetic principal components to check if genetic outliers were removed. If you observe unsolved sub-clusters on following PCA plots, this might indicate that you have different genotyping batches in the data, or large fraction of samples (e.g. >10%) from somewhat different ancestry. In this case, the algorithm migh not assign all deviating samples as outliers or remove unreasonably large fraction of samples. 
 
-![**Fig 4. PCA with all samples, outliers outlined with red.**](outputfolder_gen/gen_plots/PCA_outliers.png)  
+If the pipline removes unreasonably large fraction of the samples, there are multiple courses of action to consider:
 
-![**Fig 5. PCA with all samples, outliers removed.**](outputfolder_gen/gen_plots/Target_PCs_postQC.png)  
+1. If you observe clusters with limited numbers of clusters (e.g. N<500) and a clear separation based on PC1 or PC2, you can consider using the data as it is: first 2 genetic PCs will be used as covariates in the meta-analysis and such batch effects will be mostly accounted for. In that case, you should re-run the `DataQC` pipeline with large SD value, e.g. `--SDthresh 10`, to keep all the data in.
+
+2. If you have multiple batches with many samples (N>500), you might consider splitting the data based on genotyping batch and re-running `DataQC` and all following pipelines on those batches.
+
+If the pipelines does not remove all clear outlier samples, adjust `--SDthresh` threshold accordingly to remove small fraction of clearly deviating samples.
+
+In case of doubt please contact the lead analysts for advice and we will investigate further.
+
+![**Fig 4. PCA with all samples, outliers outlined with red.** Different shades of red indicate different classes of outliers: difference in SD from mean of PC1 and PC2 (pink), statistic of outlierness S (red), or both (dark red).](outputfolder_gen/gen_plots/PCA_outliers.png)  
+
+![**Fig 5. PCA with all samples, outliers removed.** You should not see any dramatic outliers any more. These are the PCs which will be used as covariates in the eQTL meta-analysis.](outputfolder_gen/gen_plots/Target_PCs_postQC.png)  
 
 #### Loadings of PCs
 
@@ -146,9 +172,9 @@ knitr::kable(overview_table)
 
 ### PCA on preprocessed expression data
 
-On the following plots, 8 first PCs are calculated on normalised and log~2~-transformed expression matrix. Samples were declared as outliers based on first two PCs, when they deviate from the mean value by 4 standard deviations (SDs). Analysis was run iteratively, data was pre-processed and PCA calculated until there were no further expression otliers to remove.
+On the following plots, 8 first PCs are calculated on normalised and log~2~-transformed expression matrix. Samples were declared as outliers based on first two PCs, when they deviate from the mean value by `r params$SD_exp` standard deviations (SDs). Analysis was run iteratively, data was pre-processed and PCA was calculated until there were no further expression otliers to remove.
 
-![**Fig 8. PCA on all samples, outliers from first iteration outlined.**](outputfolder_exp/exp_plots/PCA_before.png)
+![**Fig 8. PCA on all samples, outliers from all iterations are outlined.**](outputfolder_exp/exp_plots/PCA_before.png)
 
 These are 8 first expression PCs, calculated on fully processed expression data (normalised and INT-transformed) after removal of outlier samples. You should not see any dramatic outliers any more.
 
@@ -200,4 +226,4 @@ Next plot shows the expression of the sex chromosomes genes. We assume that male
 
 Samples which expression does not align with genetic sex are potential sample mixups. These are outlined with red and automatically removed from further analyses.
 
-![**Fig 10. Expression of X/Y chromosome genes.** On the x-axis is the normalised expression level of XIST, on the y-axis is the mean of the normalised expression le levels of several Y chromosome genes. Point type indicates the genetic sex and there should be no samples on the X-Y diagonal. Samples which are in the wrong sample cloud, are liklely sample mixups and were automatically removed from the data.](outputfolder_exp/exp_plots/SexSpecificGenes.png) 
+![**Fig 10. Expression of X/Y chromosome genes.** On the x-axis is the normalised expression level of XIST, on the y-axis is the mean of the normalised expression levels of several Y chromosome genes. Point type indicates the genetic sex and there should be no samples on the X-Y diagonal. Samples which are in the wrong sample cloud, are likely sample mixups and were automatically removed from the data.](outputfolder_exp/exp_plots/SexSpecificGenes.png) 

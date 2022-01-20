@@ -10,7 +10,6 @@ library(stringr)
 library(rmarkdown)
 library(Cairo)
 
-
 # Argument parser
 option_list <- list( 
     make_option(c("-t", "--target_bed"), type = "character",
@@ -18,9 +17,11 @@ option_list <- list(
     make_option(c("-s", "--sample_list"), type = "character",
     help = "Path to the file listing unrelated samples for reference data (tab-delimited .txt)."),
     make_option(c("-p", "--pops"), type = "character",
-    help = "Path to the file inidicating the population for each sample in reference data."),
+    help = "Path to the file indicating the population for each sample in reference data."),
     make_option(c("-o", "--output"), type = "character", help = "Folder with all the output files."),
     make_option(c("-S", "--S_threshold"), default = 0.4,
+    help = "Numeric threshold to declare samples outliers, based on the genotype PCs. Defaults to 0.4 but should always be visually checked and changed, if needed."),
+    make_option(c("-d", "--SD_threshold"), default = 0.4,
     help = "Numeric threshold to declare samples outliers, based on the genotype PCs. Defaults to 0.4 but should always be visually checked and changed, if needed.")
     )
 
@@ -36,6 +37,7 @@ print(args$sample_list)
 print(args$pops)
 print(args$output)
 print(args$S_threshold)
+print(args$SD_threshold)
 
 bed_simplepath <- stringr::str_replace(args$target_bed, ".bed", "")
 
@@ -202,19 +204,17 @@ combined <- rbind(abi, abi2)
 
 combined$Superpopulation <- factor(combined$Superpopulation, levels = c("Target", "EUR", "EAS", "AMR", "SAS", "AFR"))
 
-p00 <- ggplot(combined, aes(x = PC1, y = PC2, colour = Superpopulation, alpha = type)) + 
+p00 <- ggplot(combined, aes(x = PC1, y = PC2, alpha = type)) + 
 geom_point() + 
 theme_bw() + 
-scale_color_manual(values = c("Target" = "black", "EUR" = "blue", 
-"EAS" = "goldenrod", "AMR" = "lightgrey", "SAS" = "orange", "AFR" = "red")) +
-scale_alpha_manual(values = c("Target" = 1, "1000G" = 0)) +
+scale_alpha_manual(values = c("Target" = 1, "1000G" = 0)) + 
 ggtitle("Target sample projections\nin 1000G PC space")
 
 combined_h <- combined[combined$Superpopulation == "Target", ]
-combined_h$Target <- factor(combined_h$Target, levels = "Target")
-combined_h$Type <- factor(combined_h$Type, levels = "Target")
+#combined_h$Superpopulation <- factor(combined_h$Superpopulation, levels = "Target")
+#combined_h$Type <- factor(combined_h$Type, levels = "Target")
 
-p0 <- ggplot(combined_h, aes(x = PC1, y = PC2, colour = Superpopulation, alpha = type)) + 
+p0 <- ggplot(combined_h, aes(x = PC1, y = PC2)) + 
 geom_point() + 
 theme_bw() + 
 ggtitle("Target sample projections\nzoomed in")
@@ -250,9 +250,9 @@ scale_color_manual(values = c("Target" = "black", "EUR" = "blue",
 "EAS" = "goldenrod", "AMR" = "lightgrey", "SAS" = "orange", "AFR" = "red")) +
 scale_alpha_manual(values = c("Target" = 1, "1000G" = 0.2))
 
-p <- p0 + p1 + p2 + p3 + p4 + p5 + plot_layout(nrow = 3)
+p <- p00 + p0 + p1 + p2 + p3 + p4 + p5 + plot_layout(nrow = 4)
 
-ggsave(paste0(args$output, "/gen_plots/SamplesPCsProjectedTo1000G.png"), type = "cairo", height = 20, width = 9.5 * 1.5, units = "in", dpi = 300)
+ggsave(paste0(args$output, "/gen_plots/SamplesPCsProjectedTo1000G.png"), type = "cairo", height = 20, width = 9.5 * 1.6, units = "in", dpi = 300)
 fwrite(abi[, -c(2, 3, ncol(abi))], paste0(args$output, "/gen_data_summary/1000G_PC_projections.txt"), sep = "\t", quote = FALSE )
 
 ## Assign each sample to the superpopulation
@@ -313,7 +313,7 @@ related <- snp_plinkKINGQC(
 
 ### Do PCA on target data
 message("Find genetic outliers.")
-### First remove one related samples from each pair and those failing heterozygosity check
+### First remove one related sample from each pair and those failing heterozygosity check
 ind.rel <- match(unique(c(related$IID2, het_fail_samples$IID)), target_bed$fam$sample.ID)
 
 print(unique(c(related$IID2, het_fail_samples$IID)))
@@ -344,32 +344,41 @@ p <- ggplot() +
 
 ggsave(paste0(args$output, "/gen_plots/PC_dist_outliers_S.png"), type = "cairo", height = 7 / 2, width = 9, units = "in", dpi = 300)
 
-# Visualise PCs, outline outlier samples
+# Visualise PCs, outline individual outlier samples
 PCs <- predict(target_pca)
 
 PCs <- as.data.frame(PCs)
 colnames(PCs) <- paste0("PC", 1:10)
 PCs$S <- S
 
-PCs$outlier <- "no"
-PCs[PCs$S > Sthresh, ]$outlier <- "yes"
+PCs$outlier_ind <- "no"
+PCs[PCs$S > Sthresh, ]$outlier_ind <- "yes"
+PCs$sd_outlier <- "no"
+PCs[(PCs$PC1 > mean(PCs$PC1) + args$SD_threshold * sd(PCs$PC1) | PCs$PC1 < mean(PCs$PC1) - args$SD_threshold * sd(PCs$PC1)) | (PCs$PC2 > mean(PCs$PC2) + args$SD_threshold * sd(PCs$PC2) | PCs$PC2 < mean(PCs$PC2) - args$SD_threshold * sd(PCs$PC2)), ]$sd_outlier <- "yes"
 
-p1 <- ggplot(PCs, aes(x = PC1, y = PC2, colour = outlier)) + theme_bw() + geom_point() + scale_color_manual(values = c("no" = "black", "yes" = "red"))
-p2 <- ggplot(PCs, aes(x = PC3, y = PC4, colour = outlier)) + theme_bw() + geom_point() + scale_color_manual(values = c("no" = "black", "yes" = "red"))
-p3 <- ggplot(PCs, aes(x = PC5, y = PC6, colour = outlier)) + theme_bw() + geom_point() + scale_color_manual(values = c("no" = "black", "yes" = "red"))
-p4 <- ggplot(PCs, aes(x = PC7, y = PC8, colour = outlier)) + theme_bw() + geom_point() + scale_color_manual(values = c("no" = "black", "yes" = "red"))
-p5 <- ggplot(PCs, aes(x = PC9, y = PC10, colour = outlier)) + theme_bw() + geom_point() + scale_color_manual(values = c("no" = "black", "yes" = "red"))
+PCs$outlier <- "no"
+PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "no", ]$outlier <- "S outlier"
+PCs[PCs$outlier_ind == "no" & PCs$sd_outlier == "yes", ]$outlier <- "SD outlier"
+PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "yes", ]$outlier <- "S and SD outlier"
+
+# For first 2 PCs also remove samples which deviate from the mean
+
+p1 <- ggplot(PCs, aes(x = PC1, y = PC2, colour = outlier)) + theme_bw() + geom_point() + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick")) + 
+geom_vline(xintercept = c(mean(PCs$PC1) + 3 * sd(PCs$PC1), mean(PCs$PC1) - 3 * sd(PCs$PC1)), colour = "firebrick", linetype = 2) + 
+geom_hline(yintercept = c(mean(PCs$PC2) + 3 * sd(PCs$PC2), mean(PCs$PC2) - 3 * sd(PCs$PC2)), colour = "firebrick", linetype = 2)
+p2 <- ggplot(PCs, aes(x = PC3, y = PC4, colour = outlier)) + theme_bw() + geom_point() + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
+p3 <- ggplot(PCs, aes(x = PC5, y = PC6, colour = outlier)) + theme_bw() + geom_point() + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
+p4 <- ggplot(PCs, aes(x = PC7, y = PC8, colour = outlier)) + theme_bw() + geom_point() + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
+p5 <- ggplot(PCs, aes(x = PC9, y = PC10, colour = outlier)) + theme_bw() + geom_point() + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
 
 p <- p1 + p2 + p3 + p4 + p5 + plot_layout(nrow = 3)
 
 ggsave(paste0(args$output, "/gen_plots/PCA_outliers.png"), type = "cairo", height = 10 * 1.5, width = 9 * 1.5, units = "in", dpi = 300)
 
 # Filter out related samples and outlier samples, write out QCd data
-message("Filter in related samples and outlier samples, write out QCd data.")
-ind.row <- ind.norel[S < Sthresh]
+message("Filter out related samples and outlier samples, write out QCd data.")
+ind.row <- ind.norel[PCs$outlier == "no"]
 samples_to_include <- data.frame(family.ID = target_bed$.fam$family.ID[ind.row], sample.IDD2 = target_bed$.fam$sample.ID[ind.row])
-
-head(samples_to_include)
 
 temp_QC <- data.frame(stage = paste0("Outlier samples: thr. S>", Sthresh), Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include))
 summary_table <- rbind(summary_table, temp_QC)

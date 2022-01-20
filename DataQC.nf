@@ -21,13 +21,14 @@ def helpMessage() {
         -resume
 
     Mandatory arguments:
-      --bfile                       Path to the unimputed plink bgen files (without extensions bed/bim/fam).
-      --expfile                     Path to the unpreprocessed gene expression matrix (genes/probes in the rows, samples in the columns). Can be from RNA-seq experiment or from array.
+      --bfile                       Path to the unimputed genotype files in plink bed/bim/fam format (without extensions bed/bim/fam).
+      --expfile                     Path to the un-preprocessed gene expression matrix (genes/probes in the rows, samples in the columns). Can be from RNA-seq experiment or from array. NB! For Affymetrix arrays (AffyU219, AffyExon) we assume that standard preprocessing and normalisation is already done.
       --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. 
-      --exp_platform                Indicator indicating the gene expression platform. HT12v3, HT12v4, RNAseq, AffyU219, AffyExon.
+      --exp_platform                Indicator indicating the gene expression platform. HT12v3, HT12v4, HuRef8, RNAseq, AffyU219, AffyExon.
       --outdir                      Path to the output directory.
       --Sthresh                     "Outlierness" score threshold for excluding ethnic outliers. Defaults to 0.4 but should be adjusted according to visual inspection.
-      --ExpSdThreshold              Standard deviation threhshold for excluding gene expression outliers. By default, samples away by 3 SDs from the median of PC1 are removed.
+      --SDthresh                    Threshold for declaring samples outliers based on genetic PC1 and PC2. Defaults to 3 SD from the mean of PC1 and PC2 but should be adjusted according to visual inspection.
+      --ExpSdThreshold              Standard deviation threshold for excluding gene expression outliers. By default, samples away by 3 SDs from the mean of PC1 are removed.
 
     """.stripIndent()
 }
@@ -70,17 +71,14 @@ Channel
     .set { report_ch }
 
 params.Sthresh = 0.4
+params.SDthresh = 3
+params.ExpSdThreshold = 4
 params.exp_platform = ''
 params.cohort_name = ''
 params.outdir = ''
 
 // Header log info
 log.info """=======================================================
-                                          ,--./,-.
-          ___     __   __   __   ___     /,-._.--~\'
-    |\\ | |__  __ /  ` /  \\ |__) |__         }  {
-    | \\| |       \\__, \\__/ |  \\ |___     \\`-._,-`-,
-                                          `._,._,\'
 GenotypeGC v${workflow.manifest.version}"
 ======================================================="""
 def summary = [:]
@@ -89,6 +87,8 @@ summary['Pipeline Version']         = workflow.manifest.version
 summary['Run Name']                 = custom_runName ?: workflow.runName
 summary['PLINK bfile']              = params.bfile
 summary['S threshold']              = params.Sthresh
+summary['Gen SD threshold']         = params.SDthresh
+summary['Exp SD threshold']         = params.ExpSdThreshold
 summary['Expression matrix']        = params.expfile
 summary['GTE file']                 = params.gte
 summary['Max Memory']               = params.max_memory
@@ -121,10 +121,12 @@ process GenotypeQC {
     input:
       set file(bfile), file(bim), file(fam) from bfile_ch 
       val s_stat from params.Sthresh
+      val sd_thresh from params.SDthresh
 
     output:
       path ('outputfolder_gen') into output_ch_genotypes
       file 'outputfolder_gen/gen_data_QCd/SexCheck.txt' into sexcheck
+      file 'outputfolder_gen/gen_data_QCd/*fam' into sample_qc
 
       """
       Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
@@ -132,6 +134,7 @@ process GenotypeQC {
       --sample_list $baseDir/data/unrelated_reference_samples_ids.txt \
       --pops $baseDir/data/1000G_pops.txt \
       --S_threshold ${s_stat} \
+      --SD_threshold ${sd_thresh} \
       --output outputfolder_gen
 
       """
@@ -145,7 +148,9 @@ process GeneExpressionQC {
       file exp_mat from expfile_ch
       file gte from gte_ch
       file sexcheck from sexcheck
+      file geno_filter from sample_qc
       val exp_platform from params.exp_platform
+      val sd from params.ExpSdThreshold
 
     output:
       path ('outputfolder_exp') into output_ch_geneexpression
@@ -157,7 +162,9 @@ process GeneExpressionQC {
       --expression_matrix ${exp_mat} \
       --genotype_to_expression_linking ${gte} \
       --sex_info ${sexcheck} \
+      --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
+      --sd ${sd} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_Illumina_HT12v3_20220111.txt \
       --output outputfolder_exp
       """
@@ -167,6 +174,7 @@ process GeneExpressionQC {
       --expression_matrix ${exp_mat} \
       --genotype_to_expression_linking ${gte} \
       --sex_info ${sexcheck} \
+      --geno_filter {geno_filter} \
       --platform ${exp_platform} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_Illumina_HT12v4_20170808.txt \
       --output outputfolder_exp
@@ -177,6 +185,7 @@ process GeneExpressionQC {
       --expression_matrix ${exp_mat} \
       --genotype_to_expression_linking ${gte} \
       --sex_info ${sexcheck} \
+      --geno_filter {geno_filter} \
       --platform ${exp_platform} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_RNAseq.txt \
       --output outputfolder_exp
@@ -194,6 +203,9 @@ process RenderReport {
       path output_exp from output_ch_geneexpression
       path report from report_ch
       val exp_platform from params.exp_platform
+      val stresh from params.Sthresh
+      val sdtresh from params.SDthresh
+      val expsdtresh from params.ExpSdThreshold
 
     output:
       path ('outputfolder_gen/*') into output_ch2
@@ -209,6 +221,13 @@ process RenderReport {
       cp -L ${report} notebook.Rmd
 
       R -e 'library(rmarkdown);rmarkdown::render("notebook.Rmd", "html_document", 
-      output_file = "Report_DataQc.html", params = list(dataset_name = "${params.cohort_name}", platform = "${exp_platform}"))'
+      output_file = "Report_DataQc.html", 
+      params = list(
+      dataset_name = "${params.cohort_name}", 
+      platform = "${exp_platform}", 
+      N = "${output_exp}/exp_data_QCd/exp_data_preprocessed.txt",
+      S = ${stresh},
+      SD = ${sdtresh},
+      SD_exp = ${expsdtresh}))'
       """
 }
