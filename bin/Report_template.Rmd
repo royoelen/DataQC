@@ -24,7 +24,7 @@ Post-QC sample size for this cohort is: **`r library(data.table); exp <- fread(p
 
 **Settings used for sample outlier detection:**
 
-Used LOF S-threhold for ancestry outliers: `r params$S`
+Used LOF S-threhold for genetic outliers: `r params$S`
 
 Threshold of SD difference from mean genetic PC1 and PC2 is: `r params$SD`
 
@@ -147,7 +147,7 @@ If the pipline removes unreasonably large fraction of the samples, there are mul
 
 2. If you have multiple batches with many samples (N>500), you might consider splitting the data based on genotyping batch and re-running `DataQC` and all following pipelines on those batches.
 
-If the pipelines does not remove all clear outlier samples, adjust `--SDthresh` threshold accordingly to remove small fraction of clearly deviating samples.
+If the pipelines does not remove all clear outlier samples, adjust `--SDthresh` threshold accordingly, to remove small fraction of clearly deviating samples.
 
 In case of doubt please contact the lead analysts for advice and we will investigate further.
 

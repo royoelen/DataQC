@@ -64,7 +64,7 @@ Channel
 Channel
     .from(params.gte)
     .map { study -> [file("${study}")]}
-    .set { gte_ch }
+    .into { gte_ch_gen; gte_ch_exp }
 
 Channel
     .fromPath(params.report_template)
@@ -119,7 +119,8 @@ process GenotypeQC {
     tag {GenotypeQC}
 
     input:
-      set file(bfile), file(bim), file(fam) from bfile_ch 
+      set file(bfile), file(bim), file(fam) from bfile_ch
+      file gte from gte_ch_gen
       val s_stat from params.Sthresh
       val sd_thresh from params.SDthresh
 
@@ -131,12 +132,12 @@ process GenotypeQC {
       """
       Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
       --target_bed ${bfile} \
+      --gen_exp ${gte} \
       --sample_list $baseDir/data/unrelated_reference_samples_ids.txt \
       --pops $baseDir/data/1000G_pops.txt \
       --S_threshold ${s_stat} \
       --SD_threshold ${sd_thresh} \
       --output outputfolder_gen
-
       """
 }
 
@@ -146,7 +147,7 @@ process GeneExpressionQC {
 
     input:
       file exp_mat from expfile_ch
-      file gte from gte_ch
+      file gte from gte_ch_exp
       file sexcheck from sexcheck
       file geno_filter from sample_qc
       val exp_platform from params.exp_platform

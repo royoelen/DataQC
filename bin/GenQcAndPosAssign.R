@@ -11,9 +11,11 @@ library(rmarkdown)
 library(Cairo)
 
 # Argument parser
-option_list <- list( 
+option_list <- list(
     make_option(c("-t", "--target_bed"), type = "character",
     help = "Name of the target genotype file (bed/bim/fam format). Required file extension: .bed."),
+    make_option(c("-g", "--gen_exp"), type = "character",
+    help = "Tab-delimited genotype-to-expression sample ID linking file."),
     make_option(c("-s", "--sample_list"), type = "character",
     help = "Path to the file listing unrelated samples for reference data (tab-delimited .txt)."),
     make_option(c("-p", "--pops"), type = "character",
@@ -33,6 +35,7 @@ options(bigstatsr.check.parallel.blas = FALSE)
 
 # Report settings
 print(args$target_bed)
+print(args$gen_exp)
 print(args$sample_list)
 print(args$pops)
 print(args$output)
@@ -62,11 +65,24 @@ message("Read in target data.")
 target_bed <- bed(args$target_bed)
 summary_table <- data.frame(stage = "Raw file", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow)
 
+## Keep in only samples which are present in genotype-to-expression file
+gte <- fread(args$gen_exp, sep = "\t", header = FALSE)
+samples_to_include_gte <- data.frame(FID = target_bed$.fam$family.ID, IID = target_bed$.fam$sample.ID)
+samples_to_include_gte <- samples_to_include_gte[samples_to_include_gte$IID %in% gte$V1, ]
+
+fwrite(samples_to_include_gte, "SamplesToIncludeGte.txt", sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
+# Remove samples not in GTE
+system(paste0("plink/plink2 --bfile ", bed_simplepath, " --output-chr 26 --keep SamplesToIncludeGte.txt --make-bed --threads 4 --out ", bed_simplepath, "_filtered"))
+
+temp_QC <- data.frame(stage = "Samples in genotype-to-expression file", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include_gte))
+summary_table <- rbind(summary_table, temp_QC)
+
 # Do SNP and sample missingness QC on raw genotype bed
 message("Do SNP and genotype QC.")
 snp_plinkQC(
   plink.path = "plink/plink2",
-  prefix.in = bed_simplepath,
+  prefix.in = paste0(bed_simplepath, "_filtered"),
+  prefix.out = paste0(bed_simplepath, "_QC"),
   file.type = "--bfile",
   maf = 0.01,
   geno = 0.05,
@@ -93,7 +109,7 @@ system(paste0("plink/plink --bfile ", bed_simplepath, "_QC --extract plink2.prun
 
 ## If there is sex info in the fam file for all samples then remove samples which fail the sex check or genotype-based F is >0.2 & < 0.8
 sexcheck <- fread("plink.sexcheck")
-## Remove samples which have unclear sex 
+## Remove samples which have unclear sex
 sexcheck_f <- sexcheck[!(F > 0.2 & F < 0.8), ]
 
 if (nrow(sexcheck_f[sexcheck_f$PEDSEX %in% c(1, 2), ]) == nrow(sexcheck_f)){
@@ -314,6 +330,7 @@ related <- snp_plinkKINGQC(
 ### Do PCA on target data
 message("Find genetic outliers.")
 ### First remove one related sample from each pair and those failing heterozygosity check
+# TODO, check if this is correct that only one out of two is removed
 ind.rel <- match(unique(c(related$IID2, het_fail_samples$IID)), target_bed$fam$sample.ID)
 
 print(unique(c(related$IID2, het_fail_samples$IID)))
@@ -380,7 +397,7 @@ message("Filter out related samples and outlier samples, write out QCd data.")
 ind.row <- ind.norel[PCs$outlier == "no"]
 samples_to_include <- data.frame(family.ID = target_bed$.fam$family.ID[ind.row], sample.IDD2 = target_bed$.fam$sample.ID[ind.row])
 
-temp_QC <- data.frame(stage = paste0("Outlier samples: thr. S>", Sthresh), Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include))
+temp_QC <- data.frame(stage = paste0("Outlier samples: thr. S>", Sthresh, " PC1/PC2 SD deviation thresh ", args$SD_threshold), Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include))
 summary_table <- rbind(summary_table, temp_QC)
 
 fwrite(data.table::data.table(samples_to_include), "SamplesToInclude.txt", sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
