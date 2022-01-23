@@ -26,12 +26,12 @@ cohort_name=[name of the cohort]
 output_path=[name of the output path]
 
 # Command
-${nextflow_path}/nextflow run DataQC.nf \
+NXF_VER=20.10.0 ${nextflow_path}/nextflow run DataQC.nf \
 --bfile ${geno_path} \
 --expfile ${exp_path} \
 --gte ${gte_path} \
 --exp_platform ${exp_platform} \
 --cohort_name ${cohort_name} \
 --outdir ${output_path}  \
--profile slurm \
+-profile slurm,singularity \
 -resume
