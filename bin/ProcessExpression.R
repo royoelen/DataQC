@@ -138,7 +138,7 @@ RNAseq_preprocess <- function(exp, gte, gen){
     exp <- merge(exp, emp, by = "Probe")
     exp <- as.data.frame(exp)
 
-    print(exp)
+    #print(exp)
 
     rownames(exp) <- exp[, ncol(exp)]
     exp <- exp[, -ncol(exp)]
@@ -240,10 +240,16 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
 
     print(str(pcs))
 
+    #TEMP
+    #llsamples <- fread("/groups/umcg-lld/prm02/projects/samples/LLDeep_GoNL_samples_V01.txt")
+    #END
+
     PCs <- as.data.table(pcs$x)
     PCs$sample <- rownames(pcs$x)
 
-    print(PCs)
+    #PCs <- merge(PCs, llsamples[,c("LLDEEPID", "geslacht")], by.x = "sample", by.y = "LLDEEPID")
+
+    #print(PCs)
 
     importance <- pcs$sdev^2 / sum(pcs$sdev^2)
     summary_pcs[[it_round]] <- data.table(PC = paste0("PC", 1:50), explained_variance = importance[1:50])
@@ -393,7 +399,7 @@ importance <- pcs$sdev^2 / sum(pcs$sdev^2)
 summary_pcs <- data.table(PC = paste0("PC", 1:100), explained_variance = importance[1:100])
 summary_pcs$PC <- factor(summary_pcs$PC, levels = paste0("PC", 1:100))
 
-fwrite(PCs[, c(1:101)], paste0(args$output, "/exp_PCs/exp_PCs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
+fwrite(PCs[, c(1:min(101, nrow(PCs))), with = F], paste0(args$output, "/exp_PCs/exp_PCs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
 fwrite(summary_pcs, paste0(args$output, "/exp_data_summary/", "summary_pcs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
 
 p <- ggplot(summary_pcs, aes(x = PC, y = explained_variance)) + geom_bar(stat = "identity") + theme_bw() +

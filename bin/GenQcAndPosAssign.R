@@ -60,18 +60,18 @@ summary_table <- data.frame(stage = "Raw file", Nr_of_SNPs = target_bed$ncol, Nr
 
 ## Do SNP and sample QC on raw genotype bed
 ### SNP QC
-snp_plinkQC(
-  plink.path = "plink/plink2",
-  prefix.in = bed_simplepath,
-  file.type = "--bfile",
-  maf = 0.01,
-  geno = 0.05,
-  mind = 0.05,
-  hwe = 1e-6,
-  autosome.only = TRUE,
-  extra.options = "",
-  verbose = TRUE
-)
+#snp_plinkQC(
+#  plink.path = "plink/plink2",
+#  prefix.in = bed_simplepath,
+#  file.type = "--bfile",
+#  maf = 0.01,
+#  geno = 0.05,
+#  mind = 0.05,
+#  hwe = 1e-6,
+#  autosome.only = TRUE,
+#  extra.options = "",
+#  verbose = TRUE
+#)
 
 ### Find related samples
 related <- snp_plinkKINGQC(
@@ -103,6 +103,9 @@ target_pca <- bed_autoSVD(target_bed, ind.row = ind.norel, k = 10, ncores = 4)
 prob <- bigutilsr::prob_dist(target_pca$u, ncores = 4)
 S <- prob$dist.self / sqrt(prob$dist.nn)
 
+print("!!!!!!!!!!S:")
+print(S)
+
 p1 <- ggplot() +
   geom_histogram(aes(S), color = "#000000", fill = "#000000", alpha = 0.5) +
   scale_x_continuous(breaks = 0:5 / 5, limits = c(0, NA)) +
@@ -112,6 +115,8 @@ p1 <- ggplot() +
 
 # Put threshold for outlier samples, this is by default 0.4!
 Sthresh <- args$S_threshold
+
+print("test123")
 
 p2 <- ggplot() +
   geom_histogram(aes(S), color = "#000000", fill = "#000000", alpha = 0.5) +
@@ -124,15 +129,27 @@ p2 <- ggplot() +
 p <- p2
 ggsave(paste0(args$output, "/gen_plots/PC_dist_outliers_S.png"), type = "cairo", height = 7 / 2, width = 9, units = "in", dpi = 300)
 
+print("test123")
+
 # Visualise PCs, outline outlier samples
 PCs <- predict(target_pca)
+
+print(str(PCs))
 
 PCs <- as.data.frame(PCs)
 colnames(PCs) <- paste0("PC", 1:10)
 PCs$S <- S
 
+print("test345")
+
+print(str(PCs))
+
 PCs$outlier <- "no"
-PCs[PCs$S > Sthresh, ]$outlier <- "yes"
+if (any(PCs$S > Sthresh)) {
+  PCs[PCs$S > Sthresh, ]$outlier <- "yes"
+}
+
+print(str(PCs))
 
 plotLabels <- F
 uniqueShapes <- intToUtf8(c(97:122, 65:90), multiple = T)
