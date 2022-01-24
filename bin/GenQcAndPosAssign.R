@@ -111,15 +111,21 @@ system(paste0("plink/plink --bfile ", bed_simplepath, "_QC --extract plink2.prun
 sexcheck <- fread("plink.sexcheck")
 ## Remove samples which have unclear sex
 sexcheck_f <- sexcheck[!(F > 0.2 & F < 0.8), ]
+temp_QC <- data.frame(stage = "Sex check (0.2<F<0.8)", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(sexcheck_f))
+summary_table <- rbind(summary_table, temp_QC)
+
 
 if (nrow(sexcheck_f[sexcheck_f$PEDSEX %in% c(1, 2), ]) == nrow(sexcheck_f)){
 
   sexcheck_f <- sexcheck_f[!sexcheck_f$STATUS == "PROBLEM", ]
+  temp_QC <- data.frame(stage = "Sex check (reported and genetic sex mismatch)", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(sexcheck_f))
+  summary_table <- rbind(summary_table, temp_QC)
 
-} else {message("No sex info in the .fam file.")}
+} else {message("No sex info in the .fam file.")
 
-temp_QC <- data.frame(stage = "Sex check", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(sexcheck_f))
-summary_table <- rbind(summary_table, temp_QC)
+}
+
+
 sex_fail_samples <- sexcheck[sexcheck$IID %in% sexcheck_f$IID, ]$IID
 
 p <- ggplot(sexcheck, aes(x = F)) + geom_histogram(color = "#000000", fill = "#000000", alpha = 0.5) +
@@ -369,15 +375,21 @@ colnames(PCs) <- paste0("PC", 1:10)
 PCs$S <- S
 
 PCs$outlier_ind <- "no"
-PCs[PCs$S > Sthresh, ]$outlier_ind <- "yes"
+if (nrow(PCs[PCs$S > Sthresh, ]) > 0){
+PCs[PCs$S > Sthresh, ]$outlier_ind <- "yes"}
 PCs$sd_outlier <- "no"
+if (nrow(PCs[(PCs$PC1 > mean(PCs$PC1) + args$SD_threshold * sd(PCs$PC1) | PCs$PC1 < mean(PCs$PC1) - args$SD_threshold * sd(PCs$PC1)) | (PCs$PC2 > mean(PCs$PC2) + args$SD_threshold * sd(PCs$PC2) | PCs$PC2 < mean(PCs$PC2) - args$SD_threshold * sd(PCs$PC2)), ]) > 0){
 PCs[(PCs$PC1 > mean(PCs$PC1) + args$SD_threshold * sd(PCs$PC1) | PCs$PC1 < mean(PCs$PC1) - args$SD_threshold * sd(PCs$PC1)) | (PCs$PC2 > mean(PCs$PC2) + args$SD_threshold * sd(PCs$PC2) | PCs$PC2 < mean(PCs$PC2) - args$SD_threshold * sd(PCs$PC2)), ]$sd_outlier <- "yes"
+}
 
 PCs$outlier <- "no"
-PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "no", ]$outlier <- "S outlier"
-PCs[PCs$outlier_ind == "no" & PCs$sd_outlier == "yes", ]$outlier <- "SD outlier"
+if (nrow(PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "no", ]) > 0){
+PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "no", ]$outlier <- "S outlier"}
+if(nrow(PCs[PCs$outlier_ind == "no" & PCs$sd_outlier == "yes", ]) > 0){
+PCs[PCs$outlier_ind == "no" & PCs$sd_outlier == "yes", ]$outlier <- "SD outlier"}
+if(nrow(PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "yes", ]) > 0){
 PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "yes", ]$outlier <- "S and SD outlier"
-
+}
 # For first 2 PCs also remove samples which deviate from the mean
 
 p1 <- ggplot(PCs, aes(x = PC1, y = PC2, colour = outlier)) + theme_bw() + geom_point() + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick")) + 
