@@ -49,7 +49,7 @@ Next plot summarises the genetically determined sex of the input samples. Sample
 
 You can investigate the file `[your output folder]/outputfolder_gen/gen_data_QCd/SexCheck.txt` to see which samples failed the sex check.
 
-![**Fig 1. Distribution of F-values representing X chromosome heterozygosity.** Genetically determined sex thresholds are shown as vertical lines. Samples with the F-value between those two lines are potential mixups and are automatically excluded.](outputfolder_gen/gen_plots/SexCheck.png)  
+![**Fig 1. Distribution of F-values representing X chromosome heterozygosity.** Genetically determined sex thresholds are shown as vertical lines. Samples with the F-value between those two lines are potentially contaminated samples and are automatically excluded.](outputfolder_gen/gen_plots/SexCheck.png)  
 
 ### Excess heterozygosity
 

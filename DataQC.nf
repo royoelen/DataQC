@@ -1,11 +1,6 @@
 def helpMessage() {
     log.info"""
     =======================================================
-                                              ,--./,-.
-              ___     __   __   __   ___     /,-._.--~\'
-        |\\ | |__  __ /  ` /  \\ |__) |__         }  {
-        | \\| |       \\__, \\__/ |  \\ |___     \\`-._,-`-,
-                                              `._,._,\'
      DataQC v${workflow.manifest.version}
     =======================================================
     Usage:
@@ -79,7 +74,7 @@ params.outdir = ''
 
 // Header log info
 log.info """=======================================================
-GenotypeGC v${workflow.manifest.version}"
+DataQC v${workflow.manifest.version}"
 ======================================================="""
 def summary = [:]
 summary['Pipeline Name']            = 'DataQC'
