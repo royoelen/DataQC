@@ -186,7 +186,7 @@ process GeneExpressionQC {
       --expression_matrix ${exp_mat} \
       --genotype_to_expression_linking ${gte} \
       --sex_info ${sexcheck} \
-      --geno_filter {geno_filter} \
+      --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_RNAseq.txt \
       --output outputfolder_exp

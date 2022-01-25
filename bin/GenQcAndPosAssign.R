@@ -369,14 +369,20 @@ colnames(PCs) <- paste0("PC", 1:10)
 PCs$S <- S
 
 PCs$outlier_ind <- "no"
-PCs[PCs$S > Sthresh, ]$outlier_ind <- "yes"
+if (any(PCs$S > Sthresh)) {
+  PCs[PCs$S > Sthresh, ]$outlier_ind <- "yes"
+}
 PCs$sd_outlier <- "no"
-PCs[(PCs$PC1 > mean(PCs$PC1) + args$SD_threshold * sd(PCs$PC1) | PCs$PC1 < mean(PCs$PC1) - args$SD_threshold * sd(PCs$PC1)) | (PCs$PC2 > mean(PCs$PC2) + args$SD_threshold * sd(PCs$PC2) | PCs$PC2 < mean(PCs$PC2) - args$SD_threshold * sd(PCs$PC2)), ]$sd_outlier <- "yes"
+sd_outlier_selection <- (PCs$PC1 > mean(PCs$PC1) + args$SD_threshold * sd(PCs$PC1) | PCs$PC1 < mean(PCs$PC1) - args$SD_threshold * sd(PCs$PC1)) | (PCs$PC2 > mean(PCs$PC2) + args$SD_threshold * sd(PCs$PC2) | PCs$PC2 < mean(PCs$PC2) - args$SD_threshold * sd(PCs$PC2))
+if (any(sd_outlier_selection)) {
+  PCs[sd_outlier_selection, ]$sd_outlier <- "yes"
+}
 
-PCs$outlier <- "no"
-PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "no", ]$outlier <- "S outlier"
-PCs[PCs$outlier_ind == "no" & PCs$sd_outlier == "yes", ]$outlier <- "SD outlier"
-PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "yes", ]$outlier <- "S and SD outlier"
+PCs <- PCs %>% mutate(outlier = case_when(
+  outlier_ind == "yes" & sd_outlier == "no" ~ "S outlier",
+  outlier_ind == "no" & sd_outlier == "yes" ~ "SD outlier",
+  outlier_ind == "yes" & sd_outlier == "yes" ~ "S and SD outlier",
+  TRUE ~ "no"))
 
 # For first 2 PCs also remove samples which deviate from the mean
 
