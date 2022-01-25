@@ -211,7 +211,7 @@ process RenderReport {
     output:
       path ('outputfolder_gen/*') into output_ch2
       path ('outputfolder_exp/*') into output_ch3
-      path ('Report_DataQc.html') into report_ch2
+      path ('Report_DataQc*') into report_ch2
       path ('CovariatePCs.txt') into combined_covariates
 
       """
@@ -222,7 +222,7 @@ process RenderReport {
       cp -L ${report} notebook.Rmd
 
       R -e 'library(rmarkdown);rmarkdown::render("notebook.Rmd", "html_document", 
-      output_file = "Report_DataQc.html", 
+      output_file = "Report_DataQc_${params.cohort_name}.html", 
       params = list(
       dataset_name = "${params.cohort_name}", 
       platform = "${exp_platform}", 
