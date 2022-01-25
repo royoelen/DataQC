@@ -18,7 +18,7 @@ def helpMessage() {
     Mandatory arguments:
       --bfile                       Path to the unimputed genotype files in plink bed/bim/fam format (without extensions bed/bim/fam).
       --expfile                     Path to the un-preprocessed gene expression matrix (genes/probes in the rows, samples in the columns). Can be from RNA-seq experiment or from array. NB! For Affymetrix arrays (AffyU219, AffyExon) we assume that standard preprocessing and normalisation is already done.
-      --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. 
+      --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. Can be used to filter samples from the analysis.
       --exp_platform                Indicator indicating the gene expression platform. HT12v3, HT12v4, HuRef8, RNAseq, AffyU219, AffyExon.
       --outdir                      Path to the output directory.
       --Sthresh                     "Outlierness" score threshold for excluding ethnic outliers. Defaults to 0.4 but should be adjusted according to visual inspection.
