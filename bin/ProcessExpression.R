@@ -80,7 +80,7 @@ shap_test <- function(x){
     }
 }
 
-illumina_array_preprocess <- function(exp, gte, gen){
+illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
     # Leave in only probes for which there is empirical probe mapping info and convert data into matrix
     emp <- fread(args$emp_probe_mapping)
     emp <- emp[, c(1, 2), with = FALSE]
@@ -114,19 +114,21 @@ illumina_array_preprocess <- function(exp, gte, gen){
     if(!all(colnames(exp) == gte$V2)){stop("Something went wrong in matching genotype and expression IDs. Please debug!")}
     colnames(exp) <- gte$V1
 
+    if (normalize == TRUE){
     # quantile normalization
-    and_n <- normalize.quantiles(exp, copy = FALSE)
-    colnames(and_n) <- colnames(exp)
-    rownames(and_n) <- rownames(exp)
+    exp_n <- normalize.quantiles(exp, copy = FALSE)
+    colnames(exp_n) <- colnames(exp)
+    rownames(exp_n) <- rownames(exp)
+    }else{exp_n <- exp}
 
     # log2 transformation (not needed because INT is applied)
     # and_n <- log2(and_n)
-    message(paste(ncol(and_n), "samples in normalised expression matrix."))
+    message(paste(ncol(exp_n), "samples in normalised expression matrix."))
 
-    return(and_n)
+    return(exp_n)
 }
 
-RNAseq_preprocess <- function(exp, gte, gen){
+RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE){
     # Leave in only probes for which there is empirical probe mapping info and convert data into matrix
     emp <- fread(args$emp_probe_mapping)
     emp <- emp[, c(1, 2), with = FALSE]
@@ -146,8 +148,7 @@ RNAseq_preprocess <- function(exp, gte, gen){
     rownames(exp) <- exp[, ncol(exp)]
     exp <- exp[, -ncol(exp)]
     exp <- exp[, -1]
-    exp <- as.matrix(exp)
-
+    exp <- abs(as.matrix(exp))
 
     # Remove samples which are not in the gte or in genotype data
     gte <- fread(args$genotype_to_expression_linking, header = FALSE)
@@ -172,11 +173,12 @@ RNAseq_preprocess <- function(exp, gte, gen){
     gene_variance <- data.frame(gene = rownames(exp), gene_variance = apply(exp, 1, var))
     exp <- exp[!rownames(exp) %in% gene_variance[gene_variance$gene_variance == 0, ]$gene, ]
 
-    
+    if (normalize == TRUE){
     # TMM-normalized counts
     exp_n <- DGEList(counts = exp)
     exp_n <- calcNormFactors(exp_n, method = "TMM")
     exp_n <- cpm(exp_n, log = FALSE)
+    }else{exp_n <- exp}
 
     # log2 transformation (+ add 0.25 for solving issues with log2(0)) (not needed because INT will be applied)
     # and_n <- log2(and_n + 0.25)
@@ -544,23 +546,14 @@ sample_non_outliers <- gte[gte$V1 %in% sample_non_outliers, ]$V2
 
 and <- and[, colnames(and) %in% c("Feature", sample_non_outliers), with = FALSE]
 
-and <- as.data.frame(and)
-colnames(and)[1] <- "gene"
-and$gene <- as.character(and$gene)
-rownames(and) <- and$gene
-and <- and[, -1]
+if (args$platform %in% c("HT12v3", "HT12v4")){
+and_pp <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, normalize = FALSE)
+}
+if (args$platform %in% c("RNAseq")){
+and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, normalize = FALSE)
+}
 
-print(str(and))
-
-gene_summary <- exp_summary(and)
-
-emp <- fread(args$emp_probe_mapping)
-emp <- emp[, c(1, 2), with = FALSE]
-
-gene_summary <- merge(as.data.table(gene_summary), emp, by.x = "gene", by.y = "Probe")
-
-gene_summary <- gene_summary[, c(ncol(gene_summary), 1:(ncol(gene_summary) - 1)), with = FALSE]
-colnames(gene_summary)[1:2] <- c("gene", "probe")
+gene_summary <- exp_summary(and_pp)
 
 fwrite(gene_summary, paste0(args$output, "/exp_data_summary/", "raw_gene_summary.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
 

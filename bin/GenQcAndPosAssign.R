@@ -102,6 +102,12 @@ summary_table <- rbind(summary_table, temp_QC)
 
 # Do sex check
 message("Do sex check.")
+# Split x if needed
+system(paste0("plink/plink --bfile ", bed_simplepath, "_QC", " --split-x hg19 no-fail --make-bed --out ", bed_simplepath, "_split"))
+system(paste0("mv ", bed_simplepath, "_split.bed ", bed_simplepath, "_QC.bed"))
+system(paste0("mv ", bed_simplepath, "_split.bim ", bed_simplepath, "_QC.bim"))
+system(paste0("mv ", bed_simplepath, "_split.fam ", bed_simplepath, "_QC.fam"))
+
 ## Pruning
 system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC", " --indep-pairwise 50 1 0.2"))
 ## Sex check
@@ -378,12 +384,14 @@ if (any(sd_outlier_selection)) {
   PCs[sd_outlier_selection, ]$sd_outlier <- "yes"
 }
 
-PCs <- PCs %>% mutate(outlier = case_when(
-  outlier_ind == "yes" & sd_outlier == "no" ~ "S outlier",
-  outlier_ind == "no" & sd_outlier == "yes" ~ "SD outlier",
-  outlier_ind == "yes" & sd_outlier == "yes" ~ "S and SD outlier",
-  TRUE ~ "no"))
-
+PCs$outlier <- "no"
+if (nrow(PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "no", ]) > 0){
+PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "no", ]$outlier <- "S outlier"}
+if(nrow(PCs[PCs$outlier_ind == "no" & PCs$sd_outlier == "yes", ]) > 0){
+PCs[PCs$outlier_ind == "no" & PCs$sd_outlier == "yes", ]$outlier <- "SD outlier"}
+if(nrow(PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "yes", ]) > 0){
+PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "yes", ]$outlier <- "S and SD outlier"
+}
 # For first 2 PCs also remove samples which deviate from the mean
 
 p1 <- ggplot(PCs, aes(x = PC1, y = PC2, colour = outlier)) + theme_bw() + geom_point() + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick")) + 
