@@ -129,7 +129,6 @@ if (nrow(sexcheck_f[sexcheck_f$PEDSEX %in% c(1, 2), ]) == nrow(sexcheck_f)){
 
 } else {message("No sex info in the .fam file.")}
 
-temp_QC <- data.frame(stage = "Sex check", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(sexcheck_f))
 summary_table <- rbind(summary_table, temp_QC)
 sex_fail_samples <- sexcheck[sexcheck$IID %in% sexcheck_f$IID, ]$IID
 
