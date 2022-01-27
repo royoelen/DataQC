@@ -1,11 +1,6 @@
 def helpMessage() {
     log.info"""
     =======================================================
-                                              ,--./,-.
-              ___     __   __   __   ___     /,-._.--~\'
-        |\\ | |__  __ /  ` /  \\ |__) |__         }  {
-        | \\| |       \\__, \\__/ |  \\ |___     \\`-._,-`-,
-                                              `._,._,\'
      DataQC v${workflow.manifest.version}
     =======================================================
     Usage:
@@ -23,7 +18,7 @@ def helpMessage() {
     Mandatory arguments:
       --bfile                       Path to the unimputed genotype files in plink bed/bim/fam format (without extensions bed/bim/fam).
       --expfile                     Path to the un-preprocessed gene expression matrix (genes/probes in the rows, samples in the columns). Can be from RNA-seq experiment or from array. NB! For Affymetrix arrays (AffyU219, AffyExon) we assume that standard preprocessing and normalisation is already done.
-      --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. 
+      --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. Can be used to filter samples from the analysis.
       --exp_platform                Indicator indicating the gene expression platform. HT12v3, HT12v4, HuRef8, RNAseq, AffyU219, AffyExon.
       --outdir                      Path to the output directory.
       --Sthresh                     "Outlierness" score threshold for excluding ethnic outliers. Defaults to 0.4 but should be adjusted according to visual inspection.
@@ -79,7 +74,7 @@ params.outdir = ''
 
 // Header log info
 log.info """=======================================================
-GenotypeGC v${workflow.manifest.version}"
+DataQC v${workflow.manifest.version}"
 ======================================================="""
 def summary = [:]
 summary['Pipeline Name']            = 'DataQC'
@@ -211,7 +206,7 @@ process RenderReport {
     output:
       path ('outputfolder_gen/*') into output_ch2
       path ('outputfolder_exp/*') into output_ch3
-      path ('Report_DataQc.html') into report_ch2
+      path ('Report_DataQc*') into report_ch2
       path ('CovariatePCs.txt') into combined_covariates
 
       """
@@ -222,7 +217,7 @@ process RenderReport {
       cp -L ${report} notebook.Rmd
 
       R -e 'library(rmarkdown);rmarkdown::render("notebook.Rmd", "html_document", 
-      output_file = "Report_DataQc.html", 
+      output_file = "Report_DataQc_${params.cohort_name}.html", 
       params = list(
       dataset_name = "${params.cohort_name}", 
       platform = "${exp_platform}", 
