@@ -109,9 +109,12 @@ system(paste0("mv ", bed_simplepath, "_split.bim ", bed_simplepath, "_QC.bim"))
 system(paste0("mv ", bed_simplepath, "_split.fam ", bed_simplepath, "_QC.fam"))
 
 ## Pruning
-system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC", " --indep-pairwise 50 1 0.2"))
+system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC", " --indep-pairwise 20000 200 0.2"))
+#system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC", " --extract /groups/umcg-bios/tmp01/projects/BIOS_for_eQTLGenII/pipeline/20211213/data_qc/dataqc/bios_datasets/CODAM/work/e1/5deb611e393bf87c56e6e768b121c9/plink2.prune.in"))
 ## Sex check
 system(paste0("plink/plink --bfile ", bed_simplepath, "_QC --extract plink2.prune.in --check-sex"))
+
+#stop("check output")
 
 ## If there is sex info in the fam file for all samples then remove samples which fail the sex check or genotype-based F is >0.2 & < 0.8
 sexcheck <- fread("plink.sexcheck")
