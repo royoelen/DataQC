@@ -65,6 +65,8 @@ Channel
     .fromPath(params.report_template)
     .set { report_ch }
 
+params.pruned_variants_sex_check = ''
+
 params.Sthresh = 0.4
 params.SDthresh = 3
 params.ExpSdThreshold = 4
@@ -90,6 +92,7 @@ summary['Max Memory']               = params.max_memory
 summary['Max CPUs']                 = params.max_cpus
 summary['Max Time']                 = params.max_time
 summary['Cohort name']              = params.cohort_name
+if(params.pruned_variants_sex_check) summary['Pruned variants for sex check'] = params.pruned_variants_sex_check
 summary['Expression platform']      = params.exp_platform
 summary['Output dir']               = params.outdir
 summary['Working dir']              = workflow.workDir
@@ -118,11 +121,13 @@ process GenotypeQC {
       file gte from gte_ch_gen
       val s_stat from params.Sthresh
       val sd_thresh from params.SDthresh
+      val optional_pruned_variants_sex_check from params.pruned_variants_sex_check
 
     output:
       path ('outputfolder_gen') into output_ch_genotypes
       file 'outputfolder_gen/gen_data_QCd/SexCheck.txt' into sexcheck
       file 'outputfolder_gen/gen_data_QCd/*fam' into sample_qc
+
 
       """
       Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
@@ -132,7 +137,8 @@ process GenotypeQC {
       --pops $baseDir/data/1000G_pops.txt \
       --S_threshold ${s_stat} \
       --SD_threshold ${sd_thresh} \
-      --output outputfolder_gen
+      --output outputfolder_gen \
+      --pruned_variants_sex_check "${optional_pruned_variants_sex_check}"
       """
 }
 

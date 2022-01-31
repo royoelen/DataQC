@@ -20,6 +20,8 @@ option_list <- list(
     help = "Path to the file listing unrelated samples for reference data (tab-delimited .txt)."),
     make_option(c("-p", "--pops"), type = "character",
     help = "Path to the file indicating the population for each sample in reference data."),
+    make_option(c("-a", "--pruned_variants_sex_check"), type = "character",
+    help = "Path to a file with pruned X-chromosome variants to use in the sex check"),
     make_option(c("-o", "--output"), type = "character", help = "Folder with all the output files."),
     make_option(c("-S", "--S_threshold"), default = 0.4,
     help = "Numeric threshold to declare samples outliers, based on the genotype PCs. Defaults to 0.4 but should always be visually checked and changed, if needed."),
@@ -38,6 +40,7 @@ print(args$target_bed)
 print(args$gen_exp)
 print(args$sample_list)
 print(args$pops)
+print(args$pruned_variants_sex_check)
 print(args$output)
 print(args$S_threshold)
 print(args$SD_threshold)
@@ -97,22 +100,41 @@ snp_plinkQC(
 ref_bed <- bed("data/1000G_phase3_common_norel.bed")
 # Read in QCd target genotype data
 target_bed <- bed(paste0(bed_simplepath, "_QC.bed"))
-temp_QC <- data.frame(stage = "SNP CR>0.95; HWE P>1e-6; MAF>0.01; MIND<0.05", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow)
+temp_QC <- data.frame(stage = "SNP CR>0.95; HWE P>1e-6; MAF>0.01; GENO<0.05; MIND<0.05", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow)
 summary_table <- rbind(summary_table, temp_QC)
 
 # Do sex check
 message("Do sex check.")
 # Split x if needed
-system(paste0("plink/plink --bfile ", bed_simplepath, "_QC", " --split-x hg19 no-fail --make-bed --out ", bed_simplepath, "_split"))
-system(paste0("mv ", bed_simplepath, "_split.bed ", bed_simplepath, "_QC.bed"))
-system(paste0("mv ", bed_simplepath, "_split.bim ", bed_simplepath, "_QC.bim"))
-system(paste0("mv ", bed_simplepath, "_split.fam ", bed_simplepath, "_QC.fam"))
+
+pruned_variants_sex_check <- args$pruned_variants_sex_check
+
+if (!is.null(pruned_variants_sex_check) 
+    && pruned_variants_sex_check != "" 
+    && file.exists(pruned_variants_sex_check) 
+    && nrow(fread(pruned_variants_sex_check, header = F)) > 0) {
+
+    message("Using predefined pruned variants for sex-check:")
+    message(pruned_variants_sex_check)
+
+    system(paste0(
+        "plink/plink --bfile ", bed_simplepath, "_QC", " --extract ", pruned_variants_sex_check,
+        " --maf 0.05 --make-bed --out ", bed_simplepath, "_split"))
+
+} else {
+
+    message("Not using predefined pruned variants for sex-check")
+    
+    system(paste0(
+        "plink/plink --bfile ", bed_simplepath, "_QC", 
+        " --chr X --maf 0.05 --split-x hg19 no-fail --make-bed --out ", bed_simplepath, "_split"))
+
+}
 
 ## Pruning
-system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC", " --indep-pairwise 20000 200 0.2"))
-#system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC", " --extract /groups/umcg-bios/tmp01/projects/BIOS_for_eQTLGenII/pipeline/20211213/data_qc/dataqc/bios_datasets/CODAM/work/e1/5deb611e393bf87c56e6e768b121c9/plink2.prune.in"))
+system(paste0("plink/plink2 --bfile ", bed_simplepath, "_split", " --indep-pairwise 20000 200 0.2 --out check_sex_x"))
 ## Sex check
-system(paste0("plink/plink --bfile ", bed_simplepath, "_QC --extract plink2.prune.in --check-sex"))
+system(paste0("plink/plink --bfile ", bed_simplepath, "_split --extract check_sex_x.prune.in --check-sex"))
 
 #stop("check output")
 
@@ -124,22 +146,36 @@ temp_QC <- data.frame(stage = "Sex check (0.2<F<0.8)", Nr_of_SNPs = target_bed$n
 summary_table <- rbind(summary_table, temp_QC)
 
 
-if (nrow(sexcheck_f[sexcheck_f$PEDSEX %in% c(1, 2), ]) == nrow(sexcheck_f)){
-
-  sexcheck_f <- sexcheck_f[!sexcheck_f$STATUS == "PROBLEM", ]
+if (any(sexcheck_f$PEDSEX %in% c(1, 2))) {
+  
+  sexcheck_f <- sexcheck_f[(sexcheck_f$PEDSEX == 0) | (sexcheck_f$STATUS != "PROBLEM"), ]
   temp_QC <- data.frame(stage = "Sex check (reported and genetic sex mismatch)", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(sexcheck_f))
   summary_table <- rbind(summary_table, temp_QC)
 
-} else {message("No sex info in the .fam file.")}
+} else {
+  message("No sex info in the .fam file.")
+
+}
 
 summary_table <- rbind(summary_table, temp_QC)
 sex_fail_samples <- sexcheck[sexcheck$IID %in% sexcheck_f$IID, ]$IID
 
-p <- ggplot(sexcheck, aes(x = F)) + geom_histogram(color = "#000000", fill = "#000000", alpha = 0.5) +
-geom_vline(xintercept = c(0.2, 0.8), colour = "red", linetype = 2) +
-theme_bw()
+sexcheck_annotated <- sexcheck %>%
+  mutate(Reported_sex = case_when(
+    PEDSEX == 0 ~ "unknown",
+    PEDSEX == 1 ~ "male",
+    PEDSEX == 2 ~ "female"))
 
-ggsave(paste0(args$output, "/gen_plots/SexCheck.png"), type = "cairo", height = 7 / 2, width = 9, units = "in", dpi = 300)
+p <- ggplot(sexcheck_annotated, aes(x = F, fill = Reported_sex)) +
+  geom_histogram(position="stack", color = "black", alpha = 0.5) +
+  scale_fill_manual(values = c("black", "orange", "blue"), breaks = c("unknown", "male", "female"), name = "Reported sex") +
+  geom_vline(xintercept = c(0.2, 0.8), colour = "red", linetype = 2) + theme_bw()
+
+#p <- ggplot(sexcheck, aes(x = F)) + geom_histogram(color = "#000000", fill = "#000000", alpha = 0.5) +
+#geom_vline(xintercept = c(0.2, 0.8), colour = "red", linetype = 2) +
+#theme_bw()
+
+ggsave(paste0(args$output, "/gen_plots/SexCheck.png"), p, type = "cairo", height = 7 / 2, width = 9, units = "in", dpi = 300)
 
 fwrite(sexcheck_f, paste0(args$output, "/gen_data_QCd/SexCheck.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
 
@@ -171,6 +207,9 @@ summary_table <- rbind(summary_table, temp_QC)
 
 # Do heterozygosity check
 message("Do heterozygosity check.")
+
+# Prune variants
+system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --indep-pairwise 50 1 0.2"))
 
 system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --extract plink2.prune.in --het"))
 het <- fread("plink2.het")
