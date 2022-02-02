@@ -402,7 +402,7 @@ if (args$platform %in% c("AffyU219", "AffyHumanExon")){
 dist <- cor(and_p, method = "pearson")
 mds <- isoMDS(1 - dist, k = 2)
 mds <- as.data.frame(mds$points)
-colnames(mds) <- paste("MDS coordinate", 2)
+colnames(mds) <- paste("MDS coordinate", c(1:2))
 mds$Sample <- colnames(and_p)
 
 # Find samples deviating from the mean MDS1 and MDS2
