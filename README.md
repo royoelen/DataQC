@@ -4,19 +4,51 @@ Automatic data quality check and processing for unimputed genotype data and unpr
 
 Performs the following main steps:
 
-- 
+- Genotypes
+    - Standard SNP QC filtering (call-rate>0.95, Hardy-Weinberg P>1e-6, MAF>0.01).
+    - Individual-level missingness filter <0.05.
+    - Comparison of reported and genetic check, removal of mismatched samples.
+    - Removal of samples with unclear genetic sex.
+    - Removal of samples with excess heterozygosity (+/-3SD from the mean).
+    - Removal of related samples (3d degree relatives). From each pair of related samples, one is kept in the data.
+    - Visualisation of samples in the genetic reference space, instructions how to remove or split the data in case of multi-ancestry samples.
+    - Removal of in-sample genetic outliers.
+    - Calculates 10 first genetic principal components (PCs), used in analyses as covariates to correct for population stratification.
+- Gene expression:
+    - Aligns sample IDs between genotype samples and gene expression samples.
+    - Filters in blood-expressed genes.
+    - Replaces array probe IDs with gene IDs.
+    - Iteratively checks for expression outliers and removes samples which fail this check.
+    - Appropriately normalises the data according to the expression platform used and applies additional inverse normal transformation.
+    - Calculates 100 first expression PCs, used in analyses as covariates to correct for unknown variation.
+    - Calculates the expression summary statistics for each gene, used to do *post-hoc* QC and gene filtering in the meta-analysis.
+- Additional steps:
+    - Removes samples whose genetic sex does not match with the expression of sex-specific genes.
+    - Reorders the genotype samples into random order.
+    - Organises all the QCd data into the standard folder format.
+    - Provides commented `html` QC report which should be used to get an overview of the quality of the data.
 
 ## Usage information
 
 ### Input files
 
-- Unimputed genotype file in plink .bed format (https://www.cog-genomics.org/plink/1.9/input#bed). Has to be in **hg19**.
+- Unimputed genotype file in plink .bed format (https://www.cog-genomics.org/plink/1.9/input#bed). Genome build to be in **hg19**. It is advisable that .fam file also includes observed sex for all samples (format: males=1, females=2), so that pipeline does extra check on that. However, if this information is not available for all samples, pipeline just skips this check.
 - Raw, unprocessed gene expression matrix. Tab-delimited file, genes/probes in the rows, samples in the columns.
+    - First column has header "-".
     - For Illumina arrays, probe ID has to be Illumina ArrayAddress.
-    - First column has header - and contains either ENSEMBL gene IDs (RNA-seq), Illumina ArrayAddress IDs for probes or probe names for corresponding Affymetrix array.
     - For RNA-seq, gene ID has to be stable ENSEMBL gene ID (ENSEMBL v75).
-    - For Affymetrix arrays: information TBA.
+    - For Affymetrix arrays we expect that gene **expression matrix has already gone through the standard preprocessing** and is in the same format as was used in eQTLGen phase 1 analyses (incl. array probe names).
 - Genotype-to-expression linking file (gte). Tab-delimited file, no header, 2 columns: sample ID in genotype data, corresponding sample ID in gene expression data.
+
+### Additional settings
+
+There are three arguments which can be used to adjust certain outlier detection thresholds. These should be adjusted after initial run with the default settings and after investigating the diagnostic plots in the `Report_DataQc_[cohort name].html`. Then the pipeline should be re-run with adjusted settings.
+
+`--GenOutThresh` Threshold for declaring genotype sample genetic outlier, based on LOF "outlierness" metric. Default is 0.4.
+
+`--GenSdThresh` Threshold for declaring genotype sample genetic outlier, based on the deviation from the means of first two genetic PCs. Defaults to 3 SD from the mean.
+
+`--ExpSdThresh` Threshold for declaring expression sample outlier, based on the deviation from the means of first two expression PCs. Defaults to 4 SD from the mean.
 
 ### Running the data QC command
 
@@ -60,7 +92,6 @@ ${nextflow_path}/nextflow run DataQC.nf \
 --outdir ${output_path}  \
 -profile slurm \
 -resume
-
 ```
 
 ### Output
@@ -96,13 +127,13 @@ Pipeline makes the following output (most relevant files outlined):
     |--pipeline_info
         |--DataQc_report.html
         |--...
-    |--Report_DataQc.html
+    |--Report_DataQc_[cohort name].html
     |--CovariatesPCs.txt
 ```
 
 #### Steps to take
 
-1. Investigate the file `Report_DataQc.html`, fix any issues with the genotype/gene expression data according to the plots and instructions. 
+1. Investigate the file `Report_DataQc*.html`, fix any issues with the genotype/gene expression data according to the plots and instructions. You can adjust three arguments of the pipeline to adjust certain outlier detection thresholds according to your data.
 
 2. If data had any quality issues, re-run the pipeline when issues are removed, check the `Report_DataQc.html` again.
 
@@ -110,15 +141,14 @@ When all issues are solved:
 
 3. Files: `output/outputfolder_gen/gen_data_QCd/*_ToImputation.bed`, `output/outputfolder_gen/gen_data_QCd/*_ToImputation.bim`, `output/outputfolder_gen/gen_data_QCd/*_ToImputation.fam` are the filtered and QCd genotype files which need to be the input for imputation pipeline `https://gitlab.com/eqtlgen-group/eqtlgen-imputation-pipeline`
 
-4. File: `output/outputfolder_exp/exp_data_QCd/exp_data_preprocessed.txt` is the filtered, QCd and preprocessed file which needs to be the input for per-cohort preparations and encoding pipeline `https://gitlab.com/eqtlgen-group/PerCohortPreparations`.
+4. The whole folder `output` should be specified as an input for per-cohort preparations and encoding pipeline `https://gitlab.com/eqtlgen-group/PerCohortPreparations`. This pipeline automatically uses the processed, QCd expression data and covariate file to run data encoding and partial derivative calculation. It then organises the encoded matrices for sharig with central site. It also extracts some QC files for sharing with the central site:
 
-5. File: `output/CovariatePCs.txt` is the covariate file which contains 10 first genotype PCs and 50 first gene expression PCs. This should be used as an input for per-cohort preparations and encoding pipeline `https://gitlab.com/eqtlgen-group/PerCohortPreparations`.
+- `output/Report_DataQc_[cohort name].html`: most important data QC report, used in central site to check the per-cohort QC information.
+- `output/outputfolder_exp/exp_data_summary/raw_gene_summary.txt`: gene expression summary statistics (mean, median, sd, min, max, nr of unique values Shapiro test P) before normalisation, used in central site to filter out lowly expressed genes, genes having outliers, etc.
+- `output/outputfolder_exp/exp_data_summary/processed_gene_summary.txt`: gene expression summary statistics (mean, median, sd, min, max, nr of unique values, Shapiro test P) after normalisation, used in central site to filter out lowly expressed genes, genes having outliers, etc.
+- `output/outputfolder_gen/plots/*`, `output/outputfolder_exp/plots/*`: Separate diagnostic plots which can be later used in the manuscript materials.
 
-**TODO!** Combine with cell metric PGS calculation pipeline/output.
+In case of technical issues, it is advisable to check `output/pipeline_info/DataQc_report.html` and share with central site when 
 
-5. Share with central site the following files:
+- `output/pipeline_info/DataQc_report.html`: Technical pipeline runtime report, can be used in central site for debugging.
 
-    - `output/outputfolder_exp/exp_data_summary/raw_gene_summary.txt`: gene expression summary statistics (mean, median, sd, min, max, Shapiro test P) before processing, used in central site to filter out lowly expressed genes, containing outliers, etc.
-    - `output/outputfolder_exp/exp_data_summary/processed_gene_summary.txt`: gene expression summary statistics (mean, median, sd, min, max, Shapiro test P) after processing, used in central site to filter out lowly expressed genes, containing outliers, etc.
-    - `output/Report_DataQc.html`: Data QC report, used in central site to check the per-cohort QC plots. 
-    - `output/pipeline_info/DataQc_report.html`: Technical pipline runtime report, used in central site for debugging, if such need arises. 

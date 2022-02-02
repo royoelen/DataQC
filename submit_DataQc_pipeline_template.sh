@@ -18,7 +18,7 @@ module load squashfs/4.4
 # Define paths
 nextflow_path=[full path to your Nextflow executable]
 
-geno_path=[full path to your input genotype folder]
+geno_path=[full path to your genotype files without file extension]
 exp_path=[full path to your raw gene expression matrix]
 gte_path=[full path to your genotype-to-expression file]
 exp_platform=[expression platform name e.g. HT12v3 or RNAseq]

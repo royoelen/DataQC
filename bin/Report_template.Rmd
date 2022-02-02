@@ -172,13 +172,17 @@ knitr::kable(overview_table)
 
 ### PCA on preprocessed expression data
 
-On the following plots, 8 first PCs are calculated on normalised and log~2~-transformed expression matrix. Samples were declared as outliers based on first two PCs, when they deviate from the mean value by `r params$SD_exp` standard deviations (SDs). Analysis was run iteratively, data was pre-processed and PCA was calculated until there were no further expression otliers to remove.
+On the following plots, 8 first PCs are calculated on normalised and log~2~-transformed expression matrix. Samples were declared as outliers based on first two PCs, when they deviate from the mean value by `r params$SD_exp` standard deviations (SDs). Analysis was run iteratively, data was pre-processed and PCA was calculated until there were no further expression otliers to remove. Because there might be expected difference based on the sex, we also indicate the genetic sex of each sample on the plot.
 
-![**Fig 8. PCA on all samples, outliers from all iterations are outlined.**](outputfolder_exp/exp_plots/PCA_before.png)
+![**Fig 8. PCA on all samples** Genetic sex of the individual is shown as shape of the dot, outliers from all iterations are outlined as red.](outputfolder_exp/exp_plots/PCA_before.png)
 
-These are 8 first expression PCs, calculated on fully processed expression data (normalised and INT-transformed) after removal of outlier samples. You should not see any dramatic outliers any more.
+In order to visualise non-linear patterns in the data, we calculated 2 first multidimensional scaling (MDS) components and visualise those as well. This analysis were done on the data where outliers from previous step were already removed. Similarly to PCs, samples were declared as outliers when they deviate from the mean value of MDS 1 and MDS 2 by `r params$SD_exp` SDs. If you still observe outlier groups on this plot, you should try to reduce the SDs allowed to deviate (parameter `--ExpSdThreshold` of the pipeline) and re-run the pipeline.
 
-![**Fig 9. PCA on all samples, outliers removed.**](outputfolder_exp/exp_plots/PCA_after.png) 
+![**Fig 9. MDS on all samples** Genetic sex of the individual is shown as shape of the dot, outliers are outlined as red.](outputfolder_exp/exp_plots/MDS_before.png)
+
+These are 8 first expression PCs, calculated on fully processed expression data (normalised and INT-transformed) after removal of outlier samples. Genetic sex of the individual is shown as shape of the dot. You should not see any dramatic outliers any more on first two PCs.
+
+![**Fig 10. PCA on all samples, outliers removed.** Genetic sex of the individual is shown as shape of the dot.](outputfolder_exp/exp_plots/PCA_after.png) 
 
 #### Explained variance of expression PCs
 
@@ -204,7 +208,7 @@ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 p
 ```
 
-**Fig 11. Cumulative explained variance for first 100 PCs.**
+**Fig 12. Cumulative explained variance for first 100 PCs.**
 
 First 5 PCs explain cumulatively `r overview_pcs_cumulative$cumulative[5] * 100`% of variance.
 
@@ -226,4 +230,4 @@ Next plot shows the expression of the sex chromosomes genes. We assume that male
 
 Samples which expression does not align with genetic sex are potential sample mixups. These are outlined with red and automatically removed from further analyses.
 
-![**Fig 10. Expression of X/Y chromosome genes.** On the x-axis is the normalised expression level of XIST, on the y-axis is the mean of the normalised expression levels of several Y chromosome genes. Point type indicates the genetic sex and there should be no samples on the X-Y diagonal. Samples which are in the wrong sample cloud, are likely sample mixups and were automatically removed from the data.](outputfolder_exp/exp_plots/SexSpecificGenes.png) 
+![**Fig 13. Expression of X/Y chromosome genes.** On the x-axis is the normalised expression level of XIST, on the y-axis is the mean of the normalised expression levels of several Y chromosome genes. Point type indicates the genetic sex and there should be no samples on the X-Y diagonal. Samples which are in the wrong sample cloud, are likely sample mixups and were automatically removed from the data.](outputfolder_exp/exp_plots/SexSpecificGenes.png) 
