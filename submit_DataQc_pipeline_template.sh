@@ -25,6 +25,11 @@ exp_platform=[expression platform name e.g. HT12v3 or RNAseq]
 cohort_name=[name of the cohort]
 output_path=[name of the output path]
 
+# Optional arguments for the command
+# --GenOutThresh [numeric threshold]
+# --GenSdThresh [numeric threshold]
+# --ExpSdThresh [numeric threshold]
+
 # Command
 NXF_VER=20.10.0 ${nextflow_path}/nextflow run DataQC.nf \
 --bfile ${geno_path} \
