@@ -193,6 +193,7 @@ if (23 %in% sex_check_data_set_chromosomes) {
 } else {
   warning("No X chromosome present. Skipping sex-check...")
 
+  file.create(sex_check_out_path)
   file.create(sex_check_removed_out_path)
 }
 
