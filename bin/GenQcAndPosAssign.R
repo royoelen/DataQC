@@ -106,7 +106,8 @@ summary_table <- rbind(summary_table, temp_QC)
 ## Assert that all IIDs are unique
 print(target_bed$fam)
 
-sex_check_data_set_chromosomes <- unique(fread(paste0(bed_simplepath, "_QC.bim"), header = F)[,1])
+print(target_bed$map)
+sex_check_data_set_chromosomes <- unique(target_bed$map$chromosome)
 
 print(sex_check_data_set_chromosomes)
 
@@ -167,7 +168,7 @@ if (23 %in% sex_check_data_set_chromosomes) {
 
   sexcheck$PASS <- sexcheck$MATCH_PASS & sexcheck$F_PASS
 
-  if (any(sexcheck_f$PEDSEX %in% c(1, 2))) {
+  if (any(sexcheck$PEDSEX %in% c(1, 2))) {
 
     temp_QC <- data.frame(stage = "Sex check (reported and genetic sex mismatch)",
                           Nr_of_SNPs = target_bed$ncol,
@@ -179,7 +180,7 @@ if (23 %in% sex_check_data_set_chromosomes) {
   }
 
 
-  p <- ggplot(sexcheck, aes(x = F, fill = Reported_sex)) +
+  p <- ggplot(sexcheck, aes(x = F, fill = PEDSEX)) +
     geom_histogram(position="stack", color = "black", alpha = 0.5) +
     scale_fill_manual(values = c("black", "orange", "blue"), breaks = c(0, 1, 2), name = "Reported sex") +
     geom_vline(xintercept = c(0.2, 0.8), colour = "red", linetype = 2) + theme_bw()
@@ -187,12 +188,12 @@ if (23 %in% sex_check_data_set_chromosomes) {
   ggsave(paste0(args$output, "/gen_plots/SexCheck.png"), p, type = "cairo", height = 7 / 2, width = 9, units = "in", dpi = 300)
 
   fwrite(sexcheck, sex_check_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
-  fwrite(sexcheck[!sexcheck$PASS], sex_check_removed_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
+  fwrite(sexcheck[!sexcheck$PASS,], sex_check_removed_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
 
 } else {
   warning("No X chromosome present. Skipping sex-check...")
 
-  fwrite("", sex_check_removed_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
+  file.create(sex_check_removed_out_path)
 }
 
 # Remove sex chromosomes
