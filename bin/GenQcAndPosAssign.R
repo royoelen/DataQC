@@ -180,7 +180,7 @@ if (23 %in% sex_check_data_set_chromosomes) {
 
   print(sexcheck$PEDSEX)
 
-  sex_cols <- c(0 = "black", 1 = "orange", 2 = "blue")
+  sex_cols <- c("0" = "black", "1" = "orange", "2" = "blue")
 
   p <- ggplot(sexcheck, aes(x = F, fill = PEDSEX)) +
     geom_histogram(position="stack", color = "black", alpha = 0.5) +
