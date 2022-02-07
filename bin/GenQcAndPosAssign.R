@@ -207,7 +207,7 @@ snp_plinkQC(
   mind = 0.05,
   hwe = 1e-6,
   autosome.only = TRUE,
-  extra.options = paste0("--output-chr 26 --remove ", sex_check_samples_failed),
+  extra.options = paste0("--output-chr 26 --remove ", sex_check_removed_out_path),
   verbose = TRUE
 )
 
