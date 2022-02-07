@@ -182,9 +182,9 @@ if (23 %in% sex_check_data_set_chromosomes) {
 
   sex_cols <- c("0" = "black", "1" = "orange", "2" = "blue")
 
-  p <- ggplot(sexcheck, aes(x = F, fill = PEDSEX)) +
+  p <- ggplot(sexcheck, aes(x = F, fill = factor(PEDSEX))) +
     geom_histogram(position="stack", color = "black", alpha = 0.5) +
-    scale_fill_manual(values = cols, breaks = c(0, 1, 2), labels = c("Unknown", "Male", "Female"), name = "Reported sex") +
+    scale_fill_manual(values = cols, breaks = c("0", "1", "2"), labels = c("Unknown", "Male", "Female"), name = "Reported sex") +
     geom_vline(xintercept = c(0.2, 0.8), colour = "red", linetype = 2) + theme_bw()
 
   ggsave(paste0(args$output, "/gen_plots/SexCheck.png"), p, type = "cairo", height = 7 / 2, width = 9, units = "in", dpi = 300)
