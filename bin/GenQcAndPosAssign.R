@@ -104,12 +104,11 @@ temp_QC <- data.frame(stage = "SNP CR>0.95; HWE P>1e-6; MAF>0.01; GENO<0.05; MIN
 summary_table <- rbind(summary_table, temp_QC)
 
 ## Assert that all IIDs are unique
-print(target_bed$fam)
+if (any(duplicated(target_bed$fam$sample.ID))) {
+  stop("Individual sample IDs should be unique. Exiting...")
+}
 
-print(target_bed$map)
 sex_check_data_set_chromosomes <- unique(target_bed$map$chromosome)
-
-print(sex_check_data_set_chromosomes)
 
 sex_check_out_path <- paste0(args$output, "/gen_data_QCd/SexCheck.txt")
 sex_check_removed_out_path <- paste0(args$output, "/gen_data_QCd/SexCheckRemoved.txt")
@@ -133,7 +132,7 @@ if (23 %in% sex_check_data_set_chromosomes) {
     message(pruned_variants_sex_check)
 
     system(paste0(
-      "plink/plink --bfile ", bed_simplepath, "_QC", " --extract ", pruned_variants_sex_check,
+      "plink/plink --bfile ", bed_simplepath, "_QC", " --extract range ", pruned_variants_sex_check,
       " --maf 0.05 --make-bed --out ", bed_simplepath, "_split"))
 
   } else {
@@ -193,7 +192,13 @@ if (23 %in% sex_check_data_set_chromosomes) {
 } else {
   warning("No X chromosome present. Skipping sex-check...")
 
-  file.create(sex_check_out_path)
+  sexcheck <- sex_check_samples[,c(1,2,5)]
+  colnames(sexcheck) <- c("FID", "IID", "PEDSEX")
+  sexcheck$PEDSEX_COPY <- sexcheck$PEDSEX
+  sexcheck$STATUS <- NA_character_
+  sexcheck$F <- NA_real_
+
+  fwrite(sexcheck, sex_check_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
   file.create(sex_check_removed_out_path)
 }
 

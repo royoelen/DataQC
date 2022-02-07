@@ -101,8 +101,8 @@ illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
     gte$V1 <- as.character(gte$V1)
     gte$V2 <- as.character(gte$V2)
 
-    geno_fam <- fread(args$sex_info, header = FALSE)
-    gte <- gte[gte$V1 %in% geno_fam$V2,]
+    geno_fam <- fread(args$sex_info, header = TRUE)
+    gte <- gte[gte$V1 %in% geno_fam$IID,]
     gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
 
     message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
@@ -155,8 +155,8 @@ RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE){
     gte$V1 <- as.character(gte$V1)
     gte$V2 <- as.character(gte$V2)
 
-    geno_fam <- fread(args$sex_info, header = FALSE)
-    gte <- gte[gte$V1 %in% geno_fam$V2,]
+    geno_fam <- fread(args$sex_info, header = TRUE)
+    gte <- gte[gte$V1 %in% geno_fam$IID,]
     gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
 
     message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
@@ -210,8 +210,8 @@ Affy_preprocess <- function(exp, gte, gen){
     gte$V1 <- as.character(gte$V1)
     gte$V2 <- as.character(gte$V2)
 
-    geno_fam <- fread(args$sex_info, header = FALSE)
-    gte <- gte[gte$V1 %in% geno_fam$V2,]
+    geno_fam <- fread(args$sex_info, header = TRUE)
+    gte <- gte[gte$V1 %in% geno_fam$IID,]
     gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
 
     message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
@@ -397,9 +397,9 @@ summary_table <- data.table(Stage = "Unprocessed matrix", Nr_of_features = nrow(
 
 # Remove samples which are not in the gte or in genotype data
 gte <- fread(args$genotype_to_expression_linking, header = FALSE)
-geno_fam <- fread(args$sex_info, header = FALSE)
+geno_fam <- fread(args$sex_info, header = TRUE)
 gen_filter <- fread(args$geno_filter, header = FALSE)
-gte <- gte[gte$V1 %in% geno_fam$V2, ]
+gte <- gte[gte$V1 %in% geno_fam$IID, ]
 gte <- gte[gte$V1 %in% gen_filter$V2, ]
 
 print(str(gte))
@@ -453,6 +453,8 @@ max_exp <- max(y_genes$y_genes, y_genes$xist)
 
 y_genes$mismatch <- "no"
 
+y_genes$mismatch[y_genes$Sex == 0] <- "unknown"
+
 if (nrow(y_genes[(y_genes$y_genes > y_genes$xist & y_genes$Sex == 2) | (y_genes$y_genes < y_genes$xist & y_genes$Sex == 1), ]) > 0){
 y_genes[(y_genes$y_genes > y_genes$xist & y_genes$Sex == 2) | (y_genes$y_genes < y_genes$xist & y_genes$Sex == 1), ]$mismatch <- "yes"
 }
@@ -463,7 +465,7 @@ if (all(geno_fam_f$Sex == 0)) {
   base_plot <- base_plot + geom_point(aes(col = mismatch, shape = Sex))
 } else {
   base_plot <- base_plot + geom_point(aes(col = mismatch, shape = Sex)) +
-    scale_colour_manual(values = c("no" = "darkgray", "yes" = "red"))
+    scale_colour_manual(values = c("no" = "darkgray", "unknown" = "darkgray", "yes" = "red"))
 }
 
 p <- base_plot + theme_bw() + ylab("mean of Y genes") + xlab("XIST") +
