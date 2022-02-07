@@ -457,19 +457,17 @@ if (nrow(y_genes[(y_genes$y_genes > y_genes$xist & y_genes$Sex == 2) | (y_genes$
 y_genes[(y_genes$y_genes > y_genes$xist & y_genes$Sex == 2) | (y_genes$y_genes < y_genes$xist & y_genes$Sex == 1), ]$mismatch <- "yes"
 }
 
-point_layer <- geom_point(aes(col = mismatch, shape = Sex)) +
-  scale_colour_manual(values = c("no" = "darkgray", "yes" = "red"))
+base_plot <- ggplot(y_genes, aes(x = xist, y = y_genes))
 
 if (all(geno_fam_f$Sex == 0)) {
-  point_layer <- geom_point(aes(col = mismatch, shape = Sex))
+  base_plot <- base_plot + geom_point(aes(col = mismatch, shape = Sex))
+} else {
+  base_plot <- base_plot + geom_point(aes(col = mismatch, shape = Sex)) +
+    scale_colour_manual(values = c("no" = "darkgray", "yes" = "red"))
 }
 
-base_plot <- ggplot(y_genes, aes(x = xist, y = y_genes)) +
-  point_layer + geom_point() + theme_bw() +
-
-ylab("mean of Y genes") +
-xlab("XIST") +
-geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue")
+p <- base_plot + theme_bw() + ylab("mean of Y genes") + xlab("XIST") +
+  geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue")
 
 ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.png"), height = 5, width = 6, units = "in", dpi = 300, type = "cairo")
 
