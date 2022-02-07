@@ -402,7 +402,7 @@ if (args$platform %in% c("AffyU219", "AffyHumanExon")){
 dist <- cor(and_p, method = "pearson")
 mds <- isoMDS(1 - dist, k = 2)
 mds <- as.data.frame(mds$points)
-colnames(mds) <- paste("MDS coordinate", c(1:2))
+colnames(mds) <- paste("MDS coordinate", 1:2)
 mds$Sample <- colnames(and_p)
 
 # Find samples deviating from the mean MDS1 and MDS2
@@ -546,8 +546,10 @@ p <- (p5 | p6) / (p7 | p8)
 ggsave(paste0(args$output, "/exp_plots/PCA_after.png"), height = 7.5, width = 9, units = "in", dpi = 300, type = "cairo")
 ggsave(paste0(args$output, "/exp_plots/PCA_after.pdf"), height = 7.5, width = 9, units = "in", dpi = 300)
 
-and_p2 <- as.data.table(and_p)
-and_p2 <- data.table(`-` = rownames(and_p), and_p2)
+# Convert to HASE format
+and_p2 <- as.data.table(t(and_p))
+and_p2 <- data.table(`ID` = colnames(and_p), and_p2)
+
 fwrite(and_p2, paste0(args$output, "/exp_data_QCd/exp_data_preprocessed.txt"), sep = "\t", quote = FALSE)
 
 # Write out importance of final PCs
