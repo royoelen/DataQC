@@ -92,7 +92,7 @@ snp_plinkQC(
   mind = 0.05,
   hwe = 1e-6,
   autosome.only = FALSE,
-  extra.options = "--output-chr 26 --not-chr 0 25-26",
+  extra.options = "--output-chr 26 --not-chr 0 25-26 --set-all-var-ids '@:#[b37]\$r,\$a'",
   verbose = TRUE
 )
 
