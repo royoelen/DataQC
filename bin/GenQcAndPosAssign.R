@@ -10,85 +10,6 @@ library(stringr)
 library(rmarkdown)
 library(Cairo)
 
-# Sex check function
-sex_check <- function(args) {
-
-  # Split x if needed
-
-  pruned_variants_sex_check <- args$pruned_variants_sex_check
-
-  if (!is.null(pruned_variants_sex_check)
-    && pruned_variants_sex_check != ""
-    && file.exists(pruned_variants_sex_check)
-    && nrow(fread(pruned_variants_sex_check, header = F)) > 0) {
-
-    message("Using predefined pruned variants for sex-check:")
-    message(pruned_variants_sex_check)
-
-    system(paste0(
-      "plink/plink --bfile ", bed_simplepath, "_QC", " --extract ", pruned_variants_sex_check,
-      " --maf 0.05 --make-bed --out ", bed_simplepath, "_split"))
-
-  } else {
-
-    message("Not using predefined pruned variants for sex-check")
-
-    system(paste0(
-      "plink/plink --bfile ", bed_simplepath, "_QC",
-      " --chr X --maf 0.05 --split-x hg19 no-fail --make-bed --out ", bed_simplepath, "_split"))
-
-  }
-
-  ## Pruning
-  system(paste0("plink/plink2 --bfile ", bed_simplepath, "_split", " --indep-pairwise 20000 200 0.2 --out check_sex_x"))
-  ## Sex check
-  system(paste0("plink/plink --bfile ", bed_simplepath, "_split --extract check_sex_x.prune.in --check-sex"))
-
-  #stop("check output")
-
-  ## If there is sex info in the fam file for all samples then remove samples which fail the sex check or genotype-based F is >0.2 & < 0.8
-  sexcheck <- fread("plink.sexcheck")
-  ## Remove samples which have unclear sex
-  sexcheck_f <- sexcheck[!(F > 0.2 & F < 0.8), ]
-  temp_QC <- data.frame(stage = "Sex check (0.2<F<0.8)", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(sexcheck_f))
-  summary_table <- rbind(summary_table, temp_QC)
-
-
-  if (any(sexcheck_f$PEDSEX %in% c(1, 2))) {
-
-    sexcheck_f <- sexcheck_f[(sexcheck_f$PEDSEX == 0) | (sexcheck_f$STATUS != "PROBLEM"), ]
-    temp_QC <- data.frame(stage = "Sex check (reported and genetic sex mismatch)", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(sexcheck_f))
-    summary_table <- rbind(summary_table, temp_QC)
-
-  } else {
-    message("No sex info in the .fam file.")
-
-  }
-
-  summary_table <- rbind(summary_table, temp_QC)
-  sex_fail_samples <- sexcheck[sexcheck$IID %in% sexcheck_f$IID, ]$IID
-
-  sexcheck_annotated <- sexcheck %>%
-    mutate(Reported_sex = case_when(
-      PEDSEX == 0 ~ "unknown",
-      PEDSEX == 1 ~ "male",
-      PEDSEX == 2 ~ "female"))
-
-  p <- ggplot(sexcheck_annotated, aes(x = F, fill = Reported_sex)) +
-    geom_histogram(position="stack", color = "black", alpha = 0.5) +
-    scale_fill_manual(values = c("black", "orange", "blue"), breaks = c("unknown", "male", "female"), name = "Reported sex") +
-    geom_vline(xintercept = c(0.2, 0.8), colour = "red", linetype = 2) + theme_bw()
-
-  #p <- ggplot(sexcheck, aes(x = F)) + geom_histogram(color = "#000000", fill = "#000000", alpha = 0.5) +
-  #geom_vline(xintercept = c(0.2, 0.8), colour = "red", linetype = 2) +
-  #theme_bw()
-
-  ggsave(paste0(args$output, "/gen_plots/SexCheck.png"), p, type = "cairo", height = 7 / 2, width = 9, units = "in", dpi = 300)
-
-  fwrite(sexcheck_f, paste0(args$output, "/gen_data_QCd/SexCheck.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
-
-}
-
 # Argument parser
 option_list <- list(
     make_option(c("-t", "--target_bed"), type = "character",
@@ -182,20 +103,96 @@ target_bed <- bed(paste0(bed_simplepath, "_QC.bed"))
 temp_QC <- data.frame(stage = "SNP CR>0.95; HWE P>1e-6; MAF>0.01; GENO<0.05; MIND<0.05", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow)
 summary_table <- rbind(summary_table, temp_QC)
 
-sex_check_data_set_chromosomes <- fread(paste0(bed_simplepath, "_QC.bim"), header = F)[,1]
+## Assert that all IIDs are unique
+print(target_bed$fam)
 
-snp_sex_known <- F
+sex_check_data_set_chromosomes <- unique(fread(paste0(bed_simplepath, "_QC.bim"), header = F)[,1])
+
+print(sex_check_data_set_chromosomes)
+
+sex_check_out_path <- paste0(args$output, "/gen_data_QCd/SexCheck.txt")
+sex_check_removed_out_path <- paste0(args$output, "/gen_data_QCd/SexCheckRemoved.txt")
+sex_check_samples <- target_bed$fam
 
 if (23 %in% sex_check_data_set_chromosomes) {
 
   # Do sex check
   message("Do sex check.")
-  sex_check(args)
 
-  snp_sex_known <- T
+  # Split x if needed
+
+  pruned_variants_sex_check <- args$pruned_variants_sex_check
+
+  if (!is.null(pruned_variants_sex_check)
+    && pruned_variants_sex_check != ""
+    && file.exists(pruned_variants_sex_check)
+    && nrow(fread(pruned_variants_sex_check, header = F)) > 0) {
+
+    message("Using predefined pruned variants for sex-check:")
+    message(pruned_variants_sex_check)
+
+    system(paste0(
+      "plink/plink --bfile ", bed_simplepath, "_QC", " --extract ", pruned_variants_sex_check,
+      " --maf 0.05 --make-bed --out ", bed_simplepath, "_split"))
+
+  } else {
+
+    message("Not using predefined pruned variants for sex-check")
+
+    system(paste0(
+      "plink/plink --bfile ", bed_simplepath, "_QC",
+      " --chr X --maf 0.05 --split-x hg19 no-fail --make-bed --out ", bed_simplepath, "_split"))
+
+  }
+
+  ## Pruning
+  system(paste0("plink/plink2 --bfile ", bed_simplepath, "_split", " --indep-pairwise 20000 200 0.2 --out check_sex_x"))
+  ## Sex check
+  system(paste0("plink/plink --bfile ", bed_simplepath, "_split --extract check_sex_x.prune.in --check-sex"))
+
+  #stop("check output")
+
+  ## If there is sex info in the fam file for all samples then remove samples which fail the sex check or genotype-based F is >0.2 & < 0.8
+  sexcheck <- fread("plink.sexcheck")
+  ## Annotate samples who have clear sex
+  sexcheck$F_PASS <- !(sexcheck$F > 0.2 & sexcheck$F < 0.8)
+  temp_QC <- data.frame(stage = "Sex check (0.2<F<0.8)",
+                        Nr_of_SNPs = target_bed$ncol,
+                        Nr_of_samples = sum(sexcheck$F_PASS))
+  summary_table <- rbind(summary_table, temp_QC)
+
+  sexcheck$MATCH_PASS <- case_when(sexcheck$PEDSEX == 0 ~ T,
+                                   sexcheck$STATUS == "PROBLEM" ~ F,
+                                   TRUE ~ T)
+
+  sexcheck$PASS <- sexcheck$MATCH_PASS & sexcheck$F_PASS
+
+  if (any(sexcheck_f$PEDSEX %in% c(1, 2))) {
+
+    temp_QC <- data.frame(stage = "Sex check (reported and genetic sex mismatch)",
+                          Nr_of_SNPs = target_bed$ncol,
+                          Nr_of_samples = sum(sexcheck$PASS))
+    summary_table <- rbind(summary_table, temp_QC)
+
+  } else {
+    message("No sex info in the .fam file.")
+  }
+
+
+  p <- ggplot(sexcheck, aes(x = F, fill = Reported_sex)) +
+    geom_histogram(position="stack", color = "black", alpha = 0.5) +
+    scale_fill_manual(values = c("black", "orange", "blue"), breaks = c(0, 1, 2), name = "Reported sex") +
+    geom_vline(xintercept = c(0.2, 0.8), colour = "red", linetype = 2) + theme_bw()
+
+  ggsave(paste0(args$output, "/gen_plots/SexCheck.png"), p, type = "cairo", height = 7 / 2, width = 9, units = "in", dpi = 300)
+
+  fwrite(sexcheck, sex_check_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
+  fwrite(sexcheck[!sexcheck$PASS], sex_check_removed_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
+
 } else {
-
   warning("No X chromosome present. Skipping sex-check...")
+
+  fwrite("", sex_check_removed_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
 }
 
 # Remove sex chromosomes
@@ -209,7 +206,7 @@ snp_plinkQC(
   mind = 0.05,
   hwe = 1e-6,
   autosome.only = TRUE,
-  extra.options = "--output-chr 26",
+  extra.options = formatC("--output-chr 26 --remove %s", sex_check_samples_failed),
   verbose = TRUE
 )
 
@@ -221,7 +218,7 @@ system(paste0("mv ", bed_simplepath, "_QC_QC.fam ", bed_simplepath, "_QC.fam"))
 
 # Read in again QCd target genotype data
 target_bed <- bed(paste0(bed_simplepath, "_QC.bed"))
-temp_QC <- data.frame(stage = "Removed X/Y", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(sexcheck_f))
+temp_QC <- data.frame(stage = "Removed X/Y", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(target_bed$fam))
 summary_table <- rbind(summary_table, temp_QC)
 
 # Do heterozygosity check
