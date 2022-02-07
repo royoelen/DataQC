@@ -20,7 +20,7 @@ This report is for cohort: **`r params$dataset_name`**.
 
 Expression platform for this cohort is: **`r params$platform`**.
 
-Post-QC sample size for this cohort is: **`r library(data.table); exp <- fread(params$N); ncol(exp) - 1`**
+Post-QC sample size for this cohort is: **`r library(data.table); exp <- fread(params$N); nrow(exp)`**
 
 **Settings used for sample outlier detection:**
 
