@@ -19,7 +19,7 @@ def helpMessage() {
       --bfile                       Path to the unimputed genotype files in plink bed/bim/fam format (without extensions bed/bim/fam).
       --expfile                     Path to the un-preprocessed gene expression matrix (genes/probes in the rows, samples in the columns). Can be from RNA-seq experiment or from array. NB! For Affymetrix arrays (AffyU219, AffyExon) we assume that standard preprocessing and normalisation is already done.
       --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. Can be used to filter samples from the analysis.
-      --exp_platform                Indicator indicating the gene expression platform. HT12v3, HT12v4, HuRef8, RNAseq, AffyU219, AffyExon.
+      --exp_platform                Indicator indicating the gene expression platform. HT12v3, HT12v4, HuRef8, RNAseq, AffyU219, AffyHumanExon.
       --outdir                      Path to the output directory.
       --Sthresh                     "Outlierness" score threshold for excluding ethnic outliers. Defaults to 0.4 but should be adjusted according to visual inspection.
       --SDthresh                    Threshold for declaring samples outliers based on genetic PC1 and PC2. Defaults to 3 SD from the mean of PC1 and PC2 but should be adjusted according to visual inspection.
@@ -167,7 +167,7 @@ process GeneExpressionQC {
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
       --sd ${sd} \
-      --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_Illumina_HT12v3_20220111.txt \
+      --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_IlluminaHT12v3.txt \
       --output outputfolder_exp
       """
       else if (exp_platform == 'HT12v4')
@@ -178,7 +178,18 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
-      --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_Illumina_HT12v4_20170808.txt \
+      --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_IlluminaHT12v4.txt \
+      --output outputfolder_exp
+      """
+      else if (exp_platform == 'HuRef8')
+      """
+      Rscript --vanilla $baseDir/bin/ProcessExpression.R  \
+      --expression_matrix ${exp_mat} \
+      --genotype_to_expression_linking ${gte} \
+      --sex_info ${sexcheck} \
+      --geno_filter ${geno_filter} \
+      --platform ${exp_platform} \
+      --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_IlluminaHuRef8.txt \
       --output outputfolder_exp
       """
       else if (exp_platform == 'RNAseq')
@@ -189,7 +200,29 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
-      --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_RNAseq.txt \
+      --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_RnaSeq.txt \
+      --output outputfolder_exp
+      """
+      else if (exp_platform == 'AffyU219')
+      """
+      Rscript --vanilla $baseDir/bin/ProcessExpression.R  \
+      --expression_matrix ${exp_mat} \
+      --genotype_to_expression_linking ${gte} \
+      --sex_info ${sexcheck} \
+      --geno_filter ${geno_filter} \
+      --platform ${exp_platform} \
+      --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_AffyU219.txt \
+      --output outputfolder_exp
+      """
+      else if (exp_platform == 'AffyHumanExon')
+      """
+      Rscript --vanilla $baseDir/bin/ProcessExpression.R  \
+      --expression_matrix ${exp_mat} \
+      --genotype_to_expression_linking ${gte} \
+      --sex_info ${sexcheck} \
+      --geno_filter ${geno_filter} \
+      --platform ${exp_platform} \
+      --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt \
       --output outputfolder_exp
       """
 }

@@ -18,12 +18,17 @@ module load squashfs/4.4
 # Define paths
 nextflow_path=[full path to your Nextflow executable]
 
-geno_path=[full path to your input genotype folder]
+geno_path=[full path to your genotype files without file extension]
 exp_path=[full path to your raw gene expression matrix]
 gte_path=[full path to your genotype-to-expression file]
 exp_platform=[expression platform name e.g. HT12v3 or RNAseq]
 cohort_name=[name of the cohort]
 output_path=[name of the output path]
+
+# Optional arguments for the command
+# --GenOutThresh [numeric threshold]
+# --GenSdThresh [numeric threshold]
+# --ExpSdThresh [numeric threshold]
 
 # Command
 NXF_VER=20.10.0 ${nextflow_path}/nextflow run DataQC.nf \
