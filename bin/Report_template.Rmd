@@ -58,7 +58,7 @@ You can investigate the file `[your output folder]/outputfolder_gen/gen_data_QCd
 Warning! This step was skipped since no X chromosome was found in the genotype data.
 Use raw genotype that includes the X chromosome if possible.
 
-![**Fig 1. Distribution of F-values representing X chromosome heterozygosity.** Not available!]
+**Fig 1. Distribution of F-values representing X chromosome heterozygosity.** Not available!
 
 `r if(file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\end{comment}"}`
 
