@@ -45,16 +45,18 @@ knitr::kable(overview_table)
 
 ### Sex check
 
-```{r conditional_check_sex, eval=file.exists("outputfolder_gen/gen_plots/SexCheck.png")}
-print("Next plot summarises the genetically determined sex of the input samples. Samples which have unclear genetic sex (X chr heterozygosity >0.2 and <0.8) and hence might be contaminated, are removed. If reported sex is indicated in the input `.fam` file, this is also compared with genetic sex and problematic samples (potential mixups) are automatically excluded.
+`r if(!file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\begin{comment}"}`
+Next plot summarises the genetically determined sex of the input samples. Samples which have unclear genetic sex (X chr heterozygosity >0.2 and <0.8) and hence might be contaminated, are removed. If reported sex is indicated in the input `.fam` file, this is also compared with genetic sex and problematic samples (potential mixups) are automatically excluded.
 
 You can investigate the file `[your output folder]/outputfolder_gen/gen_data_QCd/SexCheck.txt` to see which samples failed the sex check.
 
-![**Fig 1. Distribution of F-values representing X chromosome heterozygosity.** Genetically determined sex thresholds are shown as vertical lines. Samples with the F-value between those two lines are potentially contaminated samples and are automatically excluded.](outputfolder_gen/gen_plots/SexCheck.png)")
-```
-```{r conditional_no_x, eval=!file.exists("outputfolder_gen/gen_plots/SexCheck.png")}
-print("Step skipped since no X chromosome was found in the genotype data")
-```
+![**Fig 1. Distribution of F-values representing X chromosome heterozygosity.** Genetically determined sex thresholds are shown as vertical lines. Samples with the F-value between those two lines are potentially contaminated samples and are automatically excluded.](outputfolder_gen/gen_plots/SexCheck.png)
+
+`r if(!file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\end{comment}"}`
+
+`r if(file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\begin{comment}"}`
+"Step skipped since no X chromosome was found in the genotype data"
+`r if(!file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\end{comment}"}`
 
 ### Excess heterozygosity
 
