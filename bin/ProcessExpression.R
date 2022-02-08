@@ -490,7 +490,7 @@ base_plot <- ggplot(y_genes, aes(x = xist, y = y_genes))
 if (all(geno_fam_f$Sex == 0)) {
   base_plot <- base_plot + geom_point(alpha = 0.3, aes(col = mismatch, shape = Sex))
 } else {
-  base_plot <- base_plot + geom_point(aes(col = mismatch, shape = Sex)) +
+  base_plot <- base_plot + geom_point(alpha = 0.3, aes(col = mismatch, shape = Sex)) +
     scale_colour_manual(values = c("no" = "black", "unknown" = "orange", "yes" = "red"))
 }
 
