@@ -92,7 +92,7 @@ snp_plinkQC(
   mind = 0.05,
   hwe = 1e-6,
   autosome.only = FALSE,
-  extra.options = "--output-chr 26 --not-chr 0 25-26 --set-all-var-ids '@:#[b37]\$r,\$a'",
+  extra.options = paste0("--output-chr 26 --not-chr 0 25-26 --set-all-var-ids ", r"(@:#[b37]\$r,\$a)"),
   verbose = TRUE
 )
 
@@ -235,7 +235,7 @@ summary_table <- rbind(summary_table, temp_QC)
 message("Do heterozygosity check.")
 
 # Prune variants
-system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --indep-pairwise 50 1 0.2"))
+system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC  --rm-dup 'exclude-mismatch' --indep-pairwise 50 1 0.2"))
 
 system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --extract plink2.prune.in --het"))
 het <- fread("plink2.het")
