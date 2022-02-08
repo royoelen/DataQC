@@ -486,6 +486,7 @@ y_genes$expressionSex <- case_when(
 )
 
 y_genes$mismatch <- case_when(
+  y_genes$Sex == 0 ~ "unknown",
   y_genes$expressionSex == y_genes$Sex ~ "no",
   y_genes$expressionSex != y_genes$Sex ~ "yes"
 )
@@ -515,12 +516,12 @@ exclusion_zone <- tibble(x = c(x_expression_median, max_exp)) %>%
   mutate(lower_bound = (x - x_expression_median) * lower_slope,
          upper_bound = (x - x_expression_median) * upper_slope)
 
-base_plot <- ggplot() +
-  geom_ribbon(exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound), fill = "blue", alpha = 0.3) +
+base_plot <- ggplot(data=exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
+  geom_ribbon(fill = "blue", alpha = 0.3) +
   geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
   geom_point(data = y_genes, inherit.aes = F, alpha = 0.3, aes(col = mismatch, shape = Sex, x = xist, y = y_genes)) +
   scale_colour_manual(values = c("no" = "black", "unknown" = "orange", "yes" = "red")) +
-  theme_bw() + ylab("mean of Y genes") + xlab("XIST") +
+  theme_bw() + ylab("mean of Y genes") + xlab("XIST")
 
 ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.png"), height = 5, width = 6, units = "in", dpi = 300, type = "cairo")
 ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.pdf"), height = 5, width = 6, units = "in", dpi = 300)
