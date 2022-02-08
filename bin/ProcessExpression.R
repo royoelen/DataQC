@@ -498,8 +498,8 @@ lower_slope <- tan((45 - args$contamination_area / 2) / 180*pi)
 upper_slope <- tan((45 + args$contamination_area / 2) / 180*pi)
 
 y_genes$contaminated <- case_when(
-  (y_genes$y_genes > ((y_genes$xist - x_expression_median) * lower_slope)
-    & y_genes$y_genes < ((y_genes$xist - x_expression_median) * upper_slope)) ~ "yes",
+  (y_genes$y_genes > ((y_genes$xist - x_expression_median) * lower_slope + y_expression_median)
+    & y_genes$y_genes < ((y_genes$xist - x_expression_median) * upper_slope + y_expression_median)) ~ "yes",
   TRUE ~ "no"
 )
 
@@ -513,11 +513,11 @@ y_genes$contaminated <- case_when(
 # }
 
 exclusion_zone <- tibble(x = c(x_expression_median, max_exp)) %>%
-  mutate(lower_bound = (x - x_expression_median) * lower_slope,
-         upper_bound = (x - x_expression_median) * upper_slope)
+  mutate(lower_bound = (x - x_expression_median) * lower_slope + y_expression_median,
+         upper_bound = (x - x_expression_median) * upper_slope + y_expression_median)
 
 base_plot <- ggplot(data=exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
-  geom_ribbon(fill = "blue", alpha = 0.3) +
+  geom_ribbon(fill = "blue", alpha = 0.2) +
   geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
   geom_point(data = y_genes, inherit.aes = F, alpha = 0.3, aes(col = mismatch, shape = Sex, x = xist, y = y_genes)) +
   scale_colour_manual(values = c("no" = "black", "unknown" = "orange", "yes" = "red")) +
