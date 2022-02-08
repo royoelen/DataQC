@@ -55,8 +55,10 @@ You can investigate the file `[your output folder]/outputfolder_gen/gen_data_QCd
 `r if(!file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\end{comment}"}`
 
 `r if(file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\begin{comment}"}`
-Step skipped since no X chromosome was found in the genotype data
-`r if(!file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\end{comment}"}`
+Warning! This step was skipped since no X chromosome was found in the genotype data.
+Use raw genotype that includes the X chromosome if possible.
+
+`r if(file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\end{comment}"}`
 
 ### Excess heterozygosity
 
