@@ -146,7 +146,8 @@ if (23 %in% sex_check_data_set_chromosomes) {
   }
 
   ## Pruning
-  system(paste0("plink/plink2 --bfile ", bed_simplepath, "_split", " --indep-pairwise 20000 200 0.2 --out check_sex_x"))
+  system(paste0("plink/plink2 --bfile ", bed_simplepath, "_split",
+                " --rm-dup 'exclude-mismatch' --indep-pairwise 20000 200 0.2 --out check_sex_x"))
   ## Sex check
   system(paste0("plink/plink --bfile ", bed_simplepath, "_split --extract check_sex_x.prune.in --check-sex"))
 
@@ -236,7 +237,7 @@ summary_table <- rbind(summary_table, temp_QC)
 message("Do heterozygosity check.")
 
 # Prune variants
-system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC  --rm-dup 'exclude-mismatch' --indep-pairwise 50 1 0.2"))
+system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --rm-dup 'exclude-mismatch' --indep-pairwise 50 1 0.2"))
 
 system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --extract plink2.prune.in --het"))
 het <- fread("plink2.het")
