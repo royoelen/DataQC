@@ -24,7 +24,10 @@ def helpMessage() {
       --Sthresh                     "Outlierness" score threshold for excluding ethnic outliers. Defaults to 0.4 but should be adjusted according to visual inspection.
       --SDthresh                    Threshold for declaring samples outliers based on genetic PC1 and PC2. Defaults to 3 SD from the mean of PC1 and PC2 but should be adjusted according to visual inspection.
       --ExpSdThreshold              Standard deviation threshold for excluding gene expression outliers. By default, samples away by 3 SDs from the mean of PC1 are removed.
+      --ContaminationArea           Area that marks likely contaminated samples based on sex-chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function.
 
+    Optional arguments
+      --pruned_variants_sex_check   Path to a plink ranges file that defines which variants to use for the check-sex command. Use this when the automatic selection does not yield satisfactory results.
     """.stripIndent()
 }
 
@@ -70,6 +73,7 @@ params.pruned_variants_sex_check = ''
 params.Sthresh = 0.4
 params.SDthresh = 3
 params.ExpSdThreshold = 4
+params.ContaminationArea = 30
 params.exp_platform = ''
 params.cohort_name = ''
 params.outdir = ''
@@ -86,6 +90,7 @@ summary['PLINK bfile']              = params.bfile
 summary['S threshold']              = params.Sthresh
 summary['Gen SD threshold']         = params.SDthresh
 summary['Exp SD threshold']         = params.ExpSdThreshold
+summary['Contamination area']       = params.ContaminationArea
 summary['Expression matrix']        = params.expfile
 summary['GTE file']                 = params.gte
 summary['Max Memory']               = params.max_memory
@@ -153,6 +158,7 @@ process GeneExpressionQC {
       file geno_filter from sample_qc
       val exp_platform from params.exp_platform
       val sd from params.ExpSdThreshold
+      val contamination_area from params.ContaminationArea
 
     output:
       path ('outputfolder_exp') into output_ch_geneexpression
@@ -167,6 +173,7 @@ process GeneExpressionQC {
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
       --sd ${sd} \
+      --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_IlluminaHT12v3.txt \
       --output outputfolder_exp
       """
@@ -178,6 +185,7 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
+      --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_IlluminaHT12v4.txt \
       --output outputfolder_exp
       """
@@ -189,6 +197,7 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
+      --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_IlluminaHuRef8.txt \
       --output outputfolder_exp
       """
@@ -200,6 +209,7 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
+      --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_RNAseq.txt \
       --output outputfolder_exp
       """
@@ -211,6 +221,7 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
+      --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_AffyU219.txt \
       --output outputfolder_exp
       """
@@ -222,6 +233,7 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
+      --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt \
       --output outputfolder_exp
       """

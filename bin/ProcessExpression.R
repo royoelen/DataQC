@@ -20,6 +20,8 @@ option_list <- list(
     help = "Empirical probe matching file. Used to link the best array probe to each blood-expressed gene."),
     make_option(c("-s", "--sd"), type = "double", default = 4,
     help = "Standard deviation threshold for removing expression samples. By default, samples away 4 SDs from the median of PC1 are removed."),
+    make_option(c("-c", "--contamination_area"), type = "double", default = 0.3,
+                help = "Area that marks likely contaminated samples based on sex-chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function."),
     make_option(c("-i", "--sex_info"), type = "character",
     help = "File with sex information. Plink2 --check-sex filtered output."),
     make_option(c("-f", "--geno_filter"), type = "character",
@@ -477,25 +479,47 @@ geno_fam_f$Sex <- as.character(geno_fam_f$Sex)
 y_genes <- merge(y_genes, geno_fam_f, by = "sample")
 max_exp <- max(y_genes$y_genes, y_genes$xist)
 
-y_genes$mismatch <- "no"
+y_genes$expressionSex <- case_when(
+  y_genes$y_genes > y_genes$xist ~ 1,
+  y_genes$y_genes < y_genes$xist ~ 2
+)
 
-y_genes$mismatch[y_genes$Sex == 0] <- "unknown"
+y_genes$mismatch <- case_when(
+  y_genes$expressionSex == y_genes$Sex ~ "no",
+  y_genes$expressionSex != y_genes$Sex ~ "yes"
+)
 
-if (nrow(y_genes[(y_genes$y_genes > y_genes$xist & y_genes$Sex == 2) | (y_genes$y_genes < y_genes$xist & y_genes$Sex == 1), ]) > 0){
-y_genes[(y_genes$y_genes > y_genes$xist & y_genes$Sex == 2) | (y_genes$y_genes < y_genes$xist & y_genes$Sex == 1), ]$mismatch <- "yes"
-}
+y_expression_median <- median(y_genes[y_genes$Sex == 1 & y_genes$expressionSex == 1, "y_genes"])
+x_expression_median <- median(y_genes[y_genes$Sex == 2 & y_genes$expressionSex == 2, "xist"])
 
-base_plot <- ggplot(y_genes, aes(x = xist, y = y_genes))
+lower_slope <- tan((45 - args$contamination_area / 2) / 180*pi)
+upper_slope <- tan((45 + args$contamination_area / 2) / 180*pi)
 
-if (all(geno_fam_f$Sex == 0)) {
-  base_plot <- base_plot + geom_point(alpha = 0.3, aes(col = mismatch, shape = Sex))
-} else {
-  base_plot <- base_plot + geom_point(alpha = 0.3, aes(col = mismatch, shape = Sex)) +
-    scale_colour_manual(values = c("no" = "black", "unknown" = "orange", "yes" = "red"))
-}
+y_genes$contaminated <- case_when(
+  (y_genes$y_genes > ((y_genes$xist - x_expression_median) * lower_slope)
+    & y_genes$y_genes < ((y_genes$xist - x_expression_median) * upper_slope)) ~ "yes",
+  TRUE ~ "no"
+)
 
-p <- base_plot + theme_bw() + ylab("mean of Y genes") + xlab("XIST") +
-  geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue")
+#
+# y_genes$mismatch <- "no"
+#
+# y_genes$mismatch[y_genes$Sex == 0] <- "unknown"
+#
+# if (nrow(y_genes[(y_genes$y_genes > y_genes$xist & y_genes$Sex == 2) | (y_genes$y_genes < y_genes$xist & y_genes$Sex == 1), ]) > 0){
+# y_genes[(y_genes$y_genes > y_genes$xist & y_genes$Sex == 2) | (y_genes$y_genes < y_genes$xist & y_genes$Sex == 1), ]$mismatch <- "yes"
+# }
+
+exclusion_zone <- tibble(x = c(x_expression_median, max_exp)) %>%
+  mutate(lower_bound = (x - x_expression_median) * lower_slope,
+         upper_bound = (x - x_expression_median) * upper_slope)
+
+base_plot <- ggplot() +
+  geom_ribbon(exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound), fill = "blue", alpha = 0.3) +
+  geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
+  geom_point(data = y_genes, inherit.aes = F, alpha = 0.3, aes(col = mismatch, shape = Sex, x = xist, y = y_genes)) +
+  scale_colour_manual(values = c("no" = "black", "unknown" = "orange", "yes" = "red")) +
+  theme_bw() + ylab("mean of Y genes") + xlab("XIST") +
 
 ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.png"), height = 5, width = 6, units = "in", dpi = 300, type = "cairo")
 ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.pdf"), height = 5, width = 6, units = "in", dpi = 300)

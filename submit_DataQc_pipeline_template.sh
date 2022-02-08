@@ -29,6 +29,8 @@ output_path=[name of the output path]
 # --GenOutThresh [numeric threshold]
 # --GenSdThresh [numeric threshold]
 # --ExpSdThresh [numeric threshold]
+# --ContaminationArea [angle 0-90]
+# --pruned_variants_sex_check [data/Affy6_pruned_chrX_variant_positions.txt]
 
 # Command
 NXF_VER=20.10.0 ${nextflow_path}/nextflow run DataQC.nf \

@@ -411,6 +411,8 @@ related <- snp_plinkKINGQC(
 
 ### Do PCA on target data
 message("Find genetic outliers.")
+
+print(related)
 ### First remove one related sample from each pair and those failing heterozygosity check
 # TODO, check if this is correct that only one out of two is removed
 ind.rel <- match(unique(c(related$IID2, het_fail_samples$IID)), target_bed$fam$sample.ID)
