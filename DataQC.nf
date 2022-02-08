@@ -200,7 +200,7 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
-      --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_RnaSeq.txt \
+      --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_RNAseq.txt \
       --output outputfolder_exp
       """
       else if (exp_platform == 'AffyU219')
