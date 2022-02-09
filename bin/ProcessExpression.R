@@ -491,8 +491,8 @@ y_genes$mismatch <- case_when(
   y_genes$expressionSex != y_genes$Sex ~ "yes"
 )
 
-x_expression_median <- median(y_genes[y_genes$Sex == 1 & y_genes$expressionSex == 1, "y_genes"])
-y_expression_median <- median(y_genes[y_genes$Sex == 2 & y_genes$expressionSex == 2, "xist"])
+x_expression_median <- median(y_genes[y_genes$Sex == 1 & y_genes$expressionSex == 1, "xist"])
+y_expression_median <- median(y_genes[y_genes$Sex == 2 & y_genes$expressionSex == 2, "y_genes"])
 
 lower_slope <- tan((45 - args$contamination_area / 2) / 180*pi)
 upper_slope <- tan((45 + args$contamination_area / 2) / 180*pi)
