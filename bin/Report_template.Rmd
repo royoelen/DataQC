@@ -154,7 +154,7 @@ On the next two plots we visualise genetic principal components to check if gene
 
 If the pipline removes unreasonably large fraction of the samples, there are multiple courses of action to consider:
 
-1. If you observe clusters with limited numbers of clusters (e.g. N<500) and a clear separation based on PC1 or PC2, you can consider using the data as it is: first 2 genetic PCs will be used as covariates in the meta-analysis and such batch effects will be mostly accounted for. In that case, you should re-run the `DataQC` pipeline with large SD value, e.g. `--SDthresh 10`, to keep all the data in.
+1. If you observe clusters with limited numbers of samples (e.g. N<500) and a clear separation based on PC1 or PC2, you can consider using the data as it is: first genetic PCs will be used as covariates in the meta-analysis and such batch effects will be mostly accounted for. In that case, you should re-run the `DataQC` pipeline with large SD value, e.g. `--SDthresh 10`, to keep all the data in.
 
 2. If you have multiple batches with many samples (N>500), you might consider splitting the data based on genotyping batch and re-running `DataQC` and all following pipelines on those batches.
 

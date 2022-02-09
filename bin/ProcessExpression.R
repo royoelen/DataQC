@@ -392,7 +392,7 @@ exp_non_outliers <- gte[gte$V1 %in% exp_non_outliers, ]$V2
 # Remove outlier samples from MDS
 and <- and[, colnames(and) %in% c("Feature", exp_non_outliers), with = FALSE]
 
-summary_table_temp <- data.table(Stage = "After removal of all expression outliers (PCA)", Nr_of_features = nrow(and), Nr_of_samples = ncol(and))
+summary_table_temp <- data.table(Stage = "After removal of all expression outliers (PCA)", Nr_of_features = nrow(and), Nr_of_samples = ncol(and) - 1)
 summary_table <- rbind(summary_table, summary_table_temp)
 
 message("Running MDS")
@@ -449,7 +449,7 @@ ggsave(paste0(args$output, "/exp_plots/MDS_before.pdf"), height = 5, width = 5.5
 exp_non_outliers <- gte[gte$V1 %in% mds[mds$outlier == "no", ]$Sample, ]$V2
 and <- and[, colnames(and) %in% c("Feature", exp_non_outliers), with = FALSE]
 
-summary_table_temp <- data.table(Stage = "After removal of all expression outliers (MDS)", Nr_of_features = nrow(and), Nr_of_samples = ncol(and))
+summary_table_temp <- data.table(Stage = "After removal of all expression outliers (MDS)", Nr_of_features = nrow(and), Nr_of_samples = ncol(and) - 1)
 summary_table <- rbind(summary_table, summary_table_temp)
 
 # Final re-process, re-calculate PCs, re-visualise and write out
