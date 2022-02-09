@@ -504,9 +504,9 @@ y_genes$contaminated <- case_when(
 )
 
 y_genes$status <- case_when(
-  y_genes$contaminated == "yes" & y_genes$mismatch == "yes" ~ "Contaminated and mismatched",
+  y_genes$contaminated == "yes" & y_genes$mismatch == "yes" ~ "Contaminated and\nsex mismatch",
   y_genes$contaminated == "yes" ~ "Likely contaminated",
-  y_genes$mismatch == "yes" ~ "Mismatched",
+  y_genes$mismatch == "yes" ~ "Sex mismatch",
   TRUE ~ "Passed"
 )
 
@@ -524,12 +524,12 @@ exclusion_zone <- tibble(x = c(x_expression_median, max_exp)) %>%
          upper_bound = (x - x_expression_median) * upper_slope + y_expression_median)
 
 base_plot <- ggplot(data=exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
-  geom_ribbon(fill = "lightgrey", alpha = 0.1) +
+  geom_ribbon(alpha = 0.2) +
   geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
   geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
   scale_colour_manual(
     values = alpha(c("Passed" = "black", "Likely contaminated" = "blue",
-                     "Mismatched" = "red", "Contaminated and mismatched" = "goldenrod"), 0.3),
+                     "Sex mismatch" = "red", "Contaminated and\nsex mismatch" = "goldenrod"), 0.3),
     name = "Passed checks") +
   coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
   theme_bw() + ylab("mean of Y genes") + xlab("XIST")
