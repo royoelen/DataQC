@@ -521,6 +521,7 @@ base_plot <- ggplot(data=exclusion_zone, aes(x = x, ymin = lower_bound, ymax = u
   geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
   geom_point(data = y_genes, inherit.aes = F, alpha = 0.3, aes(col = mismatch, shape = Sex, x = xist, y = y_genes)) +
   scale_colour_manual(values = c("no" = "black", "unknown" = "orange", "yes" = "red")) +
+  coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
   theme_bw() + ylab("mean of Y genes") + xlab("XIST")
 
 ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.png"), height = 5, width = 6, units = "in", dpi = 300, type = "cairo")
