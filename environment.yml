@@ -18,6 +18,4 @@ dependencies:
   #- bioconda::bioconductor-preprocesscore=1.52.1
   - bioconda::bioconductor-edger=3.32.1
   - conda-forge::r-hexbin=1.28.1
-  
-
-
+  - conda-forge::r-igraph=1.2.11
