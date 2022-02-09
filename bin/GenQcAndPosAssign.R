@@ -9,6 +9,7 @@ library(patchwork)
 library(stringr)
 library(rmarkdown)
 library(Cairo)
+library(igraph)
 
 # Argument parser
 option_list <- list(
@@ -111,7 +112,7 @@ if (any(duplicated(target_bed$fam$sample.ID))) {
 sex_check_data_set_chromosomes <- unique(target_bed$map$chromosome)
 
 sex_check_out_path <- paste0(args$output, "/gen_data_QCd/SexCheck.txt")
-sex_check_removed_out_path <- paste0(args$output, "/gen_data_QCd/SexCheckRemoved.txt")
+sex_check_removed_out_path <- paste0(args$output, "/gen_data_QCd/SexCheckFailed.txt")
 sex_check_samples <- target_bed$fam
 
 if (23 %in% sex_check_data_set_chromosomes) {
@@ -236,6 +237,9 @@ summary_table <- rbind(summary_table, temp_QC)
 # Do heterozygosity check
 message("Do heterozygosity check.")
 
+# Get path where to write heterozygosity failed samples to
+het_failed_samples_out_path <- paste0(args$output, "/gen_data_QCd/HeterozygosityFailed.txt")
+
 # Prune variants
 system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --rm-dup 'exclude-mismatch' --indep-pairwise 50 1 0.2"))
 
@@ -249,9 +253,9 @@ het_fail_samples <- het[het$het_rate < mean(het$het_rate) - 3 * sd(het$het_rate)
 indices_of_het_failed_samples <- match(het_fail_samples, target_bed$fam$sample.ID)
 indices_of_het_passed_samples <- rows_along(target_bed)[-indices_of_het_failed_samples]
 
+fwrite(het, het_failed_samples_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
+
 temp_QC <- data.frame(stage = "Excess heterozygosity (mean+/-3SD)", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = length(indices_of_het_passed_samples))
-summary_table <- rbind(summary_table, temp_QC)
-temp_QC <- data.frame(stage = "Excess heterozygosity (mean+/-3SD)", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(het) - nrow(het_fail_samples))
 summary_table <- rbind(summary_table, temp_QC)
 
 p <- ggplot(het, aes(x = het_rate)) + geom_histogram(color = "#000000", fill = "#000000", alpha = 0.5) + 
@@ -271,6 +275,7 @@ proj_PCA <- bed_projectPCA(
   obj.bed.ref = ref_bed,
   ind.row.ref = unrelated_ref_samples,
   obj.bed.new = target_bed,
+  ind.row.new = indices_of_het_passed_samples,
   k = 10,
   strand_flip = TRUE,
   join_by_pos = TRUE,
@@ -290,7 +295,7 @@ PCs_ref <- predict(proj_PCA$obj.svd.ref)
 abi2 <- as.data.frame(PCs_ref)
 colnames(abi2) <- paste0("PC", 1:10)
 
-abi2$sample <- ref_bed$.fam$sample.ID[unrelated_ref_samples]
+abi2$sample <- ref_bed$fam$sample.ID[unrelated_ref_samples]
 abi2 <- abi2[, c(11, 1:10)]
 
 pops <- fread(args$pops)
@@ -298,7 +303,8 @@ pops <- pops[, c(2, 6, 7)]
 abi2 <- merge(abi2, pops, by.x = "sample", by.y = "SampleID")
 abi2 <- abi2[, c(1, 12, 13, 2:11)]
 
-abi <- data.frame(sample = target_bed$fam$sample.ID, Population = "Target", Superpopulation = "Target", abi)
+abi <- data.frame(sample = target_bed$fam$sample.ID[indices_of_het_passed_samples],
+                  Population = "Target", Superpopulation = "Target", abi)
 
 abi$type <- "Target"
 abi2$type <- "1000G"
@@ -412,27 +418,57 @@ related <- snp_plinkKINGQC(
   bedfile.in = paste0(bed_simplepath, "_QC.bed"),
   thr.king = 2^-4.5,
   make.bed = FALSE,
-  ncores = 4
+  ncores = 4,
+  extra.options = paste0("--remove ", het_failed_samples_out_path)
 )
 
 ### Do PCA on target data
 message("Find genetic outliers.")
 
 print(related)
-### First remove one related sample from each pair and those failing heterozygosity check
-# TODO, check if this is correct that only one out of two is removed
-ind.rel <- match(unique(c(related$IID2, het_fail_samples$IID)), target_bed$fam$sample.ID)
 
-print(unique(c(related$IID2, het_fail_samples$IID)))
+# Remove samples that are related to each other
 
-ind.norel <- rows_along(target_bed)[-ind.rel]
+# First, get the total list of all samples with some relatedness above a predefined threshold (see above in plink call)
+related_individuals <- unique(c(related$IID1, related$IID2))
 
-temp_QC <- data.frame(stage = "Relatedness: thr. KING>2^-4.5", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = length(ind.norel))
+# If there are related samples, find the samples that should be removed so that the maximum set of samples remains,
+# but that also garantees that no relatedness remains.
+if (length(related_individuals) > 0) {
+
+  # Define a graph wherein each relation depicts an edge between vertices (samples)
+  relatedness_graph <- graph_from_edgelist(
+    as.matrix(related$IID1, related$IID2),
+    directed = F)
+
+  # Now, get the largest possible set of unrelated samples. (Get the first if there are multiple best solutions)
+  first_largest_independent_vector_set <- largest_ivs(mygraph)[[1]]
+
+  # Find those samples that are removed in the
+  samples_to_remove_due_to_relatedness <- related_individuals[
+    (!related_individuals %in% names(first_largest_independent_vector_set))]
+
+  # Get the indices of those samples that should be removed.
+  indices_of_relatedness_failed <- match(
+    samples_to_remove_due_to_relatedness,
+    target_bed$fam$sample.ID)
+
+  # Remove these indices from the indices that remained after the previous check.
+  indices_of_passed_samples <- indices_of_het_passed_samples[
+    (!indices_of_het_passed_samples %in% indices_of_relatedness_failed)]
+
+} else {
+
+  # No relatedness observed, proceeding with all samples that passed the previous check.
+  indices_of_passed_samples <- indices_of_het_passed_samples
+}
+
+temp_QC <- data.frame(stage = "Relatedness: thr. KING>2^-4.5", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = length(indices_of_passed_samples))
 summary_table <- rbind(summary_table, temp_QC)
 
 message("Find genetic outliers: do PCA on QCd target data.")
 ### PCA
-target_pca <- bed_autoSVD(target_bed, ind.row = ind.norel, k = 10, ncores = 4)
+target_pca <- bed_autoSVD(target_bed, ind.row = indices_of_passed_samples, k = 10, ncores = 4)
 
 ### Find outlier samples
 prob <- bigutilsr::prob_dist(target_pca$u, ncores = 4)

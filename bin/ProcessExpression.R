@@ -528,8 +528,8 @@ base_plot <- ggplot(data=exclusion_zone, aes(x = x, ymin = lower_bound, ymax = u
   geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
   geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
   scale_colour_manual(
-    values = alpha(c("Passed" = "black", "Likely contaminated" = "blue",
-                     "Sex mismatch" = "red", "Contaminated and\nsex mismatch" = "goldenrod"), 0.3),
+    values = alpha(c("Passed" = "black", "Likely contaminated" = "red",
+                     "Sex mismatch" = "#d79393", "Contaminated and\nsex mismatch" = "firebrick"), 0.5),
     name = "Passed checks") +
   coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
   theme_bw() + ylab("mean of Y genes") + xlab("XIST")
