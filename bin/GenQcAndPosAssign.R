@@ -245,6 +245,12 @@ het$het_rate <- (het$OBS_CT - het$`O(HOM)`) / het$OBS_CT
 
 het_fail_samples <- het[het$het_rate < mean(het$het_rate) - 3 * sd(het$het_rate) | het$het_rate > mean(het$het_rate) + 3 * sd(het$het_rate), ]
 
+# Get the indices of those samples that passed heterozygozity check
+indices_of_het_failed_samples <- match(het_fail_samples, target_bed$fam$sample.ID)
+indices_of_het_passed_samples <- rows_along(target_bed)[-indices_of_het_failed_samples]
+
+temp_QC <- data.frame(stage = "Excess heterozygosity (mean+/-3SD)", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = length(indices_of_het_passed_samples))
+summary_table <- rbind(summary_table, temp_QC)
 temp_QC <- data.frame(stage = "Excess heterozygosity (mean+/-3SD)", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(het) - nrow(het_fail_samples))
 summary_table <- rbind(summary_table, temp_QC)
 
