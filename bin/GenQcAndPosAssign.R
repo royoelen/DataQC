@@ -244,16 +244,16 @@ het_failed_samples_out_path <- paste0(args$output, "/gen_data_QCd/Heterozygosity
 system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --rm-dup 'exclude-mismatch' --indep-pairwise 50 1 0.2"))
 
 system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --extract plink2.prune.in --het"))
-het <- fread("plink2.het")
+het <- fread("plink2.het", header = T)
 het$het_rate <- (het$OBS_CT - het$`O(HOM)`) / het$OBS_CT
 
 het_fail_samples <- het[het$het_rate < mean(het$het_rate) - 3 * sd(het$het_rate) | het$het_rate > mean(het$het_rate) + 3 * sd(het$het_rate), ]
 
 # Get the indices of those samples that passed heterozygozity check
-indices_of_het_failed_samples <- match(het_fail_samples, target_bed$fam$sample.ID)
+indices_of_het_failed_samples <- match(het_fail_samples$IID, target_bed$fam$sample.ID)
 indices_of_het_passed_samples <- rows_along(target_bed)[-indices_of_het_failed_samples]
 
-fwrite(het, het_failed_samples_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
+fwrite(het_fail_samples, het_failed_samples_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
 
 temp_QC <- data.frame(stage = "Excess heterozygosity (mean+/-3SD)", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = length(indices_of_het_passed_samples))
 summary_table <- rbind(summary_table, temp_QC)
