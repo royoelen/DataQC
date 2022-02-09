@@ -438,7 +438,7 @@ if (length(related_individuals) > 0) {
 
   # Define a graph wherein each relation depicts an edge between vertices (samples)
   relatedness_graph <- graph_from_edgelist(
-    as.matrix(related$IID1, related$IID2),
+    as.matrix(related[,c("IID1", "IID2")]),
     directed = F)
 
   pdf(paste0(args$output, "/gen_plots/relatedness.pdf"))
