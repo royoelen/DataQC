@@ -503,6 +503,13 @@ y_genes$contaminated <- case_when(
   TRUE ~ "no"
 )
 
+y_genes$status <- case_when(
+  y_genes$contaminated == "yes" & y_genes$mismatch == "yes" ~ "Contaminated and mismatched",
+  y_genes$contaminated == "yes" ~ "Likely contaminated",
+  y_genes$mismatch == "yes" ~ "Mismatched",
+  TRUE ~ "Passed"
+)
+
 #
 # y_genes$mismatch <- "no"
 #
@@ -517,10 +524,13 @@ exclusion_zone <- tibble(x = c(x_expression_median, max_exp)) %>%
          upper_bound = (x - x_expression_median) * upper_slope + y_expression_median)
 
 base_plot <- ggplot(data=exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
-  geom_ribbon(fill = "blue", alpha = 0.2) +
+  geom_ribbon(fill = "lightgrey", alpha = 0.1) +
   geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
-  geom_point(data = y_genes, inherit.aes = F, alpha = 0.3, aes(col = mismatch, shape = Sex, x = xist, y = y_genes)) +
-  scale_colour_manual(values = c("no" = "black", "unknown" = "orange", "yes" = "red")) +
+  geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
+  scale_colour_manual(
+    values = alpha(c("Passed" = "black", "Likely contaminated" = "blue",
+                     "Mismatched" = "red", "Contaminated and mismatched" = "goldenrod"), 0.3),
+    name = "Passed checks") +
   coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
   theme_bw() + ylab("mean of Y genes") + xlab("XIST")
 
@@ -528,9 +538,14 @@ ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.png"), height = 5, width
 ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.pdf"), height = 5, width = 6, units = "in", dpi = 300)
 
 # Filter out potential sex mismatches
-and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$mismatch == "no", ]$sample]
+and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$mismatch != "yes", ]$sample]
 
 summary_table_temp <- data.table(Stage = "Samples after removal of sex errors", Nr_of_features = nrow(and_pp), Nr_of_samples = ncol(and_pp))
+summary_table <- rbind(summary_table, summary_table_temp)
+
+and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$contaminated != "yes", ]$sample]
+
+summary_table_temp <- data.table(Stage = "Samples after removal of likely contaminated samples", Nr_of_features = nrow(and_pp), Nr_of_samples = ncol(and_pp))
 summary_table <- rbind(summary_table, summary_table_temp)
 
 # Apply inverse normal transformation to normalised data.
