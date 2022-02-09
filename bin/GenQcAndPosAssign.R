@@ -441,6 +441,10 @@ if (length(related_individuals) > 0) {
     as.matrix(related$IID1, related$IID2),
     directed = F)
 
+  pdf(paste0(args$output, "/gen_plots/relatedness.pdf"))
+  plot(relatedness_graph)
+  dev.off()
+
   # Now, get the largest possible set of unrelated samples. (Get the first if there are multiple best solutions)
   first_largest_independent_vector_set <- largest_ivs(mygraph)[[1]]
 
