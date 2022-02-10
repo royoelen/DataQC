@@ -422,9 +422,6 @@ related <- snp_plinkKINGQC(
   extra.options = paste0("--remove ", het_failed_samples_out_path)
 )
 
-### Do PCA on target data
-message("Find genetic outliers.")
-
 print(related)
 
 # Remove samples that are related to each other
@@ -446,7 +443,7 @@ if (length(related_individuals) > 0) {
   dev.off()
 
   # Now, get the largest possible set of unrelated samples. (Get the first if there are multiple best solutions)
-  first_largest_independent_vector_set <- largest_ivs(mygraph)[[1]]
+  first_largest_independent_vector_set <- largest_ivs(relatedness_graph)[[1]]
 
   # Find those samples that are removed in the
   samples_to_remove_due_to_relatedness <- related_individuals[
@@ -470,6 +467,8 @@ if (length(related_individuals) > 0) {
 temp_QC <- data.frame(stage = "Relatedness: thr. KING>2^-4.5", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = length(indices_of_passed_samples))
 summary_table <- rbind(summary_table, temp_QC)
 
+### Do PCA on target data
+message("Find genetic outliers.")
 message("Find genetic outliers: do PCA on QCd target data.")
 ### PCA
 target_pca <- bed_autoSVD(target_bed, ind.row = indices_of_passed_samples, k = 10, ncores = 4)
