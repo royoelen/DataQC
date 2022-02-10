@@ -9,6 +9,7 @@ library(patchwork)
 library(stringr)
 library(rmarkdown)
 library(Cairo)
+library(igraph)
 
 # Argument parser
 option_list <- list(
@@ -20,6 +21,8 @@ option_list <- list(
     help = "Path to the file listing unrelated samples for reference data (tab-delimited .txt)."),
     make_option(c("-p", "--pops"), type = "character",
     help = "Path to the file indicating the population for each sample in reference data."),
+    make_option(c("-a", "--pruned_variants_sex_check"), type = "character",
+    help = "Path to a file with pruned X-chromosome variants to use in the sex check"),
     make_option(c("-o", "--output"), type = "character", help = "Folder with all the output files."),
     make_option(c("-S", "--S_threshold"), default = 0.4,
     help = "Numeric threshold to declare samples outliers, based on the genotype PCs. Defaults to 0.4 but should always be visually checked and changed, if needed."),
@@ -38,6 +41,7 @@ print(args$target_bed)
 print(args$gen_exp)
 print(args$sample_list)
 print(args$pops)
+print(args$pruned_variants_sex_check)
 print(args$output)
 print(args$S_threshold)
 print(args$SD_threshold)
@@ -89,7 +93,7 @@ snp_plinkQC(
   mind = 0.05,
   hwe = 1e-6,
   autosome.only = FALSE,
-  extra.options = "--output-chr 26 --not-chr 0 25-26",
+  extra.options = paste0("--output-chr 26 --not-chr 0 25-26 --set-all-var-ids ", r"(@:#[b37]\$r,\$a)"),
   verbose = TRUE
 )
 
@@ -97,48 +101,112 @@ snp_plinkQC(
 ref_bed <- bed("data/1000G_phase3_common_norel.bed")
 # Read in QCd target genotype data
 target_bed <- bed(paste0(bed_simplepath, "_QC.bed"))
-temp_QC <- data.frame(stage = "SNP CR>0.95; HWE P>1e-6; MAF>0.01; MIND<0.05", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow)
+temp_QC <- data.frame(stage = "SNP CR>0.95; HWE P>1e-6; MAF>0.01; GENO<0.05; MIND<0.05", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow)
 summary_table <- rbind(summary_table, temp_QC)
 
-# Do sex check
-message("Do sex check.")
-# Split x if needed
-system(paste0("plink/plink --bfile ", bed_simplepath, "_QC", " --split-x hg19 no-fail --make-bed --out ", bed_simplepath, "_split"))
-system(paste0("mv ", bed_simplepath, "_split.bed ", bed_simplepath, "_QC.bed"))
-system(paste0("mv ", bed_simplepath, "_split.bim ", bed_simplepath, "_QC.bim"))
-system(paste0("mv ", bed_simplepath, "_split.fam ", bed_simplepath, "_QC.fam"))
+## Assert that all IIDs are unique
+if (any(duplicated(target_bed$fam$sample.ID))) {
+  stop("Individual sample IDs should be unique. Exiting...")
+}
 
-## Pruning
-system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC", " --indep-pairwise 50 1 0.2"))
-## Sex check
-system(paste0("plink/plink --bfile ", bed_simplepath, "_QC --extract plink2.prune.in --check-sex"))
+sex_check_data_set_chromosomes <- unique(target_bed$map$chromosome)
 
-## If there is sex info in the fam file for all samples then remove samples which fail the sex check or genotype-based F is >0.2 & < 0.8
-sexcheck <- fread("plink.sexcheck")
-## Remove samples which have unclear sex
-sexcheck_f <- sexcheck[!(F > 0.2 & F < 0.8), ]
-temp_QC <- data.frame(stage = "Sex check (0.2<F<0.8)", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(sexcheck_f))
-summary_table <- rbind(summary_table, temp_QC)
+sex_check_out_path <- paste0(args$output, "/gen_data_QCd/SexCheck.txt")
+sex_check_removed_out_path <- paste0(args$output, "/gen_data_QCd/SexCheckFailed.txt")
+sex_check_samples <- target_bed$fam
 
+if (23 %in% sex_check_data_set_chromosomes) {
 
-if (nrow(sexcheck_f[sexcheck_f$PEDSEX %in% c(1, 2), ]) == nrow(sexcheck_f)){
+  # Do sex check
+  message("Do sex check.")
 
-  sexcheck_f <- sexcheck_f[!sexcheck_f$STATUS == "PROBLEM", ]
-  temp_QC <- data.frame(stage = "Sex check (reported and genetic sex mismatch)", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(sexcheck_f))
+  # Split x if needed
+
+  pruned_variants_sex_check <- args$pruned_variants_sex_check
+
+  if (!is.null(pruned_variants_sex_check)
+    && pruned_variants_sex_check != ""
+    && file.exists(pruned_variants_sex_check)
+    && nrow(fread(pruned_variants_sex_check, header = F)) > 0) {
+
+    message("Using predefined pruned variants for sex-check:")
+    message(pruned_variants_sex_check)
+
+    system(paste0(
+      "plink/plink --bfile ", bed_simplepath, "_QC", " --extract range ", pruned_variants_sex_check,
+      " --maf 0.05 --make-bed --out ", bed_simplepath, "_split"))
+
+  } else {
+
+    message("Not using predefined pruned variants for sex-check")
+
+    system(paste0(
+      "plink/plink --bfile ", bed_simplepath, "_QC",
+      " --chr X --maf 0.05 --split-x hg19 no-fail --make-bed --out ", bed_simplepath, "_split"))
+
+  }
+
+  ## Pruning
+  system(paste0("plink/plink2 --bfile ", bed_simplepath, "_split",
+                " --rm-dup 'exclude-mismatch' --indep-pairwise 20000 200 0.2 --out check_sex_x"))
+  ## Sex check
+  system(paste0("plink/plink --bfile ", bed_simplepath, "_split --extract check_sex_x.prune.in --check-sex"))
+
+  #stop("check output")
+
+  ## If there is sex info in the fam file for all samples then remove samples which fail the sex check or genotype-based F is >0.2 & < 0.8
+  sexcheck <- fread("plink.sexcheck")
+  ## Annotate samples who have clear sex
+  sexcheck$F_PASS <- !(sexcheck$F > 0.2 & sexcheck$F < 0.8)
+  temp_QC <- data.frame(stage = "Sex check (0.2<F<0.8)",
+                        Nr_of_SNPs = target_bed$ncol,
+                        Nr_of_samples = sum(sexcheck$F_PASS))
   summary_table <- rbind(summary_table, temp_QC)
 
-} else {message("No sex info in the .fam file.")}
+  sexcheck$MATCH_PASS <- case_when(sexcheck$PEDSEX == 0 ~ T,
+                                   sexcheck$STATUS == "PROBLEM" ~ F,
+                                   TRUE ~ T)
 
-sex_fail_samples <- sexcheck[sexcheck$IID %in% sexcheck_f$IID, ]$IID
+  sexcheck$PASS <- sexcheck$MATCH_PASS & sexcheck$F_PASS
 
-p <- ggplot(sexcheck, aes(x = F)) + geom_histogram(color = "#000000", fill = "#000000", alpha = 0.5) +
-geom_vline(xintercept = c(0.2, 0.8), colour = "red", linetype = 2) +
-theme_bw()
+  if (any(sexcheck$PEDSEX %in% c(1, 2))) {
 
-ggsave(paste0(args$output, "/gen_plots/SexCheck.png"), type = "cairo", height = 7 / 2, width = 9, units = "in", dpi = 300)
-ggsave(paste0(args$output, "/gen_plots/SexCheck.pdf"), height = 7 / 2, width = 9, units = "in", dpi = 300)
+    temp_QC <- data.frame(stage = "Sex check (reported and genetic sex mismatch)",
+                          Nr_of_SNPs = target_bed$ncol,
+                          Nr_of_samples = sum(sexcheck$PASS))
+    summary_table <- rbind(summary_table, temp_QC)
 
-fwrite(sexcheck_f, paste0(args$output, "/gen_data_QCd/SexCheck.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
+  } else {
+    message("No sex info in the .fam file.")
+  }
+
+  print(sexcheck$PEDSEX)
+
+  sex_cols <- c("0" = "black", "1" = "orange", "2" = "blue")
+
+  p <- ggplot(sexcheck, aes(x = F, fill = factor(PEDSEX))) +
+    geom_histogram(position="stack", color = "black", alpha = 0.5) +
+    scale_fill_manual(values = sex_cols, breaks = c("0", "1", "2"), labels = c("Unknown", "Male", "Female"), name = "Reported sex") +
+    geom_vline(xintercept = c(0.2, 0.8), colour = "red", linetype = 2) + theme_bw()
+
+  ggsave(paste0(args$output, "/gen_plots/SexCheck.png"), p, type = "cairo", height = 7 / 2, width = 9, units = "in", dpi = 300)
+  ggsave(paste0(args$output, "/gen_plots/SexCheck.pdf"), p, height = 7 / 2, width = 9, units = "in", dpi = 300)
+
+  fwrite(sexcheck, sex_check_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
+  fwrite(sexcheck[!sexcheck$PASS,], sex_check_removed_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
+
+} else {
+  warning("No X chromosome present. Skipping sex-check...")
+
+  sexcheck <- sex_check_samples[,c(1,2,5)]
+  colnames(sexcheck) <- c("FID", "IID", "PEDSEX")
+  sexcheck$PEDSEX_COPY <- sexcheck$PEDSEX
+  sexcheck$STATUS <- NA_character_
+  sexcheck$F <- NA_real_
+
+  fwrite(sexcheck, sex_check_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
+  file.create(sex_check_removed_out_path)
+}
 
 # Remove sex chromosomes
 snp_plinkQC(
@@ -151,7 +219,7 @@ snp_plinkQC(
   mind = 0.05,
   hwe = 1e-6,
   autosome.only = TRUE,
-  extra.options = "--output-chr 26",
+  extra.options = paste0("--output-chr 26 --remove ", sex_check_removed_out_path),
   verbose = TRUE
 )
 
@@ -163,19 +231,36 @@ system(paste0("mv ", bed_simplepath, "_QC_QC.fam ", bed_simplepath, "_QC.fam"))
 
 # Read in again QCd target genotype data
 target_bed <- bed(paste0(bed_simplepath, "_QC.bed"))
-temp_QC <- data.frame(stage = "Removed X/Y", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(sexcheck_f))
+temp_QC <- data.frame(stage = "Removed X/Y", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(target_bed$fam))
 summary_table <- rbind(summary_table, temp_QC)
 
 # Do heterozygosity check
 message("Do heterozygosity check.")
 
+# Get path where to write heterozygosity failed samples to
+het_failed_samples_out_path <- paste0(args$output, "/gen_data_QCd/HeterozygosityFailed.txt")
+
+# Prune variants
+system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --rm-dup 'exclude-mismatch' --indep-pairwise 50 1 0.2"))
+
 system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --extract plink2.prune.in --het"))
-het <- fread("plink2.het")
+het <- fread("plink2.het", header = T)
 het$het_rate <- (het$OBS_CT - het$`O(HOM)`) / het$OBS_CT
 
 het_fail_samples <- het[het$het_rate < mean(het$het_rate) - 3 * sd(het$het_rate) | het$het_rate > mean(het$het_rate) + 3 * sd(het$het_rate), ]
 
-temp_QC <- data.frame(stage = "Excess heterozygosity (mean+/-3SD)", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(het) - nrow(het_fail_samples))
+# Get the indices of those samples that passed heterozygozity check
+indices_of_het_failed_samples <- match(het_fail_samples$IID, target_bed$fam$sample.ID)
+indices_of_het_passed_samples <- rows_along(target_bed)[-indices_of_het_failed_samples]
+
+print("het_failed_samples:")
+print(indices_of_het_failed_samples)
+print("het_passed_samples:")
+print(indices_of_het_passed_samples)
+
+fwrite(het_fail_samples, het_failed_samples_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
+
+temp_QC <- data.frame(stage = "Excess heterozygosity (mean+/-3SD)", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = length(indices_of_het_passed_samples))
 summary_table <- rbind(summary_table, temp_QC)
 
 p <- ggplot(het, aes(x = het_rate)) + geom_histogram(color = "#000000", fill = "#000000", alpha = 0.5) + 
@@ -195,6 +280,7 @@ proj_PCA <- bed_projectPCA(
   obj.bed.ref = ref_bed,
   ind.row.ref = unrelated_ref_samples,
   obj.bed.new = target_bed,
+  ind.row.new = indices_of_het_passed_samples,
   k = 10,
   strand_flip = TRUE,
   join_by_pos = TRUE,
@@ -214,7 +300,7 @@ PCs_ref <- predict(proj_PCA$obj.svd.ref)
 abi2 <- as.data.frame(PCs_ref)
 colnames(abi2) <- paste0("PC", 1:10)
 
-abi2$sample <- ref_bed$.fam$sample.ID[unrelated_ref_samples]
+abi2$sample <- ref_bed$fam$sample.ID[unrelated_ref_samples]
 abi2 <- abi2[, c(11, 1:10)]
 
 pops <- fread(args$pops)
@@ -222,7 +308,8 @@ pops <- pops[, c(2, 6, 7)]
 abi2 <- merge(abi2, pops, by.x = "sample", by.y = "SampleID")
 abi2 <- abi2[, c(1, 12, 13, 2:11)]
 
-abi <- data.frame(sample = target_bed$fam$sample.ID, Population = "Target", Superpopulation = "Target", abi)
+abi <- data.frame(sample = target_bed$fam$sample.ID[indices_of_het_passed_samples],
+                  Population = "Target", Superpopulation = "Target", abi)
 
 abi$type <- "Target"
 abi2$type <- "1000G"
@@ -336,25 +423,85 @@ related <- snp_plinkKINGQC(
   bedfile.in = paste0(bed_simplepath, "_QC.bed"),
   thr.king = 2^-4.5,
   make.bed = FALSE,
-  ncores = 4
+  ncores = 4,
+  extra.options = paste0("--remove ", het_failed_samples_out_path)
 )
+
+fwrite(related, "related.txt", sep = "\t", quote = FALSE, row.names = FALSE)
+
+print(related)
+
+# Remove samples that are related to each other
+
+# First, get the total list of all samples with some relatedness above a predefined threshold (see above in plink call)
+related_individuals <- unique(c(related$IID1, related$IID2))
+
+# If there are related samples, find the samples that should be removed so that the maximum set of samples remains,
+# but that also garantees that no relatedness remains.
+if (length(related_individuals) > 0) {
+
+  # Define a graph wherein each relation depicts an edge between vertices (samples)
+  relatedness_graph <- graph_from_edgelist(
+    as.matrix(related[,c("IID1", "IID2")]),
+    directed = F)
+
+  pdf(paste0(args$output, "/gen_plots/relatedness.pdf"))
+  plot(relatedness_graph)
+  dev.off()
+
+  samples_to_remove_due_to_relatedness <- c()
+
+  # Now, get a list of samples that should be removed due to relatedness
+  # We get this through a greedy algorithm trying to find a large possible set of unrelated samples.
+  # This is a heuristic solution since the problem is really hard.
+  while (length(V(relatedness_graph)) > 1) {
+
+    # Get the degrees (how many edges does each vertex have)
+    degrees_named <- degree(relatedness_graph)
+
+    # Get the vertex with the least amount of degrees (edges)
+    curr_vertex <- names(degrees_named)[min(degrees_named) == degrees_named][1]
+
+    # Get all vertices that have an edge with curr_vertex
+    related_vertices <- names(relatedness_graph[curr_vertex][relatedness_graph[curr_vertex] > 0])
+
+    # Add these vertexes to the list of vertices to remove
+    samples_to_remove_due_to_relatedness <- c(samples_to_remove_due_to_relatedness, related_vertices)
+
+    # Remove the vertices to remove
+    relatedness_graph <- delete_vertices(relatedness_graph, c(curr_vertex, related_vertices))
+  }
+
+  # Get the indices of those samples that should be removed.
+  indices_of_relatedness_failed <- match(
+    samples_to_remove_due_to_relatedness,
+    target_bed$fam$sample.ID)
+
+  # Remove these indices from the indices that remained after the previous check.
+  indices_of_passed_samples <- indices_of_het_passed_samples[
+    (!indices_of_het_passed_samples %in% indices_of_relatedness_failed)]
+
+  print("relatedness_failed_samples:")
+  print(indices_of_relatedness_failed)
+  print("relatedness_passed_samples:")
+  print(indices_of_passed_samples)
+
+} else {
+
+  # No relatedness observed, proceeding with all samples that passed the previous check.
+  indices_of_passed_samples <- indices_of_het_passed_samples
+}
+
+temp_QC <- data.frame(stage = "Relatedness: thr. KING>2^-4.5", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = length(indices_of_passed_samples))
+summary_table <- rbind(summary_table, temp_QC)
 
 ### Do PCA on target data
 message("Find genetic outliers.")
-### First remove one related sample from each pair and those failing heterozygosity check
-# TODO, check if this is correct that only one out of two is removed
-ind.rel <- match(unique(c(related$IID2, het_fail_samples$IID)), target_bed$fam$sample.ID)
-
-print(unique(c(related$IID2, het_fail_samples$IID)))
-
-ind.norel <- rows_along(target_bed)[-ind.rel]
-
-temp_QC <- data.frame(stage = "Relatedness: thr. KING>2^-4.5", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = length(ind.norel))
-summary_table <- rbind(summary_table, temp_QC)
-
 message("Find genetic outliers: do PCA on QCd target data.")
 ### PCA
-target_pca <- bed_autoSVD(target_bed, ind.row = ind.norel, k = 10, ncores = 4)
+target_pca <- bed_autoSVD(target_bed, ind.row = indices_of_passed_samples, k = 10, ncores = 4)
+
+print(str(target_pca))
 
 ### Find outlier samples
 prob <- bigutilsr::prob_dist(target_pca$u, ncores = 4)
@@ -382,11 +529,17 @@ colnames(PCs) <- paste0("PC", 1:10)
 PCs$S <- S
 
 PCs$outlier_ind <- "no"
-if (nrow(PCs[PCs$S > Sthresh, ]) > 0){
-PCs[PCs$S > Sthresh, ]$outlier_ind <- "yes"}
+
+if (any(PCs$S > Sthresh)) {
+  PCs[PCs$S > Sthresh, ]$outlier_ind <- "yes"
+}
 PCs$sd_outlier <- "no"
-if (nrow(PCs[(PCs$PC1 > mean(PCs$PC1) + args$SD_threshold * sd(PCs$PC1) | PCs$PC1 < mean(PCs$PC1) - args$SD_threshold * sd(PCs$PC1)) | (PCs$PC2 > mean(PCs$PC2) + args$SD_threshold * sd(PCs$PC2) | PCs$PC2 < mean(PCs$PC2) - args$SD_threshold * sd(PCs$PC2)), ]) > 0){
-PCs[(PCs$PC1 > mean(PCs$PC1) + args$SD_threshold * sd(PCs$PC1) | PCs$PC1 < mean(PCs$PC1) - args$SD_threshold * sd(PCs$PC1)) | (PCs$PC2 > mean(PCs$PC2) + args$SD_threshold * sd(PCs$PC2) | PCs$PC2 < mean(PCs$PC2) - args$SD_threshold * sd(PCs$PC2)), ]$sd_outlier <- "yes"
+sd_outlier_selection <- ((PCs$PC1 > mean(PCs$PC1) + args$SD_threshold * sd(PCs$PC1)
+  | PCs$PC1 < mean(PCs$PC1) - args$SD_threshold * sd(PCs$PC1))
+  | (PCs$PC2 > mean(PCs$PC2) + args$SD_threshold * sd(PCs$PC2)
+  | PCs$PC2 < mean(PCs$PC2) - args$SD_threshold * sd(PCs$PC2)))
+if (any(sd_outlier_selection)) {
+  PCs[sd_outlier_selection, ]$sd_outlier <- "yes"
 }
 
 PCs$outlier <- "no"
@@ -399,7 +552,7 @@ PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "yes", ]$outlier <- "S and SD o
 }
 # For first 2 PCs also remove samples which deviate from the mean
 
-p1 <- ggplot(PCs, aes(x = PC1, y = PC2, colour = outlier)) + theme_bw() + geom_point(alpha = 0.5) + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick")) + 
+p1 <- ggplot(PCs, aes(x = PC1, y = PC2, colour = outlier)) + theme_bw() + geom_point(alpha = 0.5) + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick")) +
 geom_vline(xintercept = c(mean(PCs$PC1) + 3 * sd(PCs$PC1), mean(PCs$PC1) - 3 * sd(PCs$PC1)), colour = "firebrick", linetype = 2) + 
 geom_hline(yintercept = c(mean(PCs$PC2) + 3 * sd(PCs$PC2), mean(PCs$PC2) - 3 * sd(PCs$PC2)), colour = "firebrick", linetype = 2)
 p2 <- ggplot(PCs, aes(x = PC3, y = PC4, colour = outlier)) + theme_bw() + geom_point(alpha = 0.5) + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
@@ -414,8 +567,8 @@ ggsave(paste0(args$output, "/gen_plots/PCA_outliers.pdf"), height = 10 * 1.5, wi
 
 # Filter out related samples and outlier samples, write out QCd data
 message("Filter out related samples and outlier samples, write out QCd data.")
-ind.row <- ind.norel[PCs$outlier == "no"]
-samples_to_include <- data.frame(family.ID = target_bed$.fam$family.ID[ind.row], sample.IDD2 = target_bed$.fam$sample.ID[ind.row])
+indices_of_passed_samples <- indices_of_passed_samples[PCs$outlier == "no"]
+samples_to_include <- data.frame(family.ID = target_bed$.fam$family.ID[indices_of_passed_samples], sample.IDD2 = target_bed$.fam$sample.ID[indices_of_passed_samples])
 
 temp_QC <- data.frame(stage = paste0("Outlier samples: thr. S>", Sthresh, " PC1/PC2 SD deviation thresh ", args$SD_threshold), Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include))
 summary_table <- rbind(summary_table, temp_QC)
@@ -433,7 +586,7 @@ PCsQ <- predict(target_pca_qcd)
 PCsQ <- as.data.frame(PCsQ)
 
 colnames(PCsQ) <- paste0("PC", 1:10)
-rownames(PCsQ) <- bed_qc$.fam$sample.ID
+rownames(PCsQ) <- bed_qc$fam$sample.ID
 
 # Visualise
 p1 <- ggplot(PCsQ, aes(x = PC1, y = PC2)) + theme_bw() + geom_point(alpha = 0.5)

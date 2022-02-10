@@ -45,11 +45,22 @@ knitr::kable(overview_table)
 
 ### Sex check
 
+`r if(!file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\begin{comment}"}`
 Next plot summarises the genetically determined sex of the input samples. Samples which have unclear genetic sex (X chr heterozygosity >0.2 and <0.8) and hence might be contaminated, are removed. If reported sex is indicated in the input `.fam` file, this is also compared with genetic sex and problematic samples (potential mixups) are automatically excluded.
 
 You can investigate the file `[your output folder]/outputfolder_gen/gen_data_QCd/SexCheck.txt` to see which samples failed the sex check.
 
-![**Fig 1. Distribution of F-values representing X chromosome heterozygosity.** Genetically determined sex thresholds are shown as vertical lines. Samples with the F-value between those two lines are potentially contaminated samples and are automatically excluded.](outputfolder_gen/gen_plots/SexCheck.png)  
+![**Fig 1. Distribution of F-values representing X chromosome heterozygosity.** Genetically determined sex thresholds are shown as vertical lines. Samples with the F-value between those two lines are potentially contaminated samples and are automatically excluded.](outputfolder_gen/gen_plots/SexCheck.png)
+
+`r if(!file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\end{comment}"}`
+
+`r if(file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\begin{comment}"}`
+Warning! This step was skipped since no X chromosome was found in the genotype data.
+Use raw genotype that includes the X chromosome if possible.
+
+**Fig 1. Distribution of F-values representing X chromosome heterozygosity.** Not available!
+
+`r if(file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\end{comment}"}`
 
 ### Excess heterozygosity
 
@@ -224,10 +235,13 @@ First 100 PCs explain cumulatively `r overview_pcs_cumulative$cumulative[100] * 
 knitr::kable(overview_pcs)
 ```
 
-### Sex-based mixup check
+### Sex-based mix-up check
 
-Next plot shows the expression of the sex chromosomes genes. We assume that males have higher expression of genes encoded from Y-chromosome and females have higher expression of X chromosome gene *XIST*. Therefore you should see that subsets of samples align parallel to x-axis (females) and y-axis (males). There should be no samples on the x-y diagonal. 
+Next plot shows the expression of the sex chromosomes genes. We assume that males have higher expression of genes encoded from Y-chromosome and females have higher expression of X chromosome gene *XIST*. Therefore, you should see that subsets of samples align parallel to x-axis (females) and y-axis (males). There should be no samples on the x-y diagonal since these are likely samples that are contaminated.
+Samples in the shaded area are automatically removed. The area is defined by an angle of 30 degrees centered over the x-y diagonal.
 
-Samples which expression does not align with genetic sex are potential sample mixups. These are outlined with red and automatically removed from further analyses.
+Samples for which the sex-specific expression does not align with genetic sex are potential sample mix-ups.
+These are outlined with red and automatically removed from further analyses. If the X chromosome was not present,
+expression is compared to reported sex instead.
 
 ![**Fig 13. Expression of X/Y chromosome genes.** On the x-axis is the normalised expression level of XIST, on the y-axis is the mean of the normalised expression levels of several Y chromosome genes. Point type indicates the genetic sex and there should be no samples on the X-Y diagonal. Samples which are in the wrong sample cloud, are likely sample mixups and were automatically removed from the data.](outputfolder_exp/exp_plots/SexSpecificGenes.png) 
