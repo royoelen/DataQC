@@ -567,17 +567,8 @@ ggsave(paste0(args$output, "/gen_plots/PCA_outliers.pdf"), height = 10 * 1.5, wi
 
 # Filter out related samples and outlier samples, write out QCd data
 message("Filter out related samples and outlier samples, write out QCd data.")
-<<<<<<< HEAD
-#print(ind.norel)
-print(str(PCs))
-print(PCs$outlier == "no")
 indices_of_passed_samples <- indices_of_passed_samples[PCs$outlier == "no"]
-print(str(indices_of_passed_samples))
 samples_to_include <- data.frame(family.ID = target_bed$.fam$family.ID[indices_of_passed_samples], sample.IDD2 = target_bed$.fam$sample.ID[indices_of_passed_samples])
-=======
-ind.row <- indices_of_passed_samples[PCs$outlier == "no"]
-samples_to_include <- data.frame(family.ID = target_bed$.fam$family.ID[ind.row], sample.IDD2 = target_bed$.fam$sample.ID[ind.row])
->>>>>>> 43f88801fa2c5c45b79d17212baf1833b3f28051
 
 temp_QC <- data.frame(stage = paste0("Outlier samples: thr. S>", Sthresh, " PC1/PC2 SD deviation thresh ", args$SD_threshold), Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include))
 summary_table <- rbind(summary_table, temp_QC)
