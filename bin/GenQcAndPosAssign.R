@@ -253,6 +253,11 @@ het_fail_samples <- het[het$het_rate < mean(het$het_rate) - 3 * sd(het$het_rate)
 indices_of_het_failed_samples <- match(het_fail_samples$IID, target_bed$fam$sample.ID)
 indices_of_het_passed_samples <- rows_along(target_bed)[-indices_of_het_failed_samples]
 
+print("het_failed_samples:")
+print(indices_of_het_failed_samples)
+print("het_passed_samples:")
+print(indices_of_het_passed_samples)
+
 fwrite(het_fail_samples, het_failed_samples_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
 
 temp_QC <- data.frame(stage = "Excess heterozygosity (mean+/-3SD)", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = length(indices_of_het_passed_samples))
@@ -422,6 +427,8 @@ related <- snp_plinkKINGQC(
   extra.options = paste0("--remove ", het_failed_samples_out_path)
 )
 
+fwrite(related, "related.txt", sep = "\t", quote = FALSE, row.names = FALSE)
+
 print(related)
 
 # Remove samples that are related to each other
@@ -458,6 +465,11 @@ if (length(related_individuals) > 0) {
   indices_of_passed_samples <- indices_of_het_passed_samples[
     (!indices_of_het_passed_samples %in% indices_of_relatedness_failed)]
 
+  print("relatedness_failed_samples:")
+  print(indices_of_relatedness_failed)
+  print("relatedness_passed_samples:")
+  print(indices_of_passed_samples)
+
 } else {
 
   # No relatedness observed, proceeding with all samples that passed the previous check.
@@ -472,6 +484,8 @@ message("Find genetic outliers.")
 message("Find genetic outliers: do PCA on QCd target data.")
 ### PCA
 target_pca <- bed_autoSVD(target_bed, ind.row = indices_of_passed_samples, k = 10, ncores = 4)
+
+print(str(target_pca))
 
 ### Find outlier samples
 prob <- bigutilsr::prob_dist(target_pca$u, ncores = 4)
@@ -534,8 +548,12 @@ ggsave(paste0(args$output, "/gen_plots/PCA_outliers.pdf"), height = 10 * 1.5, wi
 
 # Filter out related samples and outlier samples, write out QCd data
 message("Filter out related samples and outlier samples, write out QCd data.")
-ind.row <- ind.norel[PCs$outlier == "no"]
-samples_to_include <- data.frame(family.ID = target_bed$.fam$family.ID[ind.row], sample.IDD2 = target_bed$.fam$sample.ID[ind.row])
+#print(ind.norel)
+print(str(PCs))
+print(PCs$outlier == "no")
+indices_of_passed_samples <- indices_of_passed_samples[PCs$outlier == "no"]
+print(str(indices_of_passed_samples))
+samples_to_include <- data.frame(family.ID = target_bed$.fam$family.ID[indices_of_passed_samples], sample.IDD2 = target_bed$.fam$sample.ID[indices_of_passed_samples])
 
 temp_QC <- data.frame(stage = paste0("Outlier samples: thr. S>", Sthresh, " PC1/PC2 SD deviation thresh ", args$SD_threshold), Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include))
 summary_table <- rbind(summary_table, temp_QC)
@@ -553,7 +571,7 @@ PCsQ <- predict(target_pca_qcd)
 PCsQ <- as.data.frame(PCsQ)
 
 colnames(PCsQ) <- paste0("PC", 1:10)
-rownames(PCsQ) <- bed_qc$.fam$sample.ID
+rownames(PCsQ) <- bed_qc$fam$sample.ID
 
 # Visualise
 p1 <- ggplot(PCsQ, aes(x = PC1, y = PC2)) + theme_bw() + geom_point(alpha = 0.5)
