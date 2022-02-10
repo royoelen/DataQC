@@ -422,7 +422,7 @@ related <- snp_plinkKINGQC(
   extra.options = paste0("--remove ", het_failed_samples_out_path)
 )
 
-print(related)
+fwrite(related, "related.txt", sep = "\t", quote = FALSE, row.names = FALSE)
 
 # Remove samples that are related to each other
 
@@ -442,12 +442,28 @@ if (length(related_individuals) > 0) {
   plot(relatedness_graph)
   dev.off()
 
-  # Now, get the largest possible set of unrelated samples. (Get the first if there are multiple best solutions)
-  first_largest_independent_vector_set <- largest_ivs(relatedness_graph)[[1]]
+  samples_to_remove_due_to_relatedness <- c()
 
-  # Find those samples that are removed in the
-  samples_to_remove_due_to_relatedness <- related_individuals[
-    (!related_individuals %in% names(first_largest_independent_vector_set))]
+  # Now, get a list of samples that should be removed due to relatedness
+  # We get this through a greedy algorithm trying to find a large possible set of unrelated samples.
+  # This is a heuristic solution since the problem is really hard.
+  while (length(V(relatedness_graph)) > 1) {
+
+    # Get the degrees (how many edges does each vertex have)
+    degrees_named <- degree(relatedness_graph)
+
+    # Get the vertex with the least amount of degrees (edges)
+    curr_vertex <- names(degrees_named)[min(degrees_named) == degrees_named][1]
+
+    # Get all vertices that have an edge with curr_vertex
+    related_vertices <- names(relatedness_graph[curr_vertex][relatedness_graph[curr_vertex] > 0])
+
+    # Add these vertexes to the list of vertices to remove
+    samples_to_remove_due_to_relatedness <- c(samples_to_remove_due_to_relatedness, related_vertices)
+
+    # Remove the vertices to remove
+    relatedness_graph <- delete_vertices(relatedness_graph, c(curr_vertex, related_vertices))
+  }
 
   # Get the indices of those samples that should be removed.
   indices_of_relatedness_failed <- match(
@@ -504,7 +520,10 @@ if (any(PCs$S > Sthresh)) {
   PCs[PCs$S > Sthresh, ]$outlier_ind <- "yes"
 }
 PCs$sd_outlier <- "no"
-sd_outlier_selection <- (PCs$PC1 > mean(PCs$PC1) + args$SD_threshold * sd(PCs$PC1) | PCs$PC1 < mean(PCs$PC1) - args$SD_threshold * sd(PCs$PC1)) | (PCs$PC2 > mean(PCs$PC2) + args$SD_threshold * sd(PCs$PC2) | PCs$PC2 < mean(PCs$PC2) - args$SD_threshold * sd(PCs$PC2))
+sd_outlier_selection <- ((PCs$PC1 > mean(PCs$PC1) + args$SD_threshold * sd(PCs$PC1)
+  | PCs$PC1 < mean(PCs$PC1) - args$SD_threshold * sd(PCs$PC1))
+  | (PCs$PC2 > mean(PCs$PC2) + args$SD_threshold * sd(PCs$PC2)
+  | PCs$PC2 < mean(PCs$PC2) - args$SD_threshold * sd(PCs$PC2)))
 if (any(sd_outlier_selection)) {
   PCs[sd_outlier_selection, ]$sd_outlier <- "yes"
 }
@@ -534,7 +553,7 @@ ggsave(paste0(args$output, "/gen_plots/PCA_outliers.pdf"), height = 10 * 1.5, wi
 
 # Filter out related samples and outlier samples, write out QCd data
 message("Filter out related samples and outlier samples, write out QCd data.")
-ind.row <- ind.norel[PCs$outlier == "no"]
+ind.row <- indices_of_passed_samples[PCs$outlier == "no"]
 samples_to_include <- data.frame(family.ID = target_bed$.fam$family.ID[ind.row], sample.IDD2 = target_bed$.fam$sample.ID[ind.row])
 
 temp_QC <- data.frame(stage = paste0("Outlier samples: thr. S>", Sthresh, " PC1/PC2 SD deviation thresh ", args$SD_threshold), Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include))
