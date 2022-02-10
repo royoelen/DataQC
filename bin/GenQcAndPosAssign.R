@@ -27,11 +27,7 @@ option_list <- list(
     make_option(c("-S", "--S_threshold"), default = 0.4,
     help = "Numeric threshold to declare samples outliers, based on the genotype PCs. Defaults to 0.4 but should always be visually checked and changed, if needed."),
     make_option(c("-d", "--SD_threshold"), default = 0.4,
-    help = "Numeric threshold to declare samples outliers, based on the genotype PCs. Defaults to 0.4 but should always be visually checked and changed, if needed."),
-    make_option(c("-i", "--inclusion_list"), type = "character",
-    help = "Path to the file with sample IDs to include."),
-    make_option(c("-e", "--exclusion_list"), type = "character",
-    help = "Path to the file with sample IDs to exclude. This also removes samples from inclusion list.")
+    help = "Numeric threshold to declare samples outliers, based on the genotype PCs. Defaults to 0.4 but should always be visually checked and changed, if needed.")
     )
 
 parser <- OptionParser(usage = "%prog [options] file", option_list = option_list)
@@ -49,13 +45,6 @@ print(args$pruned_variants_sex_check)
 print(args$output)
 print(args$S_threshold)
 print(args$SD_threshold)
-print(args$exclusion_list)
-
-if (!is.numeric(args$S_threshold) | !is.numeric(args$SD_threshold) | !is.numeric(args$SD_threshold)){
-  message("Some of the QC thresholds is not numeric!")
-  stop()
-}
-
 
 bed_simplepath <- stringr::str_replace(args$target_bed, ".bed", "")
 
@@ -78,70 +67,19 @@ bedfile <- download_1000G("data")
 ## Original file
 message("Read in target data.")
 target_bed <- bed(args$target_bed)
-# eQTL samples
+summary_table <- data.frame(stage = "Raw file", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow)
+
+## Keep in only samples which are present in genotype-to-expression file
 gte <- fread(args$gen_exp, sep = "\t", header = FALSE)
+samples_to_include_gte <- data.frame(FID = target_bed$.fam$family.ID, IID = target_bed$.fam$sample.ID)
+samples_to_include_gte <- samples_to_include_gte[samples_to_include_gte$IID %in% gte$V1, ]
 
-summary_table <- data.frame(stage = "Raw file", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow, 
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]))
+fwrite(samples_to_include_gte, "SamplesToIncludeGte.txt", sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
+# Remove samples not in GTE
+system(paste0("plink/plink2 --bfile ", bed_simplepath, " --output-chr 26 --keep SamplesToIncludeGte.txt --make-bed --threads 4 --out ", bed_simplepath, "_filtered"))
 
-fam <- data.frame(FID = target_bed$.fam$family.ID, IID = target_bed$.fam$sample.ID)
-
-## If specified, keep in only samples which are in the sample whitelist
-if (args$inclusion_list != ""){
-inc_list <- fread(args$inclusion_list, header = FALSE)
-samples_to_include <- fam[fam$IID %in% inc_list$V1, ]
-message("Sample inclusion filter active!")
-temp_QC <- data.frame(stage = "Samples in inclusion list", Nr_of_SNPs = target_bed$ncol, 
-Nr_of_samples = nrow(samples_to_include), 
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
+temp_QC <- data.frame(stage = "Samples in genotype-to-expression file", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include_gte))
 summary_table <- rbind(summary_table, temp_QC)
-}
-
-## Keep in only samples which are present in genotype-to-expression file AND additional up to 5000 samples (better phasing)
-samples_to_include_gte <- fam[fam$IID %in% gte$V1, ]
-
-print(paste("samples to include: ", exists("samples_to_include")))
-print(table(samples_to_include_gte$IID %in% samples_to_include$IID))
-
-if (exists("samples_to_include")){
-  samples_to_include_gte <- samples_to_include_gte[samples_to_include_gte$IID %in% samples_to_include$IID, ]
-  fam <- fam[fam$IID %in% samples_to_include$IID, ]
-  }
-# Here add up to 5000 samples which are not already included
-if (nrow(fam[!fam$IID %in% samples_to_include_gte$IID, ]) > 0){
-set.seed(123)
-add_samples <- sample(fam[!fam$IID %in% samples_to_include_gte$IID, ]$IID, min(5000, nrow(fam[!fam$IID %in% samples_to_include_gte$IID, ])))
-set.seed(NULL)
-fam2 <- fam[fam$IID %in% add_samples, ]
-samples_to_include_temp <- rbind(samples_to_include_gte, fam2)
-} else {samples_to_include_temp <- samples_to_include_gte}
-
-if (nrow(samples_to_include) > 0){
-  samples_to_include <- samples_to_include[samples_to_include$IID %in% samples_to_include_temp$IID, ]
-  print(nrow(samples_to_include))
-} else {samples_to_include <- samples_to_include_temp}
-
-temp_QC <- data.frame(stage = "Samples in genotype-to-expression file + 5000", Nr_of_SNPs = target_bed$ncol, 
-Nr_of_samples = nrow(samples_to_include), 
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
-summary_table <- rbind(summary_table, temp_QC)
-
-# Keep in only samples which are in the inclusion list
-if (args$exclusion_list != ""){
-exc_list <- fread(args$exclusion_list, header = FALSE)
-samples_to_include <- samples_to_include[!samples_to_include$IID %in% exc_list$V1, ]
-message("Sample exclusion filter active!")
-}
-
-fwrite(samples_to_include, "SamplesToInclude.txt", sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
-
-temp_QC <- data.frame(stage = "Samples after removing exclusion list", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include), 
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
-summary_table <- rbind(summary_table, temp_QC)
-
-# Remove samples not in GTE + 5k samples
-system(paste0("plink/plink2 --bfile ", bed_simplepath, " --output-chr 26 --keep SamplesToInclude.txt --make-bed --threads 4 --out ", bed_simplepath, "_filtered"))
-
 
 # Do SNP and sample missingness QC on raw genotype bed
 message("Do SNP and genotype QC.")
@@ -163,9 +101,7 @@ snp_plinkQC(
 ref_bed <- bed("data/1000G_phase3_common_norel.bed")
 # Read in QCd target genotype data
 target_bed <- bed(paste0(bed_simplepath, "_QC.bed"))
-temp_QC <- data.frame(stage = "SNP CR>0.95; HWE P>1e-6; MAF>0.01; GENO<0.05; MIND<0.05", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow, 
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]))
-
+temp_QC <- data.frame(stage = "SNP CR>0.95; HWE P>1e-6; MAF>0.01; GENO<0.05; MIND<0.05", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow)
 summary_table <- rbind(summary_table, temp_QC)
 
 ## Assert that all IIDs are unique
@@ -216,15 +152,15 @@ if (23 %in% sex_check_data_set_chromosomes) {
   ## Sex check
   system(paste0("plink/plink --bfile ", bed_simplepath, "_split --extract check_sex_x.prune.in --check-sex"))
 
+  #stop("check output")
+
   ## If there is sex info in the fam file for all samples then remove samples which fail the sex check or genotype-based F is >0.2 & < 0.8
   sexcheck <- fread("plink.sexcheck")
   ## Annotate samples who have clear sex
-
   sexcheck$F_PASS <- !(sexcheck$F > 0.2 & sexcheck$F < 0.8)
   temp_QC <- data.frame(stage = "Sex check (0.2<F<0.8)",
                         Nr_of_SNPs = target_bed$ncol,
-                        Nr_of_samples = sum(sexcheck$F_PASS), 
-                        Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% sexcheck[sexcheck$F_PASS == TRUE, ]$IID, ]))
+                        Nr_of_samples = sum(sexcheck$F_PASS))
   summary_table <- rbind(summary_table, temp_QC)
 
   sexcheck$MATCH_PASS <- case_when(sexcheck$PEDSEX == 0 ~ T,
@@ -237,13 +173,14 @@ if (23 %in% sex_check_data_set_chromosomes) {
 
     temp_QC <- data.frame(stage = "Sex check (reported and genetic sex mismatch)",
                           Nr_of_SNPs = target_bed$ncol,
-                          Nr_of_samples = sum(sexcheck$PASS), 
-                          Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% sexcheck[sexcheck$PASS == TRUE, ]$IID, ]))
+                          Nr_of_samples = sum(sexcheck$PASS))
     summary_table <- rbind(summary_table, temp_QC)
 
   } else {
     message("No sex info in the .fam file.")
   }
+
+  print(sexcheck$PEDSEX)
 
   sex_cols <- c("0" = "black", "1" = "orange", "2" = "blue")
 
@@ -294,8 +231,7 @@ system(paste0("mv ", bed_simplepath, "_QC_QC.fam ", bed_simplepath, "_QC.fam"))
 
 # Read in again QCd target genotype data
 target_bed <- bed(paste0(bed_simplepath, "_QC.bed"))
-temp_QC <- data.frame(stage = "Removed X/Y", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(target_bed$fam),
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]))
+temp_QC <- data.frame(stage = "Removed X/Y", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(target_bed$fam))
 summary_table <- rbind(summary_table, temp_QC)
 
 # Do heterozygosity check
@@ -324,14 +260,7 @@ print(indices_of_het_passed_samples)
 
 fwrite(het_fail_samples, het_failed_samples_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
 
-
-het_s <- data.frame(ID = target_bed$.fam$sample.ID, FAMID = target_bed$.fam$family.ID)
-het_s <- het_s[!het_s$ID %in% het_fail_samples$IID, ]
-
-temp_QC <- data.frame(stage = "Excess heterozygosity (mean+/-3SD)", Nr_of_SNPs = target_bed$ncol, 
-Nr_of_samples = length(indices_of_het_passed_samples),
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% het_s$ID, ]))
-
+temp_QC <- data.frame(stage = "Excess heterozygosity (mean+/-3SD)", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = length(indices_of_het_passed_samples))
 summary_table <- rbind(summary_table, temp_QC)
 
 p <- ggplot(het, aes(x = het_rate)) + geom_histogram(color = "#000000", fill = "#000000", alpha = 0.5) + 
@@ -396,6 +325,8 @@ scale_alpha_manual(values = c("Target" = 1, "1000G" = 0)) +
 ggtitle("Target sample projections\nin 1000G PC space")
 
 combined_h <- combined[combined$Superpopulation == "Target", ]
+#combined_h$Superpopulation <- factor(combined_h$Superpopulation, levels = "Target")
+#combined_h$Type <- factor(combined_h$Type, levels = "Target")
 
 p0 <- ggplot(combined_h, aes(x = PC1, y = PC2)) + 
 geom_point() + 
@@ -496,10 +427,6 @@ related <- snp_plinkKINGQC(
   extra.options = paste0("--remove ", het_failed_samples_out_path)
 )
 
-# Filter in only related individuals from genotype-to-expression file
-
-related <- related[related$IID1 %in% gte$V1 & related$IID2 %in% gte$V1, ]
-
 fwrite(related, "related.txt", sep = "\t", quote = FALSE, row.names = FALSE)
 
 print(related)
@@ -510,7 +437,7 @@ print(related)
 related_individuals <- unique(c(related$IID1, related$IID2))
 
 # If there are related samples, find the samples that should be removed so that the maximum set of samples remains,
-# but that also guarantees that no relatedness remains.
+# but that also garantees that no relatedness remains.
 if (length(related_individuals) > 0) {
 
   # Define a graph wherein each relation depicts an edge between vertices (samples)
@@ -518,40 +445,16 @@ if (length(related_individuals) > 0) {
     as.matrix(related[,c("IID1", "IID2")]),
     directed = F)
 
-  # For final version: do not write out, here are original sample IDs
   pdf(paste0(args$output, "/gen_plots/relatedness.pdf"))
   plot(relatedness_graph)
   dev.off()
 
-  samples_to_remove_due_to_relatedness <- c()
+  # Now, get the largest possible set of unrelated samples. (Get the first if there are multiple best solutions)
+  first_largest_independent_vector_set <- largest_ivs(relatedness_graph)[[1]]
 
-  # Now, get a list of samples that should be removed due to relatedness
-  # We get this through a greedy algorithm trying to find a large possible set of unrelated samples.
-  # This is a heuristic solution since the problem is really hard.
-  while (length(V(relatedness_graph)) > 1) {
-
-    # Get the degrees (how many edges does each vertex have)
-    degrees_named <- degree(relatedness_graph)
-
-    # Get the vertex with the least amount of degrees (edges)
-    least_vertex_samples <- names(degrees_named)[min(degrees_named) == degrees_named]
-
-    # Prioritize vertexes which are in genotype-to-expression file
-    if (length(least_vertex_samples[least_vertex_samples %in% gte$V1]) > 0){
-      curr_vertex <- least_vertex_samples[least_vertex_samples %in% gte$V1][1] # if there are multiple related sample IDs from GTE, then take just first 
-    } else {
-      curr_vertex <- least_vertex_samples[1]
-    }
-
-    # Get all vertices that have an edge with curr_vertex
-    related_vertices <- names(relatedness_graph[curr_vertex][relatedness_graph[curr_vertex] > 0])
-
-    # Add these vertexes to the list of vertices to remove
-    samples_to_remove_due_to_relatedness <- c(samples_to_remove_due_to_relatedness, related_vertices)
-
-    # Remove the vertices to remove
-    relatedness_graph <- delete_vertices(relatedness_graph, c(curr_vertex, related_vertices))
-  }
+  # Find those samples that are removed in the
+  samples_to_remove_due_to_relatedness <- related_individuals[
+    (!related_individuals %in% names(first_largest_independent_vector_set))]
 
   # Get the indices of those samples that should be removed.
   indices_of_relatedness_failed <- match(
@@ -573,10 +476,7 @@ if (length(related_individuals) > 0) {
   indices_of_passed_samples <- indices_of_het_passed_samples
 }
 
-temp_QC <- data.frame(stage = "Relatedness for eQTL samples: thr. KING>2^-4.5", Nr_of_SNPs = target_bed$ncol, 
-Nr_of_samples = length(indices_of_passed_samples),
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% het_s[!het_s$ID %in% samples_to_remove_due_to_relatedness, ]$ID, ]) 
-)
+temp_QC <- data.frame(stage = "Relatedness: thr. KING>2^-4.5", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = length(indices_of_passed_samples))
 summary_table <- rbind(summary_table, temp_QC)
 
 ### Do PCA on target data
@@ -584,6 +484,8 @@ message("Find genetic outliers.")
 message("Find genetic outliers: do PCA on QCd target data.")
 ### PCA
 target_pca <- bed_autoSVD(target_bed, ind.row = indices_of_passed_samples, k = 10, ncores = 4)
+
+print(str(target_pca))
 
 ### Find outlier samples
 prob <- bigutilsr::prob_dist(target_pca$u, ncores = 4)
@@ -616,10 +518,7 @@ if (any(PCs$S > Sthresh)) {
   PCs[PCs$S > Sthresh, ]$outlier_ind <- "yes"
 }
 PCs$sd_outlier <- "no"
-sd_outlier_selection <- ((PCs$PC1 > mean(PCs$PC1) + args$SD_threshold * sd(PCs$PC1)
-  | PCs$PC1 < mean(PCs$PC1) - args$SD_threshold * sd(PCs$PC1))
-  | (PCs$PC2 > mean(PCs$PC2) + args$SD_threshold * sd(PCs$PC2)
-  | PCs$PC2 < mean(PCs$PC2) - args$SD_threshold * sd(PCs$PC2)))
+sd_outlier_selection <- (PCs$PC1 > mean(PCs$PC1) + args$SD_threshold * sd(PCs$PC1) | PCs$PC1 < mean(PCs$PC1) - args$SD_threshold * sd(PCs$PC1)) | (PCs$PC2 > mean(PCs$PC2) + args$SD_threshold * sd(PCs$PC2) | PCs$PC2 < mean(PCs$PC2) - args$SD_threshold * sd(PCs$PC2))
 if (any(sd_outlier_selection)) {
   PCs[sd_outlier_selection, ]$sd_outlier <- "yes"
 }
@@ -649,58 +548,26 @@ ggsave(paste0(args$output, "/gen_plots/PCA_outliers.pdf"), height = 10 * 1.5, wi
 
 # Filter out related samples and outlier samples, write out QCd data
 message("Filter out related samples and outlier samples, write out QCd data.")
+#print(ind.norel)
+print(str(PCs))
+print(PCs$outlier == "no")
 indices_of_passed_samples <- indices_of_passed_samples[PCs$outlier == "no"]
+print(str(indices_of_passed_samples))
 samples_to_include <- data.frame(family.ID = target_bed$.fam$family.ID[indices_of_passed_samples], sample.IDD2 = target_bed$.fam$sample.ID[indices_of_passed_samples])
 
-temp_QC <- data.frame(stage = paste0("Outlier samples: thr. S>", Sthresh, " PC1/PC2 SD deviation thresh ", args$SD_threshold), Nr_of_SNPs = target_bed$ncol, 
-Nr_of_samples = nrow(samples_to_include), 
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$`sample.IDD2`, ]))
+temp_QC <- data.frame(stage = paste0("Outlier samples: thr. S>", Sthresh, " PC1/PC2 SD deviation thresh ", args$SD_threshold), Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include))
 summary_table <- rbind(summary_table, temp_QC)
 
 fwrite(data.table::data.table(samples_to_include), "SamplesToInclude.txt", sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
 # Remove samples
 system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --output-chr 26 --keep SamplesToInclude.txt --make-bed --threads 4 --out ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation"))
 
-# Reorder the samples and write out the sample file
-message("Shuffle sample order.")
-rows <- sample(nrow(samples_to_include))
-samples_to_include2 <- samples_to_include[rows, ]
-fwrite(samples_to_include2, "ShuffledSampleOrder.txt", sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
-
-system(paste0("plink/plink2 -bfile ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation ",
-"--indiv-sort f ShuffledSampleOrder.txt ",
-"--make-bed ",
-"--out ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp"))
-
-# Do final SNP QC (for MAF, etc filters on filtered SNPs)
-# Remove unfiltered samples
-system(paste0("rm ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.*"))
-
-snp_plinkQC(
-  plink.path = "plink/plink2",
-  prefix.in = paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp"),
-  prefix.out = paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation"),
-  file.type = "--bfile",
-  maf = 0.01,
-  geno = 0.05,
-  mind = 0.05,
-  hwe = 1e-6,
-  autosome.only = TRUE,
-  extra.options = "--output-chr 26",
-  verbose = TRUE
-)
-
-system(paste0("rm ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp*"))
-
-# Final rerun PCA on QCd data
+# Rerun PCA on QCd data
 bed_qc <- bed(paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.bed"))
 target_pca_qcd <- bed_autoSVD(bed_qc, k = 10, ncores = 4)
 
-# Visualise loadings
-plot(target_pca_qcd, type = "loadings", loadings = 1:10, coeff = 0.6)
-ggsave(paste0(args$output, "/gen_plots/Target_PCs_postQC_Loadings.png"), type = "cairo", height = (5 * 7) * 0.7, width = (5 * 7) * 0.7, units = "in", dpi = 300)
-
 PCsQ <- predict(target_pca_qcd)
+
 PCsQ <- as.data.frame(PCsQ)
 
 colnames(PCsQ) <- paste0("PC", 1:10)
@@ -720,15 +587,27 @@ ggsave(paste0(args$output, "/gen_plots/Target_PCs_postQC.pdf"), height = 10 * 1.
 # Write out
 fwrite(PCsQ, paste0(args$output, "/gen_PCs/GenotypePCs.txt"), row.names = TRUE, sep = "\t", quote = FALSE)
 
-# Count samples in overlapping with GTE
-final_samples <- fread(paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.fam"), header = FALSE)
-
-temp_QC <- data.frame(stage = "QCd samples overlapping with genotype-to-expression file and SNP QC filters on full dataset", 
-Nr_of_SNPs = bed_qc$ncol, 
-Nr_of_samples = nrow(final_samples[final_samples$V1 %in% gte$V1, ]), 
-Nr_of_eQTL_samples = nrow(final_samples[final_samples$V1 %in% gte$V1, ]))
-summary_table <- rbind(summary_table, temp_QC)
+# Visualise loadings
+plot(target_pca_qcd, type = "loadings", loadings = 1:10, coeff = 0.6)
+ggsave(paste0(args$output, "/gen_plots/Target_PCs_postQC_Loadings.png"), type = "cairo", height = (5 * 7) * 0.7, width = (5 * 7) * 0.7, units = "in", dpi = 300)
 
 # Write out final summary
-colnames(summary_table) <- c("Stage", "Nr. of SNPs", "Nr. of genotype samples", "Nr. of eQTL samples")
 fwrite(summary_table, paste0(args$output, "/gen_data_summary/summary_table.txt"), sep = "\t", quote = FALSE)
+
+# Reorder the samples and write out the sample file
+message("Shuffle sample order.")
+rows <- sample(nrow(samples_to_include))
+samples_to_include2 <- samples_to_include[rows, ]
+fwrite(samples_to_include2, "ShuffledSampleOrder.txt", sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+system(paste0("plink/plink2 -bfile ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation ",
+"--indiv-sort f ShuffledSampleOrder.txt ",
+"--make-bed ",
+"--out ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp"))
+
+system(paste0("mv ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp.bed ",
+args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.bed"))
+system(paste0("mv ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp.bim ",
+args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.bim"))
+system(paste0("mv ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp.fam ",
+args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.fam"))
