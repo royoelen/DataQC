@@ -232,7 +232,9 @@ exp_summary <- function(x){
     per_gene_min <- apply(x, 1, min)
     per_gene_max <- apply(x, 1, max)
     per_gene_sd <- apply(x, 1, sd)
+    nr_values <- apply(x, 1, function(x) length(x))
     unique_values <- apply(x, 1, function(x) length(unique(x)))
+    zero_values <- apply(x, 1, function(x) length(x[x == 0]))
     per_gene_shapiro <- apply(x, 1, shap_test)
 
     gene_summary <- data.table(gene = rownames(x), 
@@ -241,7 +243,9 @@ exp_summary <- function(x){
     min = per_gene_min,
     max = per_gene_max,
     sd = per_gene_sd,
+    nr_values = nr_values,
     nr_unique_values = unique_values,
+    nr_of_zero_values = zero_values,
     shapiro_P = per_gene_shapiro)
 
     return(gene_summary)
