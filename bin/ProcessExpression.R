@@ -5,6 +5,7 @@ library(ggplot2)
 library(optparse)
 library(patchwork)
 library(MASS)
+library(dplyr)
 
 setDTthreads(8)
 
@@ -20,6 +21,8 @@ option_list <- list(
     help = "Empirical probe matching file. Used to link the best array probe to each blood-expressed gene."),
     make_option(c("-s", "--sd"), type = "double", default = 4,
     help = "Standard deviation threshold for removing expression samples. By default, samples away 4 SDs from the median of PC1 are removed."),
+    make_option(c("-c", "--contamination_area"), type = "double", default = 0.3,
+                help = "Area that marks likely contaminated samples based on sex-chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function."),
     make_option(c("-i", "--sex_info"), type = "character",
     help = "File with sex information. Plink2 --check-sex filtered output."),
     make_option(c("-f", "--geno_filter"), type = "character",
@@ -67,7 +70,13 @@ INT_transform <- function(x){
     }
 
 comp_cv <- function(x){sd(x) / mean(x)}
-shap_test <- function(x){shapiro.test(x)$p.value}
+shap_test <- function(x){
+    if (length(unique(x)) > 1) {
+        return(shapiro.test(x)$p.value)
+    } else {
+        return(NA)
+    }
+}
 
 illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
     # Leave in only probes for which there is empirical probe mapping info and convert data into matrix
@@ -90,8 +99,8 @@ illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
     gte$V1 <- as.character(gte$V1)
     gte$V2 <- as.character(gte$V2)
 
-    geno_fam <- fread(args$sex_info, header = FALSE)
-    gte <- gte[gte$V1 %in% geno_fam$V2,]
+    geno_fam <- fread(args$sex_info, header = TRUE)
+    gte <- gte[gte$V1 %in% geno_fam$IID,]
     gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
 
     message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
@@ -138,8 +147,8 @@ RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE){
     gte$V1 <- as.character(gte$V1)
     gte$V2 <- as.character(gte$V2)
 
-    geno_fam <- fread(args$sex_info, header = FALSE)
-    gte <- gte[gte$V1 %in% geno_fam$V2,]
+    geno_fam <- fread(args$sex_info, header = TRUE)
+    gte <- gte[gte$V1 %in% geno_fam$IID,]
     gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
 
     message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
@@ -192,8 +201,8 @@ Affy_preprocess <- function(exp, gte, gen){
     gte$V1 <- as.character(gte$V1)
     gte$V2 <- as.character(gte$V2)
 
-    geno_fam <- fread(args$sex_info, header = FALSE)
-    gte <- gte[gte$V1 %in% geno_fam$V2,]
+    geno_fam <- fread(args$sex_info, header = TRUE)
+    gte <- gte[gte$V1 %in% geno_fam$IID,]
     gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
 
     message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
@@ -367,9 +376,9 @@ summary_table <- data.table(Stage = "Unprocessed matrix", Nr_of_features = nrow(
 
 # Remove samples which are not in the gte or in genotype data
 gte <- fread(args$genotype_to_expression_linking, header = FALSE)
-geno_fam <- fread(args$sex_info, header = FALSE)
+geno_fam <- fread(args$sex_info, header = TRUE)
 gen_filter <- fread(args$geno_filter, header = FALSE)
-gte <- gte[gte$V1 %in% geno_fam$V2, ]
+gte <- gte[gte$V1 %in% geno_fam$IID, ]
 gte <- gte[gte$V1 %in% gen_filter$V2, ]
 
 and <- and[, colnames(and) %in% c("Feature", gte$V2), with = FALSE]
@@ -416,12 +425,12 @@ sd_mds1 <- sd(mds$`MDS coordinate 1`)
 mean_mds2 <- mean(mds$`MDS coordinate 2`)
 sd_mds2 <- sd(mds$`MDS coordinate 2`)
 if (nrow(mds[mds$`MDS coordinate 1` > mean_mds1 + args$sd * sd_mds1 |
-mds$`MDS coordinate 1` < mean_mds1 - args$sd * sd_mds1 | 
+mds$`MDS coordinate 1` < mean_mds1 - args$sd * sd_mds1 |
 mds$`MDS coordinate 2` > mean_mds2 + args$sd * sd_mds2 |
 mds$`MDS coordinate 2` < mean_mds2 - args$sd * sd_mds2, ]) > 0){
 
 mds[mds$`MDS coordinate 1` > mean_mds1 + args$sd * sd_mds1 |
-mds$`MDS coordinate 1` < mean_mds1 - args$sd * sd_mds1 | 
+mds$`MDS coordinate 1` < mean_mds1 - args$sd * sd_mds1 |
 mds$`MDS coordinate 2` > mean_mds2 + args$sd * sd_mds2 |
 mds$`MDS coordinate 2` < mean_mds2 - args$sd * sd_mds2, ]$outlier <- "yes"
 
@@ -433,9 +442,9 @@ sex <- sex[, c(2, 4), with = FALSE]
 colnames(sex) <- c("Sample", "Sex")
 mds <- merge(mds, sex, by = "Sample")
 
-p <- ggplot(mds, aes(x = `MDS coordinate 1`, `MDS coordinate 2`, colour = outlier, shape = Sex)) + 
+p <- ggplot(mds, aes(x = `MDS coordinate 1`, `MDS coordinate 2`, colour = outlier, shape = Sex)) +
 geom_point(alpha = 0.3) +
-theme_bw() + 
+theme_bw() +
 scale_colour_manual(values = c("no" = "black", "yes" = "red"))
 
 ggsave(paste0(args$output, "/exp_plots/MDS_before.png"), height = 5, width = 5.5, units = "in", dpi = 300, type = "cairo")
@@ -475,27 +484,72 @@ geno_fam_f$Sex <- as.character(geno_fam_f$Sex)
 y_genes <- merge(y_genes, geno_fam_f, by = "sample")
 max_exp <- max(y_genes$y_genes, y_genes$xist)
 
-y_genes$mismatch <- "no"
+y_genes$expressionSex <- case_when(
+  y_genes$y_genes > y_genes$xist ~ 1,
+  y_genes$y_genes < y_genes$xist ~ 2
+)
 
-if (nrow(y_genes[(y_genes$y_genes > y_genes$xist & y_genes$Sex == 2) | (y_genes$y_genes < y_genes$xist & y_genes$Sex == 1), ]) > 0){
-y_genes[(y_genes$y_genes > y_genes$xist & y_genes$Sex == 2) | (y_genes$y_genes < y_genes$xist & y_genes$Sex == 1), ]$mismatch <- "yes"
-}
+y_genes$mismatch <- case_when(
+  y_genes$Sex == 0 ~ "unknown",
+  y_genes$expressionSex == y_genes$Sex ~ "no",
+  y_genes$expressionSex != y_genes$Sex ~ "yes"
+)
 
-p <- ggplot(y_genes, aes(x = xist, y = y_genes, col = mismatch, shape = Sex)) +
-geom_point(alpha = 0.3) + 
-theme_bw() +
-scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
-ylab("mean of Y genes") +
-xlab("XIST") +
-geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue")
+x_expression_median <- median(y_genes[y_genes$Sex == 1 & y_genes$expressionSex == 1, "xist"])
+y_expression_median <- median(y_genes[y_genes$Sex == 2 & y_genes$expressionSex == 2, "y_genes"])
+
+lower_slope <- tan((45 - args$contamination_area / 2) / 180*pi)
+upper_slope <- tan((45 + args$contamination_area / 2) / 180*pi)
+
+y_genes$contaminated <- case_when(
+  (y_genes$y_genes > ((y_genes$xist - x_expression_median) * lower_slope + y_expression_median)
+    & y_genes$y_genes < ((y_genes$xist - x_expression_median) * upper_slope + y_expression_median)) ~ "yes",
+  TRUE ~ "no"
+)
+
+y_genes$status <- case_when(
+  y_genes$contaminated == "yes" & y_genes$mismatch == "yes" ~ "Contaminated and\nsex mismatch",
+  y_genes$contaminated == "yes" ~ "Likely contaminated",
+  y_genes$mismatch == "yes" ~ "Sex mismatch",
+  TRUE ~ "Passed"
+)
+
+#
+# y_genes$mismatch <- "no"
+#
+# y_genes$mismatch[y_genes$Sex == 0] <- "unknown"
+#
+# if (nrow(y_genes[(y_genes$y_genes > y_genes$xist & y_genes$Sex == 2) | (y_genes$y_genes < y_genes$xist & y_genes$Sex == 1), ]) > 0){
+# y_genes[(y_genes$y_genes > y_genes$xist & y_genes$Sex == 2) | (y_genes$y_genes < y_genes$xist & y_genes$Sex == 1), ]$mismatch <- "yes"
+# }
+
+exclusion_zone <- tibble(x = c(x_expression_median, max_exp)) %>%
+  mutate(lower_bound = (x - x_expression_median) * lower_slope + y_expression_median,
+         upper_bound = (x - x_expression_median) * upper_slope + y_expression_median)
+
+base_plot <- ggplot(data=exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
+  geom_ribbon(alpha = 0.2) +
+  geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
+  geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
+  scale_colour_manual(
+    values = alpha(c("Passed" = "black", "Likely contaminated" = "red",
+                     "Sex mismatch" = "#d79393", "Contaminated and\nsex mismatch" = "firebrick"), 0.5),
+    name = "Passed checks") +
+  coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
+  theme_bw() + ylab("mean of Y genes") + xlab("XIST")
 
 ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.png"), height = 5, width = 6, units = "in", dpi = 300, type = "cairo")
 ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.pdf"), height = 5, width = 6, units = "in", dpi = 300)
 
 # Filter out potential sex mismatches
-and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$mismatch == "no", ]$sample]
+and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$mismatch != "yes", ]$sample]
 
 summary_table_temp <- data.table(Stage = "Samples after removal of sex errors", Nr_of_features = nrow(and_pp), Nr_of_samples = ncol(and_pp))
+summary_table <- rbind(summary_table, summary_table_temp)
+
+and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$contaminated != "yes", ]$sample]
+
+summary_table_temp <- data.table(Stage = "Samples after removal of likely contaminated samples", Nr_of_features = nrow(and_pp), Nr_of_samples = ncol(and_pp))
 summary_table <- rbind(summary_table, summary_table_temp)
 
 # Apply inverse normal transformation to normalised data.
@@ -561,7 +615,7 @@ importance <- pcs$sdev^2 / sum(pcs$sdev^2)
 summary_pcs <- data.table(PC = paste0("PC", 1:100), explained_variance = importance[1:100])
 summary_pcs$PC <- factor(summary_pcs$PC, levels = paste0("PC", 1:100))
 
-fwrite(PCs[, c(1:101)], paste0(args$output, "/exp_PCs/exp_PCs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
+fwrite(PCs[, c(1:min(101, nrow(PCs))), with = F], paste0(args$output, "/exp_PCs/exp_PCs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
 fwrite(summary_pcs, paste0(args$output, "/exp_data_summary/", "summary_pcs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
 
 p <- ggplot(summary_pcs, aes(x = PC, y = explained_variance)) + geom_bar(stat = "identity") + theme_bw() +
