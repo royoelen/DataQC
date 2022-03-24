@@ -527,7 +527,7 @@ exclusion_zone <- tibble(x = c(x_expression_median, max_exp)) %>%
   mutate(lower_bound = (x - x_expression_median) * lower_slope + y_expression_median,
          upper_bound = (x - x_expression_median) * upper_slope + y_expression_median)
 
-base_plot <- ggplot(data=exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
+base_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
   geom_ribbon(alpha = 0.2) +
   geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
   geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
@@ -538,8 +538,8 @@ base_plot <- ggplot(data=exclusion_zone, aes(x = x, ymin = lower_bound, ymax = u
   coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
   theme_bw() + ylab("mean of Y genes") + xlab("XIST")
 
-ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.png"), height = 5, width = 6, units = "in", dpi = 300, type = "cairo")
-ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.pdf"), height = 5, width = 6, units = "in", dpi = 300)
+ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
+ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.pdf"), height = 5, width = 7, units = "in", dpi = 300)
 
 # Filter out potential sex mismatches
 and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$mismatch != "yes", ]$sample]

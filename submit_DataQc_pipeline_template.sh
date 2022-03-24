@@ -1,44 +1,45 @@
 #!/bin/bash
 
-#SBATCH --time=48:00:00
-#SBATCH -N 1
-#SBATCH --ntasks-per-node=1
-#SBATCH --mem=6G
-#SBATCH --mail-type=BEGIN
-#SBATCH --mail-type=END
-#SBATCH --mail-type=FAIL
-#SBATCH --mail-user=[your e-mail@email.com]
-#SBATCH --job-name="DataQc"
+	#SBATCH --time=48:00:00
+	#SBATCH -N 1
+	#SBATCH --ntasks-per-node=1
+	#SBATCH --mem=6G
+	#SBATCH --mail-type=BEGIN
+	#SBATCH --mail-type=END
+	#SBATCH --mail-type=FAIL
+	#SBATCH --job-name="DataQc"
 
-# These are needed modules in UT HPC to get singularity and Nextflow running. Replace with appropriate ones for your HPC.
-module load java-1.8.0_40
-module load singularity/3.5.3
-module load squashfs/4.4
+	# These are needed modules in UT HPC to get singularity and Nextflow running. Replace with appropriate ones for your HPC.
+	module load java-1.8.0_40
+	module load singularity/3.5.3
+	module load squashfs/4.4
 
-# Define paths
-nextflow_path=[full path to your Nextflow executable]
+	# Define paths
+	# If you follow eQTLGen phase II cookbook, you can use some provided default paths
+	
+	nextflow_path=../../tools # folder where Nextflow executable is
 
-geno_path=[full path to your genotype files without file extension]
-exp_path=[full path to your raw gene expression matrix]
-gte_path=[full path to your genotype-to-expression file]
-exp_platform=[expression platform name e.g. HT12v3 or RNAseq]
-cohort_name=[name of the cohort]
-output_path=[name of the output path]
+	geno_path=[full path to your input genotype folder]
+	exp_path=[full path to your gene expression matrix]
+	gte_path=[full path to your genotype-to-expression file]
+	exp_platform=[expression platform name: HT12v3/HT12v4/HuRef8/RNAseq/AffyU219/AffyHumanExon]
+	cohort_name=[name of the cohort]
+	output_path=../output # Output path, can be kept as is
 
-# Optional arguments for the command
-# --GenOutThresh [numeric threshold]
-# --GenSdThresh [numeric threshold]
-# --ExpSdThresh [numeric threshold]
-# --ContaminationArea [angle 0-90]
-# --pruned_variants_sex_check [data/Affy6_pruned_chrX_variant_positions.txt]
+	# Optional arguments for the command
+	# --GenOutThresh [numeric threshold]
+	# --GenSdThresh [numeric threshold]
+	# --ExpSdThresh [numeric threshold]
+	# --ContaminationArea [number between 0 and 90, default 30]
 
-# Command
-NXF_VER=20.10.0 ${nextflow_path}/nextflow run DataQC.nf \
---bfile ${geno_path} \
---expfile ${exp_path} \
---gte ${gte_path} \
---exp_platform ${exp_platform} \
---cohort_name ${cohort_name} \
---outdir ${output_path}  \
--profile slurm,singularity \
--resume
+	# Command:
+	NXF_VER=20.10.0 ${nextflow_path}/nextflow run DataQC.nf \
+	--bfile ${geno_path} \
+	--expfile ${exp_path} \
+	--gte ${gte_path} \
+	--exp_platform ${exp_platform} \
+	--cohort_name ${cohort_name} \
+	--outdir ${output_path}  \
+	-profile slurm,singularity \
+	-resume
+    

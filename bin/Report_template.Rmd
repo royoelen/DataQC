@@ -12,6 +12,7 @@ params:
     S: 0.4
     SD: 3
     SD_exp: 4
+    Cont: 30
 ---
 
 # Dataset
@@ -29,6 +30,8 @@ Used LOF S-threhold for genetic outliers: `r params$S`
 Threshold of SD difference from mean genetic PC1 and PC2 is: `r params$SD`
 
 Threshold of SD difference from mean gene expression PC1 and PC2 is: `r params$SD_exp`
+
+Angle of contamination area in sex chromosome gene expression plot: `r params$Cont`
 
 ## Genotype QC report
 
@@ -238,10 +241,9 @@ knitr::kable(overview_pcs)
 ### Sex-based mix-up check
 
 Next plot shows the expression of the sex chromosomes genes. We assume that males have higher expression of genes encoded from Y-chromosome and females have higher expression of X chromosome gene *XIST*. Therefore, you should see that subsets of samples align parallel to x-axis (females) and y-axis (males). There should be no samples on the x-y diagonal since these are likely samples that are contaminated.
-Samples in the shaded area are automatically removed. The area is defined by an angle of 30 degrees centered over the x-y diagonal.
+Samples in the shaded area are automatically removed. The area is defined by an angle of `r params$Cont` degrees centered over the x-y diagonal.
 
 Samples for which the sex-specific expression does not align with genetic sex are potential sample mix-ups.
-These are outlined with red and automatically removed from further analyses. If the X chromosome was not present,
-expression is compared to reported sex instead.
+These are outlined with red and automatically removed from further analyses. If the X chromosome was not present in the genotype data, expression is compared to reported sex instead.
 
-![**Fig 13. Expression of X/Y chromosome genes.** On the x-axis is the normalised expression level of XIST, on the y-axis is the mean of the normalised expression levels of several Y chromosome genes. Point type indicates the genetic sex and there should be no samples on the X-Y diagonal. Samples which are in the wrong sample cloud, are likely sample mixups and were automatically removed from the data.](outputfolder_exp/exp_plots/SexSpecificGenes.png) 
+![**Fig 13. Expression of X/Y chromosome genes.** On the x-axis is the normalised expression level of XIST, on the y-axis is the mean of the normalised expression levels of several Y chromosome genes. Point type indicates the genetic sex and there should be no samples on the X-Y diagonal. Samples which are in the wrong sample cloud, are likely sample mixups and were automatically removed from the data. Samples which are in the shaded area, are likely contaminated and automatically removed.](outputfolder_exp/exp_plots/SexSpecificGenes.png) 
