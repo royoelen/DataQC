@@ -241,7 +241,7 @@ knitr::kable(overview_pcs)
 ### Sex-based mix-up check
 
 Next plot shows the expression of the sex chromosomes genes. We assume that males have higher expression of genes encoded from Y-chromosome and females have higher expression of X chromosome gene *XIST*. Therefore, you should see that subsets of samples align parallel to x-axis (females) and y-axis (males). There should be no samples on the x-y diagonal since these are likely samples that are contaminated.
-Samples in the shaded area are automatically removed. The area is defined by an angle of `r params$Cont` degrees centered over the x-y diagonal.
+Samples in the shaded area are automatically removed. The area is defined by an angle of `r params$Cont` degrees centered over the x-y diagonal. This is reasonable default, however you can adjust this with `--ContaminationArea` flag, if needed.
 
 Samples for which the sex-specific expression does not align with genetic sex are potential sample mix-ups.
 These are outlined with red and automatically removed from further analyses. If the X chromosome was not present in the genotype data, expression is compared to reported sex instead.
