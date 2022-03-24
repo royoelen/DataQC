@@ -50,6 +50,9 @@ There are three arguments which can be used to adjust certain outlier detection 
 
 `--ExpSdThresh` Threshold for declaring expression sample outlier, based on the deviation from the means of first two expression PCs. Defaults to 4 SD from the mean.
 
+`--ContaminationArea` Threshold for declaring samples as contaminated on XIST vs Y-chr gene expression plot. Defaults to 30 degrees, meaning that samples which have high expression of both, X-chr and Y-chr genes are likely contaminated.
+
+
 ### Running the data QC command
 
 This is example using SLURM scheduler:
@@ -86,6 +89,7 @@ output_path=[name of the output path]
 # --GenOutThresh [numeric threshold]
 # --GenSdThresh [numeric threshold]
 # --ExpSdThresh [numeric threshold]
+# --ContaminationArea [numeric threshold]
 
 # Command:
 NXF_VER=20.10.0 ${nextflow_path}/nextflow run DataQC.nf \

@@ -16,6 +16,7 @@ def helpMessage() {
         -resume
 
     Mandatory arguments:
+      --cohort_name                 Name of the cohort.
       --bfile                       Path to the unimputed genotype files in plink bed/bim/fam format (without extensions bed/bim/fam).
       --expfile                     Path to the un-preprocessed gene expression matrix (genes/probes in the rows, samples in the columns). Can be from RNA-seq experiment or from array. NB! For Affymetrix arrays (AffyU219, AffyExon) we assume that standard preprocessing and normalisation is already done.
       --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. Can be used to filter samples from the analysis.
@@ -253,6 +254,7 @@ process RenderReport {
       val stresh from params.Sthresh
       val sdtresh from params.SDthresh
       val expsdtresh from params.ExpSdThreshold
+      val contaminationarea from params.ContaminationArea
 
     output:
       path ('outputfolder_gen/*') into output_ch2
@@ -275,6 +277,7 @@ process RenderReport {
       N = "${output_exp}/exp_data_QCd/exp_data_preprocessed.txt",
       S = ${stresh},
       SD = ${sdtresh},
-      SD_exp = ${expsdtresh}))'
+      SD_exp = ${expsdtresh},
+      Cont = ${contaminationarea}))'
       """
 }
