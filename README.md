@@ -30,25 +30,9 @@ Performs the following main steps:
 
 ## Usage information
 
-### Requirements for the system
-
-- Have access to HPC with multiple cores.
-- Have Bash >=3.2 installed.
-- Have Java >=8 installed.
-- Have Slurm scheduler managing the jobs in the HPC.
-- HPC has Singularity installed and running.
-
-### Setup of the pipeline
-
-You can either clone it by using git (if available in HPC):
-
-`git clone TBA`
-
-Or just download this from the gitlab/github download link and unzip.
-
 ### Input files
 
-- Unimputed genotype file in plink .bed format (https://www.cog-genomics.org/plink/1.9/input#bed). Genome build to be in **hg19**. It is advisable that .fam file also includes observed sex for all samples (format: males=1, females=2), so that pipeline does extra check on that. However, if this information is not available for all samples, pipeline just skips this check. Input path has to be without .bed/.bim/.fam extension.
+- Unimputed genotype file in plink .bed format (https://www.cog-genomics.org/plink/1.9/input#bed). Genome build to be in **hg19**. It is advisable that .fam file also includes observed sex for all samples (format: males=1, females=2), so that pipeline does extra check on that. However, if this information is not available for all samples, pipeline just skips this check.
 - Raw, unprocessed gene expression matrix. Tab-delimited file, genes/probes in the rows, samples in the columns.
     - First column has header "-".
     - For Illumina arrays, probe ID has to be Illumina ArrayAddress.
@@ -58,7 +42,7 @@ Or just download this from the gitlab/github download link and unzip.
 
 ### Additional settings
 
-There are five arguments which can be used to adjust certain outlier detection thresholds. These should be adjusted after initial run with the default settings and after investigating the diagnostic plots in the `Report_DataQc_[cohort name].html`. Then the pipeline should be re-run with adjusted settings.
+There are three arguments which can be used to adjust certain outlier detection thresholds. These should be adjusted after initial run with the default settings and after investigating the diagnostic plots in the `Report_DataQc_[cohort name].html`. Then the pipeline should be re-run with adjusted settings.
 
 `--GenOutThresh` Threshold for declaring genotype sample genetic outlier, based on LOF "outlierness" metric. Default is 0.4.
 
@@ -68,18 +52,12 @@ There are five arguments which can be used to adjust certain outlier detection t
 
 `--ContaminationArea` Threshold for declaring samples as contaminated on XIST vs Y-chr gene expression plot. Defaults to 30 degrees, meaning that samples which have high expression of both, X-chr and Y-chr genes are likely contaminated.
 
-Optional arguments:
-
-`--InclusionList` File with the genotype IDs to keep in the analysis (one per row). Useful for e.g. keeping in only the samples which have part of the biobank, etc. By default, pipeline keeps all samples in.
-
-`--ExclusionList` File with the genotype IDs to remove from the analysis (one per row). Useful for removing part of the samples from the analysis if these are from different ancestry. In case of the overlap between inclusion list and exclusion list, intersect is kept in the analysis.
-
 
 ### Running the data QC command
 
-Go to folder `dataqc` and modify the Slurm script template `submit_DataQc_pipeline_template.sh` with your input paths. This is an example template for Slurm scheduler:
+This is example using SLURM scheduler:
 
-```bash
+```
 #!/bin/bash
 
 #SBATCH --time=48:00:00
@@ -89,6 +67,7 @@ Go to folder `dataqc` and modify the Slurm script template `submit_DataQc_pipeli
 #SBATCH --mail-type=BEGIN
 #SBATCH --mail-type=END
 #SBATCH --mail-type=FAIL
+#SBATCH --mail-user=[your e-mail@email.com]
 #SBATCH --job-name="DataQc"
 
 # These are needed modules in UT HPC to get singularity and Nextflow running. Replace with appropriate ones for your HPC.
@@ -97,26 +76,23 @@ module load singularity/3.5.3
 module load squashfs/4.4
 
 # Define paths
-# If you follow eQTLGen phase II cookbook, you can use some provided default paths
+nextflow_path=[full path to your Nextflow executable]
 
-nextflow_path=../../tools # folder where Nextflow executable is
-
-geno_path=[full path to your input genotype file without bed/bim/fam extension]
-exp_path=[full path to your gene expression matrix]
+geno_path=[full path to your input genotype folder]
+exp_path=[full path to your raw gene expression matrix]
 gte_path=[full path to your genotype-to-expression file]
-exp_platform=[expression platform name: HT12v3/HT12v4/HuRef8/RNAseq/AffyU219/AffyHumanExon]
+exp_platform=[expression platform name e.g. HT12v3 or RNAseq]
 cohort_name=[name of the cohort]
-output_path=../output # Output path, can be kept as is
+output_path=[name of the output path]
 
 # Optional arguments for the command
 # --GenOutThresh [numeric threshold]
 # --GenSdThresh [numeric threshold]
 # --ExpSdThresh [numeric threshold]
-# --ContaminationArea [number between 0 and 90, default 30]
-# --ExclusionList [file with the list of samples to remove from the analysis]
+# --ContaminationArea [numeric threshold]
 
 # Command:
-NXF_VER=21.10.6 ${nextflow_path}/nextflow run DataQC.nf \
+NXF_VER=20.10.0 ${nextflow_path}/nextflow run DataQC.nf \
 --bfile ${geno_path} \
 --expfile ${exp_path} \
 --gte ${gte_path} \
@@ -125,26 +101,7 @@ NXF_VER=21.10.6 ${nextflow_path}/nextflow run DataQC.nf \
 --outdir ${output_path}  \
 -profile slurm,singularity \
 -resume
-
 ```
-
-You can save the modified script version to informative name, e.g. `submit_DataQc_[**CohortName_PlatformName**].sh`.
-
-Then submit the job `sbatch submit_DataQc_[**CohortName_PlatformName**].sh`. This initiates pipeline, makes analysis environment (using singularity or conda) and automatically submits the steps in correct order and parallel way. Separate `work` directory is made to the folder and contains all interim files.
-
-
-### Monitoring and debugging
-
-- Monitoring:
-  - Monitor the `slurm-***.out` log file and check if all the steps finish without error. Trick: command `watch tail -n 20 slurm-***.out` helps you to interactively monitor the status of the jobs.
-  - Use `squeue -u [YourUserName]` to see if individual tasks are in the queue.
-- If the pipeline crashes (e.g. due to walltime), you can just resubmit the same script after the fixes. Nextflow does not rerun completed steps and continues only from the steps which had not completed.
-- When the work has finished, download and check the job report. This file  is automatically written to your output folder `pipeline_info` subfolder, for potential errors or warnings. E.g. `output/pipeline_info/DataQcReport.html`.
-- When you need to do some debugging, then you can use the last section of aforementioned report to figure out in which subfolder from `work` folder the actual step was run. You can then navigate to this folder and investigate the following hidden files:
-  - `.command.sh`: script which was submitted
-  - `.command.log`: log file for seeing the analysis outputs/errors.
-  - `.command.err`: file which lists the errors, if any.
-
 
 ### Output
 
@@ -196,27 +153,11 @@ When all issues are solved:
 4. The whole folder `output` should be specified as an input for per-cohort preparations and encoding pipeline `https://gitlab.com/eqtlgen-group/PerCohortPreparations`. This pipeline automatically uses the processed, QCd expression data and covariate file to run data encoding and partial derivative calculation. It then organises the encoded matrices for sharig with central site. It also extracts some QC files for sharing with the central site:
 
 - `output/Report_DataQc_[cohort name].html`: most important data QC report, used in central site to check the per-cohort QC information.
-- `output/outputfolder_exp/exp_data_summary/raw_gene_summary.txt`: gene expression summary statistics (mean, median, sd, min, max, nr of unique values, Shapiro test P) before normalisation, used in central site to filter out lowly expressed genes, genes having outliers, etc.
+- `output/outputfolder_exp/exp_data_summary/raw_gene_summary.txt`: gene expression summary statistics (mean, median, sd, min, max, nr of unique values Shapiro test P) before normalisation, used in central site to filter out lowly expressed genes, genes having outliers, etc.
 - `output/outputfolder_exp/exp_data_summary/processed_gene_summary.txt`: gene expression summary statistics (mean, median, sd, min, max, nr of unique values, Shapiro test P) after normalisation, used in central site to filter out lowly expressed genes, genes having outliers, etc.
 - `output/outputfolder_gen/plots/*`, `output/outputfolder_exp/plots/*`: Separate diagnostic plots which can be later used in the manuscript materials.
-- `output/pipeline_info/DataQc_report.html`: Technical pipeline runtime report, it can be used in central site for debugging.
 
-## Acknowledgements
+In case of technical issues, it is advisable to check `output/pipeline_info/DataQc_report.html` and share with central site when 
 
-Genotype QC and covariate preparations make extensive use of the [bigsnpr package](https://privefl.github.io/bigsnpr/) and [plink 2](https://www.cog-genomics.org/plink/2.0/).
+- `output/pipeline_info/DataQc_report.html`: Technical pipeline runtime report, can be used in central site for debugging.
 
-Gene expression processing makes use of [preprocesscore](https://bioconductor.org/packages/release/bioc/html/preprocessCore.html) and [edgeR](https://bioconductor.org/packages/release/bioc/html/edgeR.html) R packages.
-
-### Citation
-
-[Privé, F., Luu, K., Blum, M. G. B., McGrath, J. J., &#38; Vilhjálmsson, B. J. (2020). Efficient toolkit implementing best practices for principal component analysis of population genetic data. <i>Bioinformatics</i>, <i>36</i>(16), 4449–4457. https://doi.org/10.1093/BIOINFORMATICS/BTAA520](https://academic.oup.com/bioinformatics/article/36/16/4449/5838185)
-
-[Chang, C. C., Chow, C. C., Tellier, L. C. A. M., Vattikuti, S., Purcell, S. M., &#38; Lee, J. J. (2015). Second-generation PLINK: Rising to the challenge of larger and richer datasets. GigaScience, 4(1). https://doi.org/10.1186/s13742-015-0047-8](https://academic.oup.com/gigascience/article/4/1/s13742-015-0047-8/2707533)
-
-[Bolstad B (2021). preprocessCore: A collection of pre-processing functions. R package version 1.56.0, https://github.com/bmbolstad/preprocessCore.](https://bioconductor.org/packages/release/bioc/html/preprocessCore.html)
-
-[Robinson MD, McCarthy DJ, Smyth GK (2010). “edgeR: a Bioconductor package for differential expression analysis of digital gene expression data.” Bioinformatics, 26(1), 139-140. doi: 10.1093/bioinformatics/btp616.](10.1093/bioinformatics/btp616)
-
-### Contacts
-
-For this Nextflow pipeline: urmo.vosa at gmail.com.

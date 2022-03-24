@@ -22,17 +22,27 @@ def helpMessage() {
       --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. Can be used to filter samples from the analysis.
       --exp_platform                Indicator indicating the gene expression platform. HT12v3, HT12v4, HuRef8, RNAseq, AffyU219, AffyHumanExon.
       --outdir                      Path to the output directory.
-      --GenOutThresh                "Outlierness" score threshold for excluding ethnic outliers. Defaults to 0.4 but should be adjusted according to visual inspection.
-      --GenSdThresh                 Threshold for declaring samples outliers based on genetic PC1 and PC2. Defaults to 3 SD from the mean of PC1 and PC2 but should be adjusted according to visual inspection.
-      --ExpSdThresh                 Standard deviation threshold for excluding gene expression outliers. By default, samples away by 3 SDs from the mean of PC1 are removed.
-      --ContaminationArea           Area that marks likely contaminated samples based on sex chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function.
- 
+      --Sthresh                     "Outlierness" score threshold for excluding ethnic outliers. Defaults to 0.4 but should be adjusted according to visual inspection.
+      --SDthresh                    Threshold for declaring samples outliers based on genetic PC1 and PC2. Defaults to 3 SD from the mean of PC1 and PC2 but should be adjusted according to visual inspection.
+      --ExpSdThreshold              Standard deviation threshold for excluding gene expression outliers. By default, samples away by 3 SDs from the mean of PC1 are removed.
+      --ContaminationArea           Area that marks likely contaminated samples based on sex-chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function.
+
     Optional arguments
       --pruned_variants_sex_check   Path to a plink ranges file that defines which variants to use for the check-sex command. Use this when the automatic selection does not yield satisfactory results.
-      --InclusionList               File with sample IDs to restrict to the analysis. Useful for keeping in the inclusion list of the samples. By default, all samples are kept.
-      --ExclusionList               File with sample IDs to remove from the analysis. Useful for removing the ancestry outliers or restricting the genotype data to one superpopulation. Samples are also removed from the inclusion list. By default, all samples are kept.
-
     """.stripIndent()
+}
+
+// Show help emssage
+if (params.help){
+    helpMessage()
+    exit 0
+}
+
+// Has the run name been specified by the user?
+//  this has the bonus effect of catching both -name and --name
+custom_runName = params.name
+if( !(workflow.runName ==~ /[a-z]+_[a-z]+/) ){
+  custom_runName = workflow.runName
 }
 
 // Define location of Report_template.Rmd
@@ -43,39 +53,31 @@ params.report_template = "$baseDir/bin/Report_template.Rmd"
 Channel
     .from(params.bfile)
     .map { study -> [file("${study}.bed"), file("${study}.bim"), file("${study}.fam")]}
-    .ifEmpty { exit 1, "Input genotype files not found!" }
     .set { bfile_ch }
 
 Channel
     .from(params.expfile)
     .map { study -> [file("${study}")]}
-    .ifEmpty { exit 1, "Input expression files not found!" }
     .set { expfile_ch }
 
 Channel
     .from(params.gte)
     .map { study -> [file("${study}")]}
-    .ifEmpty { exit 1, "Input GTE file not found!" }
     .into { gte_ch_gen; gte_ch_exp }
 
 Channel
     .fromPath(params.report_template)
-    .ifEmpty { exit 1, "Input report not found!" }
     .set { report_ch }
 
+params.pruned_variants_sex_check = ''
 
-params.GenOutThresh = 0.4
-params.GenSdThresh = 3
-params.ExpSdThresh = 4
+params.Sthresh = 0.4
+params.SDthresh = 3
+params.ExpSdThreshold = 4
 params.ContaminationArea = 30
 params.exp_platform = ''
 params.cohort_name = ''
 params.outdir = ''
-
-params.InclusionList = ''
-params.ExclusionList = ''
-
-params.pruned_variants_sex_check = ''
 
 // Header log info
 log.info """=======================================================
@@ -84,10 +86,11 @@ DataQC v${workflow.manifest.version}"
 def summary = [:]
 summary['Pipeline Name']            = 'DataQC'
 summary['Pipeline Version']         = workflow.manifest.version
+summary['Run Name']                 = custom_runName ?: workflow.runName
 summary['PLINK bfile']              = params.bfile
-summary['S threshold']              = params.GenOutThresh
-summary['Gen SD threshold']         = params.GenSdThresh
-summary['Exp SD threshold']         = params.ExpSdThresh
+summary['S threshold']              = params.Sthresh
+summary['Gen SD threshold']         = params.SDthresh
+summary['Exp SD threshold']         = params.ExpSdThreshold
 summary['Contamination area']       = params.ContaminationArea
 summary['Expression matrix']        = params.expfile
 summary['GTE file']                 = params.gte
@@ -96,8 +99,6 @@ summary['Max CPUs']                 = params.max_cpus
 summary['Max Time']                 = params.max_time
 summary['Cohort name']              = params.cohort_name
 if(params.pruned_variants_sex_check) summary['Pruned variants for sex check'] = params.pruned_variants_sex_check
-if(params.InclusionList) summary['Inclusion list'] = params.InclusionList
-if(params.ExclusionList) summary['Exclusion list'] = params.ExclusionList
 summary['Expression platform']      = params.exp_platform
 summary['Output dir']               = params.outdir
 summary['Working dir']              = workflow.workDir
@@ -109,6 +110,11 @@ summary['Current path']             = "$PWD"
 summary['Working dir']              = workflow.workDir
 summary['Script dir']               = workflow.projectDir
 summary['Config Profile']           = workflow.profile
+if(workflow.profile == 'awsbatch'){
+   summary['AWS Region']            = params.awsregion
+   summary['AWS Queue']             = params.awsqueue
+}
+if(params.email) summary['E-mail Address'] = params.email
 log.info summary.collect { k,v -> "${k.padRight(21)}: $v" }.join("\n")
 log.info "========================================="
 
@@ -119,16 +125,15 @@ process GenotypeQC {
     input:
       set file(bfile), file(bim), file(fam) from bfile_ch
       file gte from gte_ch_gen
-      val s_stat from params.GenOutThresh
-      val sd_thresh from params.GenSdThresh
+      val s_stat from params.Sthresh
+      val sd_thresh from params.SDthresh
       val optional_pruned_variants_sex_check from params.pruned_variants_sex_check
-      val ExclusionList from params.ExclusionList
-      val InclusionList from params.InclusionList
 
     output:
       path ('outputfolder_gen') into output_ch_genotypes
       file 'outputfolder_gen/gen_data_QCd/SexCheck.txt' into sexcheck
       file 'outputfolder_gen/gen_data_QCd/*fam' into sample_qc
+
 
       """
       Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
@@ -138,8 +143,6 @@ process GenotypeQC {
       --pops $baseDir/data/1000G_pops.txt \
       --S_threshold ${s_stat} \
       --SD_threshold ${sd_thresh} \
-      --inclusion_list "${InclusionList}" \
-      --exclusion_list "${ExclusionList}" \
       --output outputfolder_gen \
       --pruned_variants_sex_check "${optional_pruned_variants_sex_check}"
       """
@@ -155,7 +158,7 @@ process GeneExpressionQC {
       file sexcheck from sexcheck
       file geno_filter from sample_qc
       val exp_platform from params.exp_platform
-      val sd from params.ExpSdThresh
+      val sd from params.ExpSdThreshold
       val contamination_area from params.ContaminationArea
 
     output:
@@ -248,9 +251,9 @@ process RenderReport {
       path output_exp from output_ch_geneexpression
       path report from report_ch
       val exp_platform from params.exp_platform
-      val stresh from params.GenOutThresh
-      val sdtresh from params.GenSdThresh
-      val expsdtresh from params.ExpSdThresh
+      val stresh from params.Sthresh
+      val sdtresh from params.SDthresh
+      val expsdtresh from params.ExpSdThreshold
       val contaminationarea from params.ContaminationArea
 
     output:
@@ -277,8 +280,4 @@ process RenderReport {
       SD_exp = ${expsdtresh},
       Cont = ${contaminationarea}))'
       """
-}
-
-workflow.onComplete {
-    println ( workflow.success ? "Pipeline finished!" : "Something crashed...debug!" )
 }
