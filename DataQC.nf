@@ -32,19 +32,6 @@ def helpMessage() {
     """.stripIndent()
 }
 
-// Show help emssage
-if (params.help){
-    helpMessage()
-    exit 0
-}
-
-// Has the run name been specified by the user?
-//  this has the bonus effect of catching both -name and --name
-custom_runName = params.name
-if( !(workflow.runName ==~ /[a-z]+_[a-z]+/) ){
-  custom_runName = workflow.runName
-}
-
 // Define location of Report_template.Rmd
 params.report_template = "$baseDir/bin/Report_template.Rmd"
 
