@@ -92,7 +92,7 @@ output_path=[name of the output path]
 # --ContaminationArea [numeric threshold]
 
 # Command:
-NXF_VER=20.10.0 ${nextflow_path}/nextflow run DataQC.nf \
+NXF_VER=21.10.6 ${nextflow_path}/nextflow run DataQC.nf \
 --bfile ${geno_path} \
 --expfile ${exp_path} \
 --gte ${gte_path} \
