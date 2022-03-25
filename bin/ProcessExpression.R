@@ -447,8 +447,8 @@ geom_point(alpha = 0.3) +
 theme_bw() +
 scale_colour_manual(values = c("no" = "black", "yes" = "red"))
 
-ggsave(paste0(args$output, "/exp_plots/MDS_before.png"), height = 5, width = 5.5, units = "in", dpi = 300, type = "cairo")
-ggsave(paste0(args$output, "/exp_plots/MDS_before.pdf"), height = 5, width = 5.5, units = "in", dpi = 300)
+ggsave(paste0(args$output, "/exp_plots/MDS_before.png"), height = 5, width = 6, units = "in", dpi = 300, type = "cairo")
+ggsave(paste0(args$output, "/exp_plots/MDS_before.pdf"), height = 5, width = 6, units = "in", dpi = 300)
 
 exp_non_outliers <- gte[gte$V1 %in% mds[mds$outlier == "no", ]$Sample, ]$V2
 and <- and[, colnames(and) %in% c("Feature", exp_non_outliers), with = FALSE]
