@@ -24,7 +24,7 @@ def helpMessage() {
       --outdir                      Path to the output directory.
       --Sthresh                     "Outlierness" score threshold for excluding ethnic outliers. Defaults to 0.4 but should be adjusted according to visual inspection.
       --SDthresh                    Threshold for declaring samples outliers based on genetic PC1 and PC2. Defaults to 3 SD from the mean of PC1 and PC2 but should be adjusted according to visual inspection.
-      --ExpSdThreshold              Standard deviation threshold for excluding gene expression outliers. By default, samples away by 3 SDs from the mean of PC1 are removed.
+      --ExpSdThresh                 Standard deviation threshold for excluding gene expression outliers. By default, samples away by 3 SDs from the mean of PC1 are removed.
       --ContaminationArea           Area that marks likely contaminated samples based on sex chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function.
 
     Optional arguments
@@ -60,7 +60,7 @@ params.pruned_variants_sex_check = ''
 
 params.Sthresh = 0.4
 params.SDthresh = 3
-params.ExpSdThreshold = 4
+params.ExpSdThresh = 4
 params.ContaminationArea = 30
 params.exp_platform = ''
 params.cohort_name = ''
@@ -73,11 +73,10 @@ DataQC v${workflow.manifest.version}"
 def summary = [:]
 summary['Pipeline Name']            = 'DataQC'
 summary['Pipeline Version']         = workflow.manifest.version
-summary['Run Name']                 = custom_runName ?: workflow.runName
 summary['PLINK bfile']              = params.bfile
 summary['S threshold']              = params.Sthresh
 summary['Gen SD threshold']         = params.SDthresh
-summary['Exp SD threshold']         = params.ExpSdThreshold
+summary['Exp SD threshold']         = params.ExpSdThresh
 summary['Contamination area']       = params.ContaminationArea
 summary['Expression matrix']        = params.expfile
 summary['GTE file']                 = params.gte
@@ -97,11 +96,6 @@ summary['Current path']             = "$PWD"
 summary['Working dir']              = workflow.workDir
 summary['Script dir']               = workflow.projectDir
 summary['Config Profile']           = workflow.profile
-if(workflow.profile == 'awsbatch'){
-   summary['AWS Region']            = params.awsregion
-   summary['AWS Queue']             = params.awsqueue
-}
-if(params.email) summary['E-mail Address'] = params.email
 log.info summary.collect { k,v -> "${k.padRight(21)}: $v" }.join("\n")
 log.info "========================================="
 
@@ -145,7 +139,7 @@ process GeneExpressionQC {
       file sexcheck from sexcheck
       file geno_filter from sample_qc
       val exp_platform from params.exp_platform
-      val sd from params.ExpSdThreshold
+      val sd from params.ExpSdThresh
       val contamination_area from params.ContaminationArea
 
     output:
@@ -240,7 +234,7 @@ process RenderReport {
       val exp_platform from params.exp_platform
       val stresh from params.Sthresh
       val sdtresh from params.SDthresh
-      val expsdtresh from params.ExpSdThreshold
+      val expsdtresh from params.ExpSdThresh
       val contaminationarea from params.ContaminationArea
 
     output:
