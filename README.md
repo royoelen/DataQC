@@ -153,11 +153,8 @@ When all issues are solved:
 4. The whole folder `output` should be specified as an input for per-cohort preparations and encoding pipeline `https://gitlab.com/eqtlgen-group/PerCohortPreparations`. This pipeline automatically uses the processed, QCd expression data and covariate file to run data encoding and partial derivative calculation. It then organises the encoded matrices for sharig with central site. It also extracts some QC files for sharing with the central site:
 
 - `output/Report_DataQc_[cohort name].html`: most important data QC report, used in central site to check the per-cohort QC information.
-- `output/outputfolder_exp/exp_data_summary/raw_gene_summary.txt`: gene expression summary statistics (mean, median, sd, min, max, nr of unique values Shapiro test P) before normalisation, used in central site to filter out lowly expressed genes, genes having outliers, etc.
+- `output/outputfolder_exp/exp_data_summary/raw_gene_summary.txt`: gene expression summary statistics (mean, median, sd, min, max, nr of unique values, Shapiro test P) before normalisation, used in central site to filter out lowly expressed genes, genes having outliers, etc.
 - `output/outputfolder_exp/exp_data_summary/processed_gene_summary.txt`: gene expression summary statistics (mean, median, sd, min, max, nr of unique values, Shapiro test P) after normalisation, used in central site to filter out lowly expressed genes, genes having outliers, etc.
 - `output/outputfolder_gen/plots/*`, `output/outputfolder_exp/plots/*`: Separate diagnostic plots which can be later used in the manuscript materials.
-
-In case of technical issues, it is advisable to check `output/pipeline_info/DataQc_report.html` and share with central site when 
-
-- `output/pipeline_info/DataQc_report.html`: Technical pipeline runtime report, can be used in central site for debugging.
+- `output/pipeline_info/DataQc_report.html`: Technical pipeline runtime report, it can be used in central site for debugging.
 
