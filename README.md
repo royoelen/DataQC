@@ -30,6 +30,22 @@ Performs the following main steps:
 
 ## Usage information
 
+### Requirements for the system
+
+- Have access to HPC with multiple cores.
+- Have Bash >=3.2 installed.
+- Have Java 8 installed.
+- Have Slurm scheduler managing the jobs in the HPC.
+- HPC has Singularity installed and running.
+
+### Setup of the pipeline
+
+You can either clone it by using git (if available in HPC):
+
+`git clone TBA`
+
+Or just download this from the gitlab/github download link and unzip.
+
 ### Input files
 
 - Unimputed genotype file in plink .bed format (https://www.cog-genomics.org/plink/1.9/input#bed). Genome build to be in **hg19**. It is advisable that .fam file also includes observed sex for all samples (format: males=1, females=2), so that pipeline does extra check on that. However, if this information is not available for all samples, pipeline just skips this check.
@@ -55,7 +71,7 @@ There are three arguments which can be used to adjust certain outlier detection 
 
 ### Running the data QC command
 
-This is example using SLURM scheduler:
+Go to folder `dataqc` and modify the SLURM script template `submit_DataQc_pipeline_template.sh` with your input paths. This is an example template SLURM scheduler:
 
 ```
 #!/bin/bash
@@ -102,6 +118,24 @@ NXF_VER=21.10.6 ${nextflow_path}/nextflow run DataQC.nf \
 -profile slurm,singularity \
 -resume
 ```
+
+You can save the modified script version to informative name, e.g. `submit_DataQc_[**CohortName_PlatformName**].sh`.
+
+Then submit the job `sbatch submit_DataQc_[**CohortName_PlatformName**].sh`. This initiates pipeline, makes analysis environment (using singularity or conda) and automatically submits the steps in correct order and parallel way. Separate `work` directory is made to the folder and contains all interim files.
+
+
+### Monitoring and debugging
+
+- Monitoring:
+  - Monitor the `slurm-***.out` log file and check if all the steps finish without error. Trick: command `watch tail -n 20 slurm-***.out` helps you to interactively monitor the status of the jobs.
+  - Use `squeue -u [YourUserName]` to see if individual tasks are in the queue.
+- If the pipeline crashes (e.g. due to walltime), you can just resubmit the same script after the fixes. Nextflow does not rerun completed steps and continues only from the steps which had not completed.
+- When the work has finished, download and check the job report. This file  is automatically written to your output folder `pipeline_info` subfolder, for potential errors or warnings. E.g. `output/pipeline_info/DataQcReport.html`.
+- When you need to do some debugging, then you can use the last section of aforementioned report to figure out in which subfolder from `work` folder the actual step was run. You can then navigate to this folder and investigate the following hidden files:
+  - `.command.sh`: script which was submitted
+  - `.command.log`: log file for seeing the analysis outputs/errors.
+  - `.command.err`: file which lists the errors, if any.
+
 
 ### Output
 
@@ -158,3 +192,22 @@ When all issues are solved:
 - `output/outputfolder_gen/plots/*`, `output/outputfolder_exp/plots/*`: Separate diagnostic plots which can be later used in the manuscript materials.
 - `output/pipeline_info/DataQc_report.html`: Technical pipeline runtime report, it can be used in central site for debugging.
 
+## Acknowledgements
+
+Genotype QC and covariate preparations make extensive use of the [bigsnpr package](https://privefl.github.io/bigsnpr/) and [plink 2](https://www.cog-genomics.org/plink/2.0/).
+
+Gene expression processing makes use of [preprocesscore](https://bioconductor.org/packages/release/bioc/html/preprocessCore.html) and [edgeR](https://bioconductor.org/packages/release/bioc/html/edgeR.html) R packages.
+
+### Citation
+
+[Privé, F., Luu, K., Blum, M. G. B., McGrath, J. J., &#38; Vilhjálmsson, B. J. (2020). Efficient toolkit implementing best practices for principal component analysis of population genetic data. <i>Bioinformatics</i>, <i>36</i>(16), 4449–4457. https://doi.org/10.1093/BIOINFORMATICS/BTAA520](https://academic.oup.com/bioinformatics/article/36/16/4449/5838185)
+
+[Chang, C. C., Chow, C. C., Tellier, L. C. A. M., Vattikuti, S., Purcell, S. M., &#38; Lee, J. J. (2015). Second-generation PLINK: Rising to the challenge of larger and richer datasets. GigaScience, 4(1). https://doi.org/10.1186/s13742-015-0047-8](https://academic.oup.com/gigascience/article/4/1/s13742-015-0047-8/2707533)
+
+[Bolstad B (2021). preprocessCore: A collection of pre-processing functions. R package version 1.56.0, https://github.com/bmbolstad/preprocessCore.](https://bioconductor.org/packages/release/bioc/html/preprocessCore.html)
+
+[Robinson MD, McCarthy DJ, Smyth GK (2010). “edgeR: a Bioconductor package for differential expression analysis of digital gene expression data.” Bioinformatics, 26(1), 139-140. doi: 10.1093/bioinformatics/btp616.](10.1093/bioinformatics/btp616)
+
+### Contacts
+
+For this Nextflow pipeline: urmo.vosa at gmail.com.
