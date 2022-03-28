@@ -262,3 +262,7 @@ process RenderReport {
       Cont = ${contaminationarea}))'
       """
 }
+
+workflow.onComplete {
+    println ( workflow.success ? "Pipeline finished!" : "Something crashed...debug!" )
+}
