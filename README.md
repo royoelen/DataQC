@@ -73,7 +73,7 @@ There are three arguments which can be used to adjust certain outlier detection 
 
 Go to folder `dataqc` and modify the Slurm script template `submit_DataQc_pipeline_template.sh` with your input paths. This is an example template for Slurm scheduler:
 
-```
+```bash
 #!/bin/bash
 
 #SBATCH --time=48:00:00
