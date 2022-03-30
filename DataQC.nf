@@ -22,8 +22,8 @@ def helpMessage() {
       --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. Can be used to filter samples from the analysis.
       --exp_platform                Indicator indicating the gene expression platform. HT12v3, HT12v4, HuRef8, RNAseq, AffyU219, AffyHumanExon.
       --outdir                      Path to the output directory.
-      --Sthresh                     "Outlierness" score threshold for excluding ethnic outliers. Defaults to 0.4 but should be adjusted according to visual inspection.
-      --SDthresh                    Threshold for declaring samples outliers based on genetic PC1 and PC2. Defaults to 3 SD from the mean of PC1 and PC2 but should be adjusted according to visual inspection.
+      --GenOutThresh                "Outlierness" score threshold for excluding ethnic outliers. Defaults to 0.4 but should be adjusted according to visual inspection.
+      --GenSdThresh                 Threshold for declaring samples outliers based on genetic PC1 and PC2. Defaults to 3 SD from the mean of PC1 and PC2 but should be adjusted according to visual inspection.
       --ExpSdThresh                 Standard deviation threshold for excluding gene expression outliers. By default, samples away by 3 SDs from the mean of PC1 are removed.
       --ContaminationArea           Area that marks likely contaminated samples based on sex chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function.
 
@@ -40,31 +40,37 @@ params.report_template = "$baseDir/bin/Report_template.Rmd"
 Channel
     .from(params.bfile)
     .map { study -> [file("${study}.bed"), file("${study}.bim"), file("${study}.fam")]}
+    .ifEmpty { exit 1, "Input genotype files not found!" }
     .set { bfile_ch }
 
 Channel
     .from(params.expfile)
     .map { study -> [file("${study}")]}
+    .ifEmpty { exit 1, "Input expression files not found!" }
     .set { expfile_ch }
 
 Channel
     .from(params.gte)
     .map { study -> [file("${study}")]}
+    .ifEmpty { exit 1, "Input GTE file not found!" }
     .into { gte_ch_gen; gte_ch_exp }
 
 Channel
     .fromPath(params.report_template)
+    .ifEmpty { exit 1, "Input report not found!" }
     .set { report_ch }
 
 params.pruned_variants_sex_check = ''
 
-params.Sthresh = 0.4
-params.SDthresh = 3
+params.GenOutThresh = 0.4
+params.GenSdThresh = 3
 params.ExpSdThresh = 4
 params.ContaminationArea = 30
 params.exp_platform = ''
 params.cohort_name = ''
 params.outdir = ''
+
+
 
 // Header log info
 log.info """=======================================================
@@ -74,8 +80,8 @@ def summary = [:]
 summary['Pipeline Name']            = 'DataQC'
 summary['Pipeline Version']         = workflow.manifest.version
 summary['PLINK bfile']              = params.bfile
-summary['S threshold']              = params.Sthresh
-summary['Gen SD threshold']         = params.SDthresh
+summary['S threshold']              = params.GenOutThresh
+summary['Gen SD threshold']         = params.GenSdThresh
 summary['Exp SD threshold']         = params.ExpSdThresh
 summary['Contamination area']       = params.ContaminationArea
 summary['Expression matrix']        = params.expfile
@@ -106,8 +112,8 @@ process GenotypeQC {
     input:
       set file(bfile), file(bim), file(fam) from bfile_ch
       file gte from gte_ch_gen
-      val s_stat from params.Sthresh
-      val sd_thresh from params.SDthresh
+      val s_stat from params.GenOutThresh
+      val sd_thresh from params.GenSdThresh
       val optional_pruned_variants_sex_check from params.pruned_variants_sex_check
 
     output:
@@ -232,8 +238,8 @@ process RenderReport {
       path output_exp from output_ch_geneexpression
       path report from report_ch
       val exp_platform from params.exp_platform
-      val stresh from params.Sthresh
-      val sdtresh from params.SDthresh
+      val stresh from params.GenOutThresh
+      val sdtresh from params.GenSdThresh
       val expsdtresh from params.ExpSdThresh
       val contaminationarea from params.ContaminationArea
 
