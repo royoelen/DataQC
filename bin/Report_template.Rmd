@@ -147,7 +147,7 @@ Here we conduct PCA on the genotypes of eQTL samples only and investigate if the
 
 #### Outlier samples
 
-On the next plot you can see the distribution of Probabilistic Local Outlier Factor "outlierness" statistic ([Kriegel et al., 2009](https://dl.acm.org/doi/10.1145/1645953.1646195), [Privé et al., 2020](https://academic.oup.com/bioinformatics/article/36/16/4449/5838185)), based on which the samples are declared genetic outliers and removed from the analysis. You should check based on the histogram if the default value is appropriate. If not, adjust it in the pipeline argument and re-run.
+On the next plot you can see the distribution of Probabilistic Local Outlier Factor "outlierness" statistic ([Kriegel et al., 2009](https://dl.acm.org/doi/10.1145/1645953.1646195), [Privé et al., 2020](https://academic.oup.com/bioinformatics/article/36/16/4449/5838185)), based on which the samples are declared genetic outliers and removed from the analysis. You should check based on the histogram if the default value is appropriate. If not, adjust it in the pipeline argument `--GenOutThresh` and re-run.
 
 If you observe bimodal distribution on the histogram then it might indicate substratification in the genotype data. Check the following section, Figure 4 and 5. 
 
@@ -157,11 +157,11 @@ On the next two plots we visualise genetic principal components to check if gene
 
 If the pipline removes unreasonably large fraction of the samples, there are multiple courses of action to consider:
 
-1. If you observe clusters with limited numbers of samples (e.g. N<500) and a clear separation based on PC1 or PC2, you can consider using the data as it is: first genetic PCs will be used as covariates in the meta-analysis and such batch effects will be mostly accounted for. In that case, you should re-run the `DataQC` pipeline with large SD value, e.g. `--SDthresh 10`, to keep all the data in.
+1. If you observe clusters with limited numbers of samples (e.g. N<500) and a clear separation based on PC1 or PC2, you can consider using the data as it is: first genetic PCs will be used as covariates in the meta-analysis and such batch effects will be mostly accounted for. In that case, you should re-run the `DataQC` pipeline with large SD value, e.g. `--GenSdThresh 10`, to keep all the data in.
 
 2. If you have multiple batches with many samples (N>500), you might consider splitting the data based on genotyping batch and re-running `DataQC` and all following pipelines on those batches.
 
-If the pipelines does not remove all clear outlier samples, adjust `--SDthresh` threshold accordingly, to remove small fraction of clearly deviating samples.
+If the pipelines does not remove all clear outlier samples, adjust `--GenSdThresh` threshold accordingly, to remove small fraction of clearly deviating samples.
 
 In case of doubt please contact the lead analysts for advice and we will investigate further.
 
