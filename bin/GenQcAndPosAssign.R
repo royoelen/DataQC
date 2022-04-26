@@ -463,13 +463,13 @@ if (length(related_individuals) > 0) {
     degrees_named <- degree(relatedness_graph)
 
     # Get the vertex with the least amount of degrees (edges)
-    # Prioritize vertexes which are in genotype-to-expression file
+    least_vertex_samples <- names(degrees_named)[min(degrees_named) == degrees_named]
 
-    related_vertexes <- names(degrees_named)[min(degrees_named) == degrees_named]
-    if (length(related_vertexes[related_vertexes %in% gte$V1]) > 0){
-      curr_vertex <- related_vertexes[related_vertexes %in% gte$V1][1] # if there are multiple related sample IDs from GTE, then take just first 
+    # Prioritize vertexes which are in genotype-to-expression file
+    if (length(least_vertex_samples[least_vertex_samples %in% gte$V1]) > 0){
+      curr_vertex <- least_vertex_samples[least_vertex_samples %in% gte$V1][1] # if there are multiple related sample IDs from GTE, then take just first 
     } else {
-      curr_vertex <- names(degrees_named)[min(degrees_named) == degrees_named][1]
+      curr_vertex <- least_vertex_samples[1]
     }
 
     # Get all vertices that have an edge with curr_vertex
