@@ -69,16 +69,20 @@ message("Read in target data.")
 target_bed <- bed(args$target_bed)
 summary_table <- data.frame(stage = "Raw file", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow)
 
-## Keep in only samples which are present in genotype-to-expression file
+## Keep in only samples which are present in genotype-to-expression file AND additional up to 5000 samples (better phasing)
 gte <- fread(args$gen_exp, sep = "\t", header = FALSE)
-samples_to_include_gte <- data.frame(FID = target_bed$.fam$family.ID, IID = target_bed$.fam$sample.ID)
-samples_to_include_gte <- samples_to_include_gte[samples_to_include_gte$IID %in% gte$V1, ]
+fam <- data.frame(FID = target_bed$.fam$family.ID, IID = target_bed$.fam$sample.ID)
+samples_to_include_gte <- fam[fam$IID %in% gte$V1, ]
+# Here add up to 5000 samples which are not already included
+add_samples <- sample(fam[!fam$IID %in% samples_to_include_gte$IID, ]$IID, 5000)
+fam2 <- fam[fam$IID %in% add_samples, ]
+samples_to_include <- rbind(samples_to_include_gte, fam2)
 
-fwrite(samples_to_include_gte, "SamplesToIncludeGte.txt", sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
-# Remove samples not in GTE
-system(paste0("plink/plink2 --bfile ", bed_simplepath, " --output-chr 26 --keep SamplesToIncludeGte.txt --make-bed --threads 4 --out ", bed_simplepath, "_filtered"))
+fwrite(samples_to_include, "SamplesToInclude.txt", sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
+# Remove samples not in GTE + 5k samples
+system(paste0("plink/plink2 --bfile ", bed_simplepath, " --output-chr 26 --keep SamplesToInclude.txt --make-bed --threads 4 --out ", bed_simplepath, "_filtered"))
 
-temp_QC <- data.frame(stage = "Samples in genotype-to-expression file", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include_gte))
+temp_QC <- data.frame(stage = "Samples in genotype-to-expression file + 5000", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include))
 summary_table <- rbind(summary_table, temp_QC)
 
 # Do SNP and sample missingness QC on raw genotype bed
@@ -151,8 +155,6 @@ if (23 %in% sex_check_data_set_chromosomes) {
                 " --rm-dup 'exclude-mismatch' --indep-pairwise 20000 200 0.2 --out check_sex_x"))
   ## Sex check
   system(paste0("plink/plink --bfile ", bed_simplepath, "_split --extract check_sex_x.prune.in --check-sex"))
-
-  #stop("check output")
 
   ## If there is sex info in the fam file for all samples then remove samples which fail the sex check or genotype-based F is >0.2 & < 0.8
   sexcheck <- fread("plink.sexcheck")
@@ -437,7 +439,7 @@ print(related)
 related_individuals <- unique(c(related$IID1, related$IID2))
 
 # If there are related samples, find the samples that should be removed so that the maximum set of samples remains,
-# but that also garantees that no relatedness remains.
+# but that also guarantees that no relatedness remains.
 if (length(related_individuals) > 0) {
 
   # Define a graph wherein each relation depicts an edge between vertices (samples)
@@ -445,6 +447,7 @@ if (length(related_individuals) > 0) {
     as.matrix(related[,c("IID1", "IID2")]),
     directed = F)
 
+  # For final version: do not write out, here are original sample IDs
   pdf(paste0(args$output, "/gen_plots/relatedness.pdf"))
   plot(relatedness_graph)
   dev.off()
@@ -460,7 +463,14 @@ if (length(related_individuals) > 0) {
     degrees_named <- degree(relatedness_graph)
 
     # Get the vertex with the least amount of degrees (edges)
-    curr_vertex <- names(degrees_named)[min(degrees_named) == degrees_named][1]
+    # Prioritize vertexes which are in genotype-to-expression file
+
+    related_vertexes <- names(degrees_named)[min(degrees_named) == degrees_named]
+    if (length(related_vertexes[related_vertexes %in% gte$V1]) > 0){
+      curr_vertex <- related_vertexes[related_vertexes %in% gte$V1][1] # if there are multiple related sample IDs from GTE, then take just first 
+    } else {
+      curr_vertex <- names(degrees_named)[min(degrees_named) == degrees_named][1]
+    }
 
     # Get all vertices that have an edge with curr_vertex
     related_vertices <- names(relatedness_graph[curr_vertex][relatedness_graph[curr_vertex] > 0])
@@ -606,9 +616,6 @@ fwrite(PCsQ, paste0(args$output, "/gen_PCs/GenotypePCs.txt"), row.names = TRUE, 
 plot(target_pca_qcd, type = "loadings", loadings = 1:10, coeff = 0.6)
 ggsave(paste0(args$output, "/gen_plots/Target_PCs_postQC_Loadings.png"), type = "cairo", height = (5 * 7) * 0.7, width = (5 * 7) * 0.7, units = "in", dpi = 300)
 
-# Write out final summary
-fwrite(summary_table, paste0(args$output, "/gen_data_summary/summary_table.txt"), sep = "\t", quote = FALSE)
-
 # Reorder the samples and write out the sample file
 message("Shuffle sample order.")
 rows <- sample(nrow(samples_to_include))
@@ -626,3 +633,12 @@ system(paste0("mv ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputati
 args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.bim"))
 system(paste0("mv ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp.fam ",
 args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.fam"))
+
+# Count samples in overlapping with GTE
+final_samples <- fread(paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.fam"), header = FALSE)
+
+temp_QC <- data.frame(stage = "QCd samples overlapping with genotype-to-expression file", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(final_samples[final_samples$V1 %in% gte$V1, ]))
+summary_table <- rbind(summary_table, temp_QC)
+
+# Write out final summary
+fwrite(summary_table, paste0(args$output, "/gen_data_summary/summary_table.txt"), sep = "\t", quote = FALSE)
