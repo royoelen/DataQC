@@ -74,7 +74,7 @@ gte <- fread(args$gen_exp, sep = "\t", header = FALSE)
 fam <- data.frame(FID = target_bed$.fam$family.ID, IID = target_bed$.fam$sample.ID)
 samples_to_include_gte <- fam[fam$IID %in% gte$V1, ]
 # Here add up to 5000 samples which are not already included
-add_samples <- sample(fam[!fam$IID %in% samples_to_include_gte$IID, ]$IID, 5000)
+add_samples <- sample(fam[!fam$IID %in% samples_to_include_gte$IID, ]$IID, min(5000, nrow(fam[!fam$IID %in% samples_to_include_gte$IID, ])))
 fam2 <- fam[fam$IID %in% add_samples, ]
 samples_to_include <- rbind(samples_to_include_gte, fam2)
 
