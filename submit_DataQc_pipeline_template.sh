@@ -31,6 +31,7 @@ output_path=../output # Output path, can be kept as is
 # --GenSdThresh [numeric threshold]
 # --ExpSdThresh [numeric threshold]
 # --ContaminationArea [number between 0 and 90, default 30]
+# --ExclusionList [file with the list of samples to remove from the analysis]
 
 # Command:
 NXF_VER=21.10.6 ${nextflow_path}/nextflow run DataQC.nf \

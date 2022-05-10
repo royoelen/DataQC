@@ -80,7 +80,7 @@ Here we project your genotype samples into 1000G p3v5 superpopulations to check 
 1. If you observe a few samples which are different ancestry compared to the majority of samples (e.g. majority of the samples are of EUR ancestry and there are few samples from AFR or SAS), then remove ancestry outliers and re-run the DataQc pipeline without those samples.
 2. If you observe many (>100) samples which are different ancestry compared to the majority of samples (your dataset consists of individuals from several ancestries) then please split your genotype data based on ancestry and rerun this and following pipelines on those datasets separately.
 
-The file `AssignedPopulations.txt` and `1000G_PC_projections.txt` has been written to the your output folder under `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. Easiest is to make another genotype-to-expression (gte) file which has those samples removed and rerun the pipeline with new gte. You can also use plink/plink 1.9/plink 2.0 to filter samples from initial .bed/.bim/.fam files.
+The files `AssignedPopulations.txt` and `1000G_PC_projections.txt` have been written to the your output folder under folder `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. Please use optional `--ExclusionList` and specify the file with the list of samples you want to withhold from this dataset.
 
 ![**Fig 2. Genotype samples projected to 1000G superpopulations.** First two plots show only target dataset in the 1000G PC space. Rest of the plots visualise target dataset, as well as samples from 1000G superpopulations by plotting first 10 genotype PCs.](outputfolder_gen/gen_plots/SamplesPCsProjectedTo1000G.png)  
 
@@ -138,7 +138,7 @@ Again, please follow the following instructions:
 1. If you observe a few samples which are different ancestry compared to the majority of samples (e.g. majority of the samples are of EUR ancestry and there are few samples from AFR or SAS), then remove ancestry outliers and re-run the DataQc pipeline without those samples.
 2. If you observe many (>100) samples which are different ancestry compared to the majority of samples (your dataset consists of individuals from several ancestries) then please split your genotype data, based on ancestry and rerun this and following pipelines on those datasets separately. This assumes that you know the ancestry information for your genotype data.
 
-The file `AssignedPopulations.txt` and `1000G_PC_projections.txt` has been written to the your output folder under `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. Easiest is to make another genotype-to-expression (gte) file which has those samples removed and rerun the pipeline with new gte. You can also use plink/plink 1.9/plink 2.0 to filter samples from initial .bed/.bim/.fam files.
+The files `AssignedPopulations.txt` and `1000G_PC_projections.txt` have been written to the your output folder under folder `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. Please use optional `--ExclusionList` and specify the file with the list of samples you want to withhold from this dataset.
 
 
 ### Individual genetic outliers in the target population
