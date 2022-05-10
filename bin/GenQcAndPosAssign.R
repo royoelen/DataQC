@@ -27,7 +27,9 @@ option_list <- list(
     make_option(c("-S", "--S_threshold"), default = 0.4,
     help = "Numeric threshold to declare samples outliers, based on the genotype PCs. Defaults to 0.4 but should always be visually checked and changed, if needed."),
     make_option(c("-d", "--SD_threshold"), default = 0.4,
-    help = "Numeric threshold to declare samples outliers, based on the genotype PCs. Defaults to 0.4 but should always be visually checked and changed, if needed.")
+    help = "Numeric threshold to declare samples outliers, based on the genotype PCs. Defaults to 0.4 but should always be visually checked and changed, if needed."),
+    make_option(c("-e", "--exclusion_list"), type = "character",
+    help = "Path to the file listing samples to exclude."),
     )
 
 parser <- OptionParser(usage = "%prog [options] file", option_list = option_list)
@@ -45,6 +47,7 @@ print(args$pruned_variants_sex_check)
 print(args$output)
 print(args$S_threshold)
 print(args$SD_threshold)
+print(args$exclusion_list)
 
 bed_simplepath <- stringr::str_replace(args$target_bed, ".bed", "")
 
@@ -78,12 +81,23 @@ add_samples <- sample(fam[!fam$IID %in% samples_to_include_gte$IID, ]$IID, min(5
 fam2 <- fam[fam$IID %in% add_samples, ]
 samples_to_include <- rbind(samples_to_include_gte, fam2)
 
+temp_QC <- data.frame(stage = "Samples in genotype-to-expression file + 5000", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include))
+summary_table <- rbind(summary_table, temp_QC)
+
+# Keep in only samples which are in the inclusion list
+if (args$exclusion_list != ""){
+exc_list <- fread(args$exclusion_list, header = FALSE)
+samples_to_include <- samples_to_include[!samples_to_include$IID %in% exc_list, ]
+}
+
 fwrite(samples_to_include, "SamplesToInclude.txt", sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
+
+temp_QC <- data.frame(stage = "Samples after removing exclusion list", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include))
+summary_table <- rbind(summary_table, temp_QC)
+
 # Remove samples not in GTE + 5k samples
 system(paste0("plink/plink2 --bfile ", bed_simplepath, " --output-chr 26 --keep SamplesToInclude.txt --make-bed --threads 4 --out ", bed_simplepath, "_filtered"))
 
-temp_QC <- data.frame(stage = "Samples in genotype-to-expression file + 5000", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include))
-summary_table <- rbind(summary_table, temp_QC)
 
 # Do SNP and sample missingness QC on raw genotype bed
 message("Do SNP and genotype QC.")
