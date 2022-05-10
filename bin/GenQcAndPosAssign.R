@@ -28,8 +28,10 @@ option_list <- list(
     help = "Numeric threshold to declare samples outliers, based on the genotype PCs. Defaults to 0.4 but should always be visually checked and changed, if needed."),
     make_option(c("-d", "--SD_threshold"), default = 0.4,
     help = "Numeric threshold to declare samples outliers, based on the genotype PCs. Defaults to 0.4 but should always be visually checked and changed, if needed."),
+    make_option(c("-i", "--inclusion_list"), type = "character",
+    help = "Path to the file with sample IDs to include."),
     make_option(c("-e", "--exclusion_list"), type = "character",
-    help = "Path to the file listing samples to exclude."),
+    help = "Path to the file with sample IDs to exclude. This also removes samples from inclusion list.")
     )
 
 parser <- OptionParser(usage = "%prog [options] file", option_list = option_list)
@@ -72,14 +74,23 @@ message("Read in target data.")
 target_bed <- bed(args$target_bed)
 summary_table <- data.frame(stage = "Raw file", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow)
 
+fam <- data.frame(FID = target_bed$.fam$family.ID, IID = target_bed$.fam$sample.ID)
+
+## If specified, keep in only samples which are in the sample whitelist
+if (args$inclusion_list != ""){
+inc_list <- fread(args$inclusion_list, header = FALSE)
+samples_to_include <- samples_to_include[samples_to_include$IID %in% inc_list, ]
+}
+
 ## Keep in only samples which are present in genotype-to-expression file AND additional up to 5000 samples (better phasing)
 gte <- fread(args$gen_exp, sep = "\t", header = FALSE)
-fam <- data.frame(FID = target_bed$.fam$family.ID, IID = target_bed$.fam$sample.ID)
+
 samples_to_include_gte <- fam[fam$IID %in% gte$V1, ]
 # Here add up to 5000 samples which are not already included
 add_samples <- sample(fam[!fam$IID %in% samples_to_include_gte$IID, ]$IID, min(5000, nrow(fam[!fam$IID %in% samples_to_include_gte$IID, ])))
 fam2 <- fam[fam$IID %in% add_samples, ]
-samples_to_include <- rbind(samples_to_include_gte, fam2)
+samples_to_include_temp <- rbind(samples_to_include_gte, fam2)
+samples_to_include <- samples_to_include[samples_to_include$IID %in% samples_to_include_temp$IID, ]
 
 temp_QC <- data.frame(stage = "Samples in genotype-to-expression file + 5000", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include))
 summary_table <- rbind(summary_table, temp_QC)

@@ -29,7 +29,8 @@ def helpMessage() {
  
     Optional arguments
       --pruned_variants_sex_check   Path to a plink ranges file that defines which variants to use for the check-sex command. Use this when the automatic selection does not yield satisfactory results.
-      --ExclusionList               File with sample IDs to remove from the analysis. Useful for removing the ancestry outliers or restricting the genotype data to one superpopulation. By default, all samples are kept.
+      --InclusionList               File with sample IDs to restrict to the analysis. Useful for keeping in the inclusion list of the samples. By default, all samples are kept.
+      --ExclusionList               File with sample IDs to remove from the analysis. Useful for removing the ancestry outliers or restricting the genotype data to one superpopulation. Samples are also removed from the inclusion list. By default, all samples are kept.
 
     """.stripIndent()
 }
@@ -71,6 +72,7 @@ params.cohort_name = ''
 params.outdir = ''
 
 params.pruned_variants_sex_check = ''
+params.InclusionList = ''
 params.ExclusionList = ''
 
 
@@ -93,7 +95,8 @@ summary['Max CPUs']                 = params.max_cpus
 summary['Max Time']                 = params.max_time
 summary['Cohort name']              = params.cohort_name
 if(params.pruned_variants_sex_check) summary['Pruned variants for sex check'] = params.pruned_variants_sex_check
-if(params.ExclusionList) summary['Pruned variants for sex check'] = params.ExclusionList
+if(params.InclusionList) summary['Inclusion list'] = params.InclusionList
+if(params.ExclusionList) summary['Exclusion list'] = params.ExclusionList
 summary['Expression platform']      = params.exp_platform
 summary['Output dir']               = params.outdir
 summary['Working dir']              = workflow.workDir
@@ -119,6 +122,7 @@ process GenotypeQC {
       val sd_thresh from params.GenSdThresh
       val optional_pruned_variants_sex_check from params.pruned_variants_sex_check
       val ExclusionList from params.ExclusionList
+      val InclusionList from params.InclusionList
 
     output:
       path ('outputfolder_gen') into output_ch_genotypes
@@ -133,7 +137,8 @@ process GenotypeQC {
       --pops $baseDir/data/1000G_pops.txt \
       --S_threshold ${s_stat} \
       --SD_threshold ${sd_thresh} \
-      --exclusion_list "${ExclusionList}"
+      --inclusion_list "${InclusionList}" \
+      --exclusion_list "${ExclusionList}" \
       --output outputfolder_gen \
       --pruned_variants_sex_check "${optional_pruned_variants_sex_check}"
       """

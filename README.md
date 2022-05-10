@@ -48,7 +48,7 @@ Or just download this from the gitlab/github download link and unzip.
 
 ### Input files
 
-- Unimputed genotype file in plink .bed format (https://www.cog-genomics.org/plink/1.9/input#bed). Genome build to be in **hg19**. It is advisable that .fam file also includes observed sex for all samples (format: males=1, females=2), so that pipeline does extra check on that. However, if this information is not available for all samples, pipeline just skips this check.
+- Unimputed genotype file in plink .bed format (https://www.cog-genomics.org/plink/1.9/input#bed). Genome build to be in **hg19**. It is advisable that .fam file also includes observed sex for all samples (format: males=1, females=2), so that pipeline does extra check on that. However, if this information is not available for all samples, pipeline just skips this check. Input path has to be without .bed/.bim/.fam extension.
 - Raw, unprocessed gene expression matrix. Tab-delimited file, genes/probes in the rows, samples in the columns.
     - First column has header "-".
     - For Illumina arrays, probe ID has to be Illumina ArrayAddress.
@@ -58,7 +58,7 @@ Or just download this from the gitlab/github download link and unzip.
 
 ### Additional settings
 
-There are three arguments which can be used to adjust certain outlier detection thresholds. These should be adjusted after initial run with the default settings and after investigating the diagnostic plots in the `Report_DataQc_[cohort name].html`. Then the pipeline should be re-run with adjusted settings.
+There are five arguments which can be used to adjust certain outlier detection thresholds. These should be adjusted after initial run with the default settings and after investigating the diagnostic plots in the `Report_DataQc_[cohort name].html`. Then the pipeline should be re-run with adjusted settings.
 
 `--GenOutThresh` Threshold for declaring genotype sample genetic outlier, based on LOF "outlierness" metric. Default is 0.4.
 
@@ -67,6 +67,12 @@ There are three arguments which can be used to adjust certain outlier detection 
 `--ExpSdThresh` Threshold for declaring expression sample outlier, based on the deviation from the means of first two expression PCs. Defaults to 4 SD from the mean.
 
 `--ContaminationArea` Threshold for declaring samples as contaminated on XIST vs Y-chr gene expression plot. Defaults to 30 degrees, meaning that samples which have high expression of both, X-chr and Y-chr genes are likely contaminated.
+
+Optional arguments:
+
+`--InclusionList` File with the genotype IDs to keep in the analysis (one per row). Useful for e.g. keeping in only the samples which have part of the biobank, etc. By default, pipeline keeps all samples in.
+
+`--ExclusionList` File with the genotype IDs to remove from the analysis (one per row). Useful for removing part of the samples from the analysis if these are from different ancestry. In case of the overlap between inclusion list and exclusion list, intersect is kept in the analysis.
 
 
 ### Running the data QC command
@@ -83,7 +89,6 @@ Go to folder `dataqc` and modify the Slurm script template `submit_DataQc_pipeli
 #SBATCH --mail-type=BEGIN
 #SBATCH --mail-type=END
 #SBATCH --mail-type=FAIL
-#SBATCH --mail-user=[your e-mail@email.com]
 #SBATCH --job-name="DataQc"
 
 # These are needed modules in UT HPC to get singularity and Nextflow running. Replace with appropriate ones for your HPC.
@@ -92,20 +97,23 @@ module load singularity/3.5.3
 module load squashfs/4.4
 
 # Define paths
-nextflow_path=[full path to your Nextflow executable]
+# If you follow eQTLGen phase II cookbook, you can use some provided default paths
 
-geno_path=[full path to your input genotype folder]
-exp_path=[full path to your raw gene expression matrix]
+nextflow_path=../../tools # folder where Nextflow executable is
+
+geno_path=[full path to your input genotype file without bed/bim/fam extension]
+exp_path=[full path to your gene expression matrix]
 gte_path=[full path to your genotype-to-expression file]
-exp_platform=[expression platform name e.g. HT12v3 or RNAseq]
+exp_platform=[expression platform name: HT12v3/HT12v4/HuRef8/RNAseq/AffyU219/AffyHumanExon]
 cohort_name=[name of the cohort]
-output_path=[name of the output path]
+output_path=../output # Output path, can be kept as is
 
 # Optional arguments for the command
 # --GenOutThresh [numeric threshold]
 # --GenSdThresh [numeric threshold]
 # --ExpSdThresh [numeric threshold]
-# --ContaminationArea [numeric threshold]
+# --ContaminationArea [number between 0 and 90, default 30]
+# --ExclusionList [file with the list of samples to remove from the analysis]
 
 # Command:
 NXF_VER=21.10.6 ${nextflow_path}/nextflow run DataQC.nf \
@@ -117,6 +125,7 @@ NXF_VER=21.10.6 ${nextflow_path}/nextflow run DataQC.nf \
 --outdir ${output_path}  \
 -profile slurm,singularity \
 -resume
+
 ```
 
 You can save the modified script version to informative name, e.g. `submit_DataQc_[**CohortName_PlatformName**].sh`.
