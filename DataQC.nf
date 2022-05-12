@@ -63,6 +63,7 @@ Channel
     .ifEmpty { exit 1, "Input report not found!" }
     .set { report_ch }
 
+
 params.GenOutThresh = 0.4
 params.GenSdThresh = 3
 params.ExpSdThresh = 4
@@ -71,10 +72,10 @@ params.exp_platform = ''
 params.cohort_name = ''
 params.outdir = ''
 
-params.pruned_variants_sex_check = ''
 params.InclusionList = ''
 params.ExclusionList = ''
 
+params.pruned_variants_sex_check = ''
 
 // Header log info
 log.info """=======================================================

@@ -51,7 +51,9 @@ knitr::kable(overview_table)
 `r if(!file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\begin{comment}"}`
 Next plot summarises the genetically determined sex of the input samples. Samples which have unclear genetic sex (X chr heterozygosity >0.2 and <0.8) and hence might be contaminated, are removed. If reported sex is indicated in the input `.fam` file, this is also compared with genetic sex and problematic samples (potential mixups) are automatically excluded.
 
-You can investigate the file `[your output folder]/outputfolder_gen/gen_data_QCd/SexCheck.txt` to see which samples failed the sex check.
+`r nrow(fread("outputfolder_gen/gen_data_QCd/SexCheckFailed.txt"))` samples failed genotype check and were removed.
+
+You can investigate the file `[your output folder]/outputfolder_gen/gen_data_QCd/SexCheckFailed.txt` to see which samples failed the sex check.
 
 ![**Fig 1. Distribution of F-values representing X chromosome heterozygosity.** Genetically determined sex thresholds are shown as vertical lines. Samples with the F-value between those two lines are potentially contaminated samples and are automatically excluded.](outputfolder_gen/gen_plots/SexCheck.png)
 
@@ -131,14 +133,14 @@ fwrite(res, "outputfolder_gen/gen_data_summary/AssignedPopulations.txt", sep = "
 
 `r nrow(res[res$SamplePopAssign == "AFR",])` samples in the data are most similar to AFR superpopulation.
 
-`r res %>% filter(Confidence != "confident") %>% nrow()` samples assignement to the data is not very confident (<2 times difference with second most similar superpopulation).
+`r res %>% filter(Confidence != "confident") %>% nrow()` samples assignment to the data is not very confident (<2 fold difference with second most similar superpopulation).
 
 Again, please follow the following instructions:
 
 1. If you observe a few samples which are different ancestry compared to the majority of samples (e.g. majority of the samples are of EUR ancestry and there are few samples from AFR or SAS), then remove ancestry outliers and re-run the DataQc pipeline without those samples.
 2. If you observe many (>100) samples which are different ancestry compared to the majority of samples (your dataset consists of individuals from several ancestries) then please split your genotype data, based on ancestry and rerun this and following pipelines on those datasets separately. This assumes that you know the ancestry information for your genotype data.
 
-The files `AssignedPopulations.txt` and `1000G_PC_projections.txt` have been written to the your output folder under folder `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. Please use optional `--ExclusionList` and specify the file with the list of samples you want to withhold from this dataset.
+The files `AssignedPopulations.txt` and `1000G_PC_projections.txt` have been written to the your output folder under folder `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. Please use optional `--ExclusionList` and specify the file with the list of samples you want to withhold from this dataset. If the large majority of your cohort is from specific superpopulation (e.g. EUR) but you observe a small number of samples which are not confidently assigned to this superpopulation (<2 fold difference with second most similar superpopulation), you can remove those too.
 
 
 ### Individual genetic outliers in the target population
@@ -147,7 +149,7 @@ Here we conduct PCA on the genotypes of eQTL samples only and investigate if the
 
 #### Outlier samples
 
-On the next plot you can see the distribution of Probabilistic Local Outlier Factor "outlierness" statistic ([Kriegel et al., 2009](https://dl.acm.org/doi/10.1145/1645953.1646195), [Privé et al., 2020](https://academic.oup.com/bioinformatics/article/36/16/4449/5838185)), based on which the samples are declared genetic outliers and removed from the analysis. Use the histogram to check if the default value is appropriate. If not, adjust it in the pipeline argument `--GenOutThresh` and re-run the pipeline.
+On the next plot you can see the distribution of Probabilistic Local Outlier Factor "outlierness" statistic ([Kriegel et al., 2009](https://dl.acm.org/doi/10.1145/1645953.1646195), [Privé et al., 2020](https://academic.oup.com/bioinformatics/article/36/16/4449/5838185)), based on which the samples are declared genetic outliers and removed from the analysis. Use the histogram to check if the default value is appropriate. If there si long tail to the right, please adjust the default value in the pipeline argument `--GenOutThresh` and re-run the pipeline. Threshold should be selected so that there are no clear outliers on the panes of *Fig. 6*.
 
 If you observe bimodal distribution on the histogram then it might indicate substratification in the genotype data. Check the following section, Figure 5 and 6. 
 

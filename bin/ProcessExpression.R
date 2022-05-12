@@ -1,664 +1,714 @@
-library(data.table)
-library(preprocessCore)
-library(edgeR)
+#!/usr/bin/env Rscript
+
+library(bigsnpr)
+library(dplyr)
 library(ggplot2)
+library(data.table)
 library(optparse)
 library(patchwork)
-library(MASS)
-library(dplyr)
-
-setDTthreads(8)
+library(stringr)
+library(rmarkdown)
+library(Cairo)
+library(igraph)
 
 # Argument parser
 option_list <- list(
-    make_option(c("-e", "--expression_matrix"), type = "character",
-    help = "Unprocessed gene expression matrix from array or RNA-seq experiment. Samples in columns, genes/probes in the rows."),
-    make_option(c("-l", "--genotype_to_expression_linking"), type = "character",
-    help = "Genotype-to-expression linking file. No header. First column- sample IDs in the genotype file, second column- corresponding sample IDs in the gene expression matrix."),
-    make_option(c("-p", "--platform"), type = "character",
-    help = "Gene expression platform. This determines the normalization method and replaces probes with best-matching genes based on empirical probe mapping. One of: HT12v3, HT12v4, HuRef8, RNAseq, AffyU219, AffyHumanExon."),
-    make_option(c("-m", "--emp_probe_mapping"), type = "character",
-    help = "Empirical probe matching file. Used to link the best array probe to each blood-expressed gene."),
-    make_option(c("-s", "--sd"), type = "double", default = 4,
-    help = "Standard deviation threshold for removing expression samples. By default, samples away 4 SDs from the median of PC1 are removed."),
-    make_option(c("-c", "--contamination_area"), type = "double", default = 0.3,
-                help = "Area that marks likely contaminated samples based on sex-chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function."),
-    make_option(c("-i", "--sex_info"), type = "character",
-    help = "File with sex information. Plink2 --check-sex filtered output."),
-    make_option(c("-f", "--geno_filter"), type = "character",
-    help = "File with filtered genotype samples. Plink fam file."),
-    make_option(c("-o", "--output"), type = "character",
-    help = "Output folder where to put preprocessed data matrix, expression PCs, etc.")
+    make_option(c("-t", "--target_bed"), type = "character",
+    help = "Name of the target genotype file (bed/bim/fam format). Required file extension: .bed."),
+    make_option(c("-g", "--gen_exp"), type = "character",
+    help = "Tab-delimited genotype-to-expression sample ID linking file."),
+    make_option(c("-s", "--sample_list"), type = "character",
+    help = "Path to the file listing unrelated samples for reference data (tab-delimited .txt)."),
+    make_option(c("-p", "--pops"), type = "character",
+    help = "Path to the file indicating the population for each sample in reference data."),
+    make_option(c("-a", "--pruned_variants_sex_check"), type = "character",
+    help = "Path to a file with pruned X-chromosome variants to use in the sex check"),
+    make_option(c("-o", "--output"), type = "character", help = "Folder with all the output files."),
+    make_option(c("-S", "--S_threshold"), default = 0.4,
+    help = "Numeric threshold to declare samples outliers, based on the genotype PCs. Defaults to 0.4 but should always be visually checked and changed, if needed."),
+    make_option(c("-d", "--SD_threshold"), default = 0.4,
+    help = "Numeric threshold to declare samples outliers, based on the genotype PCs. Defaults to 0.4 but should always be visually checked and changed, if needed."),
+    make_option(c("-i", "--inclusion_list"), type = "character",
+    help = "Path to the file with sample IDs to include."),
+    make_option(c("-e", "--exclusion_list"), type = "character",
+    help = "Path to the file with sample IDs to exclude. This also removes samples from inclusion list.")
     )
 
 parser <- OptionParser(usage = "%prog [options] file", option_list = option_list)
 args <- parse_args(parser)
 
-# Debug
-print(args$expression_matrix)
-print(args$genotype_to_expression_linking)
-print(args$geno_filter)
-print(args$sex_info)
-print(args$platform)
-print(args$emp_probe_mapping)
-print(args$sd)
+# Remove the check of parallel blas
+options(bigstatsr.check.parallel.blas = FALSE)
+
+# Report settings
+print(args$target_bed)
+print(args$gen_exp)
+print(args$sample_list)
+print(args$pops)
+print(args$pruned_variants_sex_check)
 print(args$output)
+print(args$S_threshold)
+print(args$SD_threshold)
+print(args$exclusion_list)
+
+if (!is.numeric(args$S_threshold) | !is.numeric(args$SD_threshold) | !is.numeric(args$SD_threshold)){
+  message("Some of the QC thresholds is not numeric!")
+  stop()
+}
+
+
+bed_simplepath <- stringr::str_replace(args$target_bed, ".bed", "")
 
 # Make output folder structure
 dir.create(args$output)
-dir.create(paste0(args$output, "/exp_plots"))
-dir.create(paste0(args$output, "/exp_data_QCd"))
-dir.create(paste0(args$output, "/exp_PCs"))
-dir.create(paste0(args$output, "/exp_data_summary"))
+dir.create(paste0(args$output, "/gen_plots"))
+dir.create(paste0(args$output, "/gen_data_QCd"))
+dir.create(paste0(args$output, "/gen_PCs"))
+dir.create(paste0(args$output, "/gen_data_summary"))
 
-#############
-# functions #
-#############
-Z_transform <- function(x){
-    z <- (x - mean(x))/sd(x)
-    return(z)
-    }
+# Download plink2 executable
+download_plink2("plink", AVX2 = FALSE)
+# Download plink 1.9 executable
+download_plink("plink")
 
-center_data <- function(x){
-    z <- (x - mean(x))
-    return(z)
-    }
+# Download subsetted 1000G reference
+bedfile <- download_1000G("data")
 
-INT_transform <- function(x){
-    int <- qnorm((rank(x, na.last = "keep") - 0.5) / sum(!is.na(x)))
-    return(int)
-    }
+# Target data
+## Original file
+message("Read in target data.")
+target_bed <- bed(args$target_bed)
+# eQTL samples
+gte <- fread(args$gen_exp, sep = "\t", header = FALSE)
 
-comp_cv <- function(x){sd(x) / mean(x)}
-shap_test <- function(x){
-    if (length(unique(x)) > 1) {
-        return(shapiro.test(x)$p.value)
-    } else {
-        return(NA)
-    }
+summary_table <- data.frame(stage = "Raw file", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow, 
+Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]))
+
+fam <- data.frame(FID = target_bed$.fam$family.ID, IID = target_bed$.fam$sample.ID)
+
+
+## If specified, keep in only samples which are in the sample whitelist
+if (args$inclusion_list != ""){
+inc_list <- fread(args$inclusion_list, header = FALSE)
+samples_to_include <- fam[fam$IID %in% inc_list$V1, ]
+message("Sample inclusion filter active!")
+temp_QC <- data.frame(stage = "Samples in inclusion list", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include), 
+Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
+summary_table <- rbind(summary_table, temp_QC)
 }
 
-illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
-    # Leave in only probes for which there is empirical probe mapping info and convert data into matrix
-    emp <- fread(args$emp_probe_mapping)
-    emp <- emp[, c(1, 2), with = FALSE]
-    colnames(exp)[1] <- "Probe"
+## Keep in only samples which are present in genotype-to-expression file AND additional up to 5000 samples (better phasing)
 
-    exp$Probe <- as.character(exp$Probe)
-    emp$Probe <- as.character(emp$Probe)
+samples_to_include_gte <- fam[fam$IID %in% gte$V1, ]
+# Here add up to 5000 samples which are not already included
+add_samples <- sample(fam[!fam$IID %in% samples_to_include_gte$IID, ]$IID, min(5000, nrow(fam[!fam$IID %in% samples_to_include_gte$IID, ])))
+fam2 <- fam[fam$IID %in% add_samples, ]
+samples_to_include_temp <- rbind(samples_to_include_gte, fam2)
 
-    exp <- merge(exp, emp, by = "Probe")
-    exp <- as.data.frame(exp)
-    rownames(exp) <- exp[, ncol(exp)]
-    exp <- exp[, -ncol(exp)]
-    exp <- exp[, -1]
-    exp <- as.matrix(exp)
+if (nrow(samples_to_include) > 0){
+samples_to_include <- samples_to_include[samples_to_include$IID %in% samples_to_include_temp$IID, ]
+} else {samples_to_include <- samples_to_include_temp}
 
-    # Remove samples which are not in the gte or in genotype data
-    gte <- fread(args$genotype_to_expression_linking, header = FALSE)
-    gte$V1 <- as.character(gte$V1)
-    gte$V2 <- as.character(gte$V2)
+temp_QC <- data.frame(stage = "Samples in genotype-to-expression file + 5000", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include), 
+Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
+summary_table <- rbind(summary_table, temp_QC)
 
-    geno_fam <- fread(args$sex_info, header = TRUE)
-    gte <- gte[gte$V1 %in% geno_fam$IID,]
-    gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
-
-    message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
-
-    exp <- exp[, colnames(exp) %in% gte$V2]
-    exp <- exp[, base::order(colnames(exp))]
-    gte <- gte[base::order(gte$V2), ]
-
-    if(!all(colnames(exp) == gte$V2)){stop("Something went wrong in matching genotype and expression IDs. Please debug!")}
-    colnames(exp) <- gte$V1
-
-    if (normalize == TRUE){
-    # quantile normalization
-    exp_n <- normalize.quantiles(exp, copy = FALSE)
-    colnames(exp_n) <- colnames(exp)
-    rownames(exp_n) <- rownames(exp)
-    }else{exp_n <- exp}
-
-    # log2 transformation (not needed because INT is applied)
-    # and_n <- log2(and_n)
-    message(paste(ncol(exp_n), "samples in normalised expression matrix."))
-
-    return(exp_n)
+# Keep in only samples which are in the inclusion list
+if (args$exclusion_list != ""){
+exc_list <- fread(args$exclusion_list, header = FALSE)
+samples_to_include <- samples_to_include[!samples_to_include$IID %in% exc_list$V1, ]
+message("Sample exclusion filter active!")
 }
 
-RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE){
-    # Leave in only probes for which there is empirical probe mapping info and convert data into matrix
-    emp <- fread(args$emp_probe_mapping)
-    emp <- emp[, c(1, 2), with = FALSE]
-    colnames(exp)[1] <- "Probe"
+fwrite(samples_to_include, "SamplesToInclude.txt", sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
 
-    exp$Probe <- as.character(exp$Probe)
-    emp$Probe <- as.character(emp$Probe)
+temp_QC <- data.frame(stage = "Samples after removing exclusion list", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include), 
+Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
+summary_table <- rbind(summary_table, temp_QC)
 
-    exp <- merge(exp, emp, by = "Probe")
-    exp <- as.data.frame(exp)
-    rownames(exp) <- exp[, ncol(exp)]
-    exp <- exp[, -ncol(exp)]
-    exp <- exp[, -1]
-    exp <- abs(as.matrix(exp))
+# Remove samples not in GTE + 5k samples
+system(paste0("plink/plink2 --bfile ", bed_simplepath, " --output-chr 26 --keep SamplesToInclude.txt --make-bed --threads 4 --out ", bed_simplepath, "_filtered"))
 
-    # Remove samples which are not in the gte or in genotype data
-    gte <- fread(args$genotype_to_expression_linking, header = FALSE)
-    gte$V1 <- as.character(gte$V1)
-    gte$V2 <- as.character(gte$V2)
 
-    geno_fam <- fread(args$sex_info, header = TRUE)
-    gte <- gte[gte$V1 %in% geno_fam$IID,]
-    gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
+# Do SNP and sample missingness QC on raw genotype bed
+message("Do SNP and genotype QC.")
+snp_plinkQC(
+  plink.path = "plink/plink2",
+  prefix.in = paste0(bed_simplepath, "_filtered"),
+  prefix.out = paste0(bed_simplepath, "_QC"),
+  file.type = "--bfile",
+  maf = 0.01,
+  geno = 0.05,
+  mind = 0.05,
+  hwe = 1e-6,
+  autosome.only = FALSE,
+  extra.options = paste0("--output-chr 26 --not-chr 0 25-26 --set-all-var-ids ", r"(@:#[b37]\$r,\$a)"),
+  verbose = TRUE
+)
 
-    message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
+# Read in reference and target genotype data
+ref_bed <- bed("data/1000G_phase3_common_norel.bed")
+# Read in QCd target genotype data
+target_bed <- bed(paste0(bed_simplepath, "_QC.bed"))
+temp_QC <- data.frame(stage = "SNP CR>0.95; HWE P>1e-6; MAF>0.01; GENO<0.05; MIND<0.05", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow, 
+Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]))
 
-    exp <- exp[, colnames(exp) %in% gte$V2]
-    exp <- exp[, base::order(colnames(exp))]
-    gte <- gte[base::order(gte$V2), ]
+summary_table <- rbind(summary_table, temp_QC)
 
-    if(!all(colnames(exp) == gte$V2)){stop("Something went wrong in matching genotype and expression IDs. Please debug!")}
-
-    colnames(exp) <- gte$V1
-
-    # Remove genes with no variance
-    gene_variance <- data.frame(gene = rownames(exp), gene_variance = apply(exp, 1, var))
-    exp <- exp[!rownames(exp) %in% gene_variance[gene_variance$gene_variance == 0, ]$gene, ]
-
-    if (normalize == TRUE){
-    # TMM-normalized counts
-    exp_n <- DGEList(counts = exp)
-    exp_n <- calcNormFactors(exp_n, method = "TMM")
-    exp_n <- cpm(exp_n, log = FALSE)
-    }else{exp_n <- exp}
-
-    # log2 transformation (+ add 0.25 for solving issues with log2(0)) (not needed because INT will be applied)
-    # and_n <- log2(and_n + 0.25)
-    message(paste(ncol(exp_n), "samples in normalised expression matrix."))
-
-    return(exp_n)
+## Assert that all IIDs are unique
+if (any(duplicated(target_bed$fam$sample.ID))) {
+  stop("Individual sample IDs should be unique. Exiting...")
 }
 
-Affy_preprocess <- function(exp, gte, gen){
-    # Leave in only probes for which there is empirical probe mapping info and convert data into matrix
-    message("For Affymetrix arrays we assume that input expression matrix is already appropriately normalised and transformed.")
-    emp <- fread(args$emp_probe_mapping)
-    emp <- emp[, c(1, 2), with = FALSE]
-    colnames(exp)[1] <- "Probe"
+sex_check_data_set_chromosomes <- unique(target_bed$map$chromosome)
 
-    exp$Probe <- as.character(exp$Probe)
-    emp$Probe <- as.character(emp$Probe)
+sex_check_out_path <- paste0(args$output, "/gen_data_QCd/SexCheck.txt")
+sex_check_removed_out_path <- paste0(args$output, "/gen_data_QCd/SexCheckFailed.txt")
+sex_check_samples <- target_bed$fam
 
-    exp <- merge(exp, emp, by = "Probe")
-    exp <- as.data.frame(exp)
-    rownames(exp) <- exp[, ncol(exp)]
-    exp <- exp[, -ncol(exp)]
-    exp <- exp[, -1]
-    exp <- as.matrix(exp)
+if (23 %in% sex_check_data_set_chromosomes) {
 
-    # Remove samples which are not in the gte or in genotype data
-    gte <- fread(args$genotype_to_expression_linking, header = FALSE)
-    gte$V1 <- as.character(gte$V1)
-    gte$V2 <- as.character(gte$V2)
+  # Do sex check
+  message("Do sex check.")
 
-    geno_fam <- fread(args$sex_info, header = TRUE)
-    gte <- gte[gte$V1 %in% geno_fam$IID,]
-    gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
+  # Split x if needed
 
-    message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
+  pruned_variants_sex_check <- args$pruned_variants_sex_check
 
-    exp <- exp[, colnames(exp) %in% gte$V2]
-    exp <- exp[, base::order(colnames(exp))]
-    gte <- gte[base::order(gte$V2), ]
+  if (!is.null(pruned_variants_sex_check)
+    && pruned_variants_sex_check != ""
+    && file.exists(pruned_variants_sex_check)
+    && nrow(fread(pruned_variants_sex_check, header = F)) > 0) {
 
-    if(!all(colnames(exp) == gte$V2)){stop("Something went wrong in matching genotype and expression IDs. Please debug!")}
+    message("Using predefined pruned variants for sex-check:")
+    message(pruned_variants_sex_check)
 
-    colnames(exp) <- gte$V1
+    system(paste0(
+      "plink/plink --bfile ", bed_simplepath, "_QC", " --extract range ", pruned_variants_sex_check,
+      " --maf 0.05 --make-bed --out ", bed_simplepath, "_split"))
 
-    # Remove genes with no variance
-    gene_variance <- data.frame(gene = rownames(exp), gene_variance = apply(exp, 1, var))
-    exp <- exp[!rownames(exp) %in% gene_variance[gene_variance$gene_variance == 0, ]$gene, ]
+  } else {
 
-    # No normalisation done, it assumes that you have already done this.
-    message(paste(ncol(exp_n), "samples in normalised expression matrix."))
+    message("Not using predefined pruned variants for sex-check")
 
-    return(exp_n)
-}
+    system(paste0(
+      "plink/plink --bfile ", bed_simplepath, "_QC",
+      " --chr X --maf 0.05 --split-x hg19 no-fail --make-bed --out ", bed_simplepath, "_split"))
 
-exp_summary <- function(x){
-
-    per_gene_mean <- apply(x, 1, mean)
-    per_gene_median <- apply(x, 1, median)
-    per_gene_min <- apply(x, 1, min)
-    per_gene_max <- apply(x, 1, max)
-    per_gene_sd <- apply(x, 1, sd)
-    nr_values <- apply(x, 1, function(x) length(x))
-    unique_values <- apply(x, 1, function(x) length(unique(x)))
-    zero_values <- apply(x, 1, function(x) length(x[x == 0]))
-    per_gene_shapiro <- apply(x, 1, shap_test)
-
-    gene_summary <- data.table(gene = rownames(x), 
-    mean = per_gene_mean,
-    median = per_gene_median,
-    min = per_gene_min,
-    max = per_gene_max,
-    sd = per_gene_sd,
-    nr_values = nr_values,
-    nr_unique_values = unique_values,
-    nr_of_zero_values = zero_values,
-    shapiro_P = per_gene_shapiro)
-
-    return(gene_summary)
-}
-
-IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c("HT12v3", "HT12v4", "HuRef8", "RNAseq", "AffyU291", "AffyHuEx")) {
-  and <- input_exp
-  list_ggplots <- list()
-  summary_pcs <- list()
-  outliers <- c()
-  platform <- match.arg(platform)
-  message(paste0("Expression platform is ", platform, ", preprocessing the data..."))
-
-  it_round <- 0
-  plot_it_round <- 0
-  nr_outliers <- 1
-
-  message(paste("Removing samples which deviate more than", sd_threshold, "SDs from the mean values of PC1 or PC2."))
-  message("Starting iterative outlier detection...")
-
-  while (nr_outliers > 0) {
-
-    if (platform %in% c("HT12v3", "HT12v4", "HuRef8")){
-      and_p <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-      and_p <- log2(and_p)
-      #and_p <- apply(and_p, 1, INT_transform)
-      #and_p <- t(and_p)
-      #and_p <- apply(and_p, 1, center_data)
-      #and_p <- t(and_p)
-    } else if(platform %in% c("RNAseq")){
-      and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-      and_p <- log2(and_p + 0.25)
-      #and_p <- apply(and_p, 1, INT_transform)
-      #and_p <- t(and_p)
-      #and_p <- apply(and_p, 1, center_data)
-      #and_p <- t(and_p)
-    } else if(platform %in% c("AffyU219", "AffyHumanExon")){
-      and_p <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-      #and_p <- apply(and_p, 1, INT_transform)
-      #and_p <- t(and_p)
-      #and_p <- apply(and_p, 1, center_data)
-      #and_p <- t(and_p)
-    }
-    message("Data preprocessed!")
-
-    it_round <- it_round + 1
-    pcs <- prcomp(t(and_p), center = FALSE, scale. = FALSE)
-    message("PCA calculation finished!")
-
-    PCs <- as.data.table(pcs$x)
-    PCs$sample <- rownames(pcs$x)
-
-    importance <- pcs$sdev^2 / sum(pcs$sdev^2)
-    summary_pcs[[it_round]] <- data.table(PC = paste0("PC", 1:50), explained_variance = importance[1:50])
-
-    PCs$outlier <- "no"
-    PCs1_mean <- mean(PCs$PC1)
-    PCs1_sd <- sd(PCs$PC1)
-    PCs[(PCs$PC1 > PCs1_mean + sd_threshold * PCs1_sd) | (PCs$PC1 < PCs1_mean - sd_threshold * PCs1_sd)]$outlier <- "yes"
-
-    PCs2_mean <- mean(PCs$PC2)
-    PCs2_sd <- sd(PCs$PC2)
-    PCs[(PCs$PC2 > PCs2_mean + sd_threshold * PCs2_sd) | (PCs$PC2 < PCs2_mean - sd_threshold * PCs2_sd)]$outlier <- "yes"
-
-    plot_it_round <- plot_it_round + 1
-    list_ggplots[[plot_it_round]] <- ggplot(PCs, aes(x = PC1, y = PC2, colour = outlier)) +
-      geom_point(alpha = 0.3) +
-      theme_bw() +
-      scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
-      ggtitle(paste0(it_round, ". iteration round"))
-    
-    plot_it_round <- plot_it_round + 1
-    list_ggplots[[plot_it_round]] <- ggplot(PCs, aes(x = PC3, y = PC4, colour = outlier)) +
-      geom_point(alpha = 0.3) +
-      theme_bw() +
-      scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
-      ggtitle(paste0(it_round, ". iteration round"))
-    
-    plot_it_round <- plot_it_round + 1
-    list_ggplots[[plot_it_round]] <- ggplot(PCs, aes(x = PC5, y = PC6, colour = outlier)) +
-      geom_point(alpha = 0.3) +
-      theme_bw() +
-      scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
-      ggtitle(paste0(it_round, ". iteration round"))
-    
-    plot_it_round <- plot_it_round + 1
-    list_ggplots[[plot_it_round]] <- ggplot(PCs, aes(x = PC7, y = PC8, colour = outlier)) +
-      geom_point(alpha = 0.3) +
-      theme_bw() +
-      scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
-      ggtitle(paste0(it_round, ". iteration round"))
-
-    non_outliers <- PCs[!PCs$outlier %in% c("yes"), ]$sample
-
-    non_outliers <- gte[as.character(gte$V1) %in% non_outliers, ]$V2
-  
-    # Remove outlier samples from the unprocessed data
-    and <- and[, colnames(and) %in% c(non_outliers, "Feature"), with = FALSE]
-
-    nr_outliers <- length(PCs[PCs$outlier %in% c("yes"), ]$sample)
-
-    if (nr_outliers > 0) {
-      message(paste0("Iteration round ", it_round, ". Removed ", nr_outliers, " outlier(s). Re-processing the data and running another round of PCA."))
-      summary_table_temp <- data.table(Stage = paste("After removal of expression outliers in ", it_round, " iteration."), Nr_of_features = nrow(and), Nr_of_samples = ncol(and))
-      summary_table <- rbind(summary_table, summary_table_temp)
-
-      outliers <- c(outliers, PCs[PCs$outlier %in% c("yes"), ]$sample)
-    } else if (nr_outliers == 0) {
-      message(paste0("Iteration round ", it_round, ". No outliers detected. Finalizing interactive outlier detection."))
-    }
-    if (it_round == 1){
-      PCs_it1 <- PCs
-    } else {PCs_it1[PCs_it1$sample %in% outliers, ]$outlier <- "yes"}
   }
 
-  return(list(exp_mat = and_p, plots = list_ggplots, summary_pcs = summary_pcs, PCs_first = PCs_it1))
+  ## Pruning
+  system(paste0("plink/plink2 --bfile ", bed_simplepath, "_split",
+                " --rm-dup 'exclude-mismatch' --indep-pairwise 20000 200 0.2 --out check_sex_x"))
+  ## Sex check
+  system(paste0("plink/plink --bfile ", bed_simplepath, "_split --extract check_sex_x.prune.in --check-sex"))
+
+  ## If there is sex info in the fam file for all samples then remove samples which fail the sex check or genotype-based F is >0.2 & < 0.8
+  sexcheck <- fread("plink.sexcheck")
+  ## Annotate samples who have clear sex
+
+  sexcheck$F_PASS <- !(sexcheck$F > 0.2 & sexcheck$F < 0.8)
+  temp_QC <- data.frame(stage = "Sex check (0.2<F<0.8)",
+                        Nr_of_SNPs = target_bed$ncol,
+                        Nr_of_samples = sum(sexcheck$F_PASS), 
+                        Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% sexcheck[sexcheck$F_PASS == TRUE, ]$IID, ]))
+  summary_table <- rbind(summary_table, temp_QC)
+
+  sexcheck$MATCH_PASS <- case_when(sexcheck$PEDSEX == 0 ~ T,
+                                   sexcheck$STATUS == "PROBLEM" ~ F,
+                                   TRUE ~ T)
+
+  sexcheck$PASS <- sexcheck$MATCH_PASS & sexcheck$F_PASS
+
+  if (any(sexcheck$PEDSEX %in% c(1, 2))) {
+
+    temp_QC <- data.frame(stage = "Sex check (reported and genetic sex mismatch)",
+                          Nr_of_SNPs = target_bed$ncol,
+                          Nr_of_samples = sum(sexcheck$PASS), 
+                          Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% sexcheck[sexcheck$PASS == TRUE, ]$IID, ]))
+    summary_table <- rbind(summary_table, temp_QC)
+
+  } else {
+    message("No sex info in the .fam file.")
+  }
+
+  sex_cols <- c("0" = "black", "1" = "orange", "2" = "blue")
+
+  p <- ggplot(sexcheck, aes(x = F, fill = factor(PEDSEX))) +
+    geom_histogram(position="stack", color = "black", alpha = 0.5) +
+    scale_fill_manual(values = sex_cols, breaks = c("0", "1", "2"), labels = c("Unknown", "Male", "Female"), name = "Reported sex") +
+    geom_vline(xintercept = c(0.2, 0.8), colour = "red", linetype = 2) + theme_bw()
+
+  ggsave(paste0(args$output, "/gen_plots/SexCheck.png"), p, type = "cairo", height = 7 / 2, width = 9, units = "in", dpi = 300)
+  ggsave(paste0(args$output, "/gen_plots/SexCheck.pdf"), p, height = 7 / 2, width = 9, units = "in", dpi = 300)
+
+  fwrite(sexcheck, sex_check_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
+  fwrite(sexcheck[!sexcheck$PASS,], sex_check_removed_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
+
+} else {
+  warning("No X chromosome present. Skipping sex-check...")
+
+  sexcheck <- sex_check_samples[,c(1,2,5)]
+  colnames(sexcheck) <- c("FID", "IID", "PEDSEX")
+  sexcheck$PEDSEX_COPY <- sexcheck$PEDSEX
+  sexcheck$STATUS <- NA_character_
+  sexcheck$F <- NA_real_
+
+  fwrite(sexcheck, sex_check_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
+  file.create(sex_check_removed_out_path)
 }
 
-############
-# Analysis #
-############
-# Read in raw expression matrix
-and <- fread(args$expression_matrix)
-colnames(and)[1] <- "Feature"
-message(paste("Initially:", nrow(and), "genes/probes and ", ncol(and), "samples"))
-
-summary_table <- data.table(Stage = "Unprocessed matrix", Nr_of_features = nrow(and), Nr_of_samples = ncol(and))
-
-# Remove samples which are not in the gte or in genotype data
-gte <- fread(args$genotype_to_expression_linking, header = FALSE)
-geno_fam <- fread(args$sex_info, header = TRUE)
-gen_filter <- fread(args$geno_filter, header = FALSE)
-gte <- gte[gte$V1 %in% geno_fam$IID, ]
-gte <- gte[gte$V1 %in% gen_filter$V2, ]
-
-and <- and[, colnames(and) %in% c("Feature", gte$V2), with = FALSE]
-
-summary_table_temp <- data.table(Stage = "Samples which overlap with QCd genotype info", Nr_of_features = nrow(and), Nr_of_samples = ncol(and) - 1)
-summary_table <- rbind(summary_table, summary_table_temp)
-
-if (!args$platform %in% c("HT12v3", "HT12v4", "HuRef8", "RNAseq", "AffyU219", "AffyHumanExon")){stop("Platform has to be one of HT12v3, HT12v4, HuRef8, RNAseq, AffyU291, AffyHuEx")}
-
-iterative_outliers <- IterativeOutlierDetection(and, sd_threshold = args$sd, platform = args$platform) 
-
-# Keep in the original data only non-outlier samples
-exp_non_outliers <- colnames(iterative_outliers$exp_mat)
-exp_non_outliers <- gte[gte$V1 %in% exp_non_outliers, ]$V2
-# Remove outlier samples from MDS
-and <- and[, colnames(and) %in% c("Feature", exp_non_outliers), with = FALSE]
-
-summary_table_temp <- data.table(Stage = "After removal of all expression outliers (PCA)", Nr_of_features = nrow(and), Nr_of_samples = ncol(and) - 1)
-summary_table <- rbind(summary_table, summary_table_temp)
-
-message("Running MDS")
-if (args$platform %in% c("HT12v3", "HT12v4", "HuRef8")){
-  and_p <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-  and_p <- log2(and_p)
-}
-if (args$platform %in% c("RNAseq")){
-  and_p <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-  and_p <- log2(and_p + 0.25)
-}
-if (args$platform %in% c("AffyU219", "AffyHumanExon")){
-  and_p <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-}
-
-dist <- cor(and_p, method = "pearson")
-mds <- isoMDS(1 - dist, k = 2)
-mds <- as.data.frame(mds$points)
-colnames(mds) <- paste("MDS coordinate", 1:2)
-mds$Sample <- colnames(and_p)
-
-# Find samples deviating from the mean MDS1 and MDS2
-mds$outlier <- "no"
-mean_mds1 <- mean(mds$`MDS coordinate 1`)
-sd_mds1 <- sd(mds$`MDS coordinate 1`)
-mean_mds2 <- mean(mds$`MDS coordinate 2`)
-sd_mds2 <- sd(mds$`MDS coordinate 2`)
-if (nrow(mds[mds$`MDS coordinate 1` > mean_mds1 + args$sd * sd_mds1 |
-mds$`MDS coordinate 1` < mean_mds1 - args$sd * sd_mds1 |
-mds$`MDS coordinate 2` > mean_mds2 + args$sd * sd_mds2 |
-mds$`MDS coordinate 2` < mean_mds2 - args$sd * sd_mds2, ]) > 0){
-
-mds[mds$`MDS coordinate 1` > mean_mds1 + args$sd * sd_mds1 |
-mds$`MDS coordinate 1` < mean_mds1 - args$sd * sd_mds1 |
-mds$`MDS coordinate 2` > mean_mds2 + args$sd * sd_mds2 |
-mds$`MDS coordinate 2` < mean_mds2 - args$sd * sd_mds2, ]$outlier <- "yes"
-
-}
-
-# Add sex info
-sex <- fread(args$sex_info, header = FALSE)
-sex <- sex[, c(2, 4), with = FALSE]
-colnames(sex) <- c("Sample", "Sex")
-mds <- merge(mds, sex, by = "Sample")
-
-p <- ggplot(mds, aes(x = `MDS coordinate 1`, `MDS coordinate 2`, colour = outlier, shape = Sex)) +
-geom_point(alpha = 0.3) +
-theme_bw() +
-scale_colour_manual(values = c("no" = "black", "yes" = "red"))
-
-ggsave(paste0(args$output, "/exp_plots/MDS_before.png"), height = 5, width = 6, units = "in", dpi = 300, type = "cairo")
-ggsave(paste0(args$output, "/exp_plots/MDS_before.pdf"), height = 5, width = 6, units = "in", dpi = 300)
-
-exp_non_outliers <- gte[gte$V1 %in% mds[mds$outlier == "no", ]$Sample, ]$V2
-and <- and[, colnames(and) %in% c("Feature", exp_non_outliers), with = FALSE]
-
-summary_table_temp <- data.table(Stage = "After removal of all expression outliers (MDS)", Nr_of_features = nrow(and), Nr_of_samples = ncol(and) - 1)
-summary_table <- rbind(summary_table, summary_table_temp)
-
-# Final re-process, re-calculate PCs, re-visualise and write out
-if (args$platform %in% c("HT12v3", "HT12v4", "HuRef8")){
-and_pp <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-} else if (args$platform %in% c("RNAseq")){
-and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-} else if (args$platform %in% c("AffyU219", "AffyHumanExon")){
-and_pp <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-}
-
-# Visualise the expression of X-specific and Y-specific genes
-xist <- and_pp[rownames(and_pp) == "ENSG00000229807", ]
-y_genes <- c("ENSG00000234795", "ENSG00000237048", "ENSG00000275866", "ENSG00000239225", "ENSG00000169789", "ENSG00000129862", "ENSG00000273693", "ENSG00000243040", "ENSG00000198692",
-"ENSG00000233699", "ENSG00000254488", "ENSG00000236424", "ENSG00000234414", "ENSG00000099715", "ENSG00000180910", "ENSG00000280969", "ENSG00000215560", "ENSG00000229236",
-"ENSG00000223637", "ENSG00000131007", "ENSG00000176728", "ENSG00000012817", "ENSG00000182415", "ENSG00000099725", "ENSG00000184895", "ENSG00000129824", "ENSG00000067646",
-"ENSG00000183878", "ENSG00000154620", "ENSG00000241859", "ENSG00000099721", "ENSG00000092377", "ENSG00000205944", "ENSG00000168757", "ENSG00000197038", "ENSG00000232808",
-"ENSG00000233803", "ENSG00000229549", "ENSG00000242389", "ENSG00000165246", "ENSG00000215580", "ENSG00000131002")
-y_genes <- and_pp[rownames(and_pp) %in% y_genes, ]
-
-y_mean <- apply(y_genes, 2, mean)
-y_genes <- data.frame(sample = colnames(y_genes), xist = xist, y_genes = y_mean)
-
-geno_fam_f <- geno_fam[, c(2, 4), with = FALSE]
-colnames(geno_fam_f) <- c("sample", "Sex")
-geno_fam_f$Sex <- as.character(geno_fam_f$Sex)
-
-y_genes <- merge(y_genes, geno_fam_f, by = "sample")
-max_exp <- max(y_genes$y_genes, y_genes$xist)
-
-y_genes$expressionSex <- case_when(
-  y_genes$y_genes > y_genes$xist ~ 1,
-  y_genes$y_genes < y_genes$xist ~ 2
+# Remove sex chromosomes
+snp_plinkQC(
+  plink.path = "plink/plink2",
+  prefix.in = paste0(bed_simplepath, "_QC"),
+  prefix.out = paste0(bed_simplepath, "_QC", "_QC"),
+  file.type = "--bfile",
+  maf = 0.01,
+  geno = 0.05,
+  mind = 0.05,
+  hwe = 1e-6,
+  autosome.only = TRUE,
+  extra.options = paste0("--output-chr 26 --remove ", sex_check_removed_out_path),
+  verbose = TRUE
 )
 
-y_genes$mismatch <- case_when(
-  y_genes$Sex == 0 ~ "unknown",
-  y_genes$expressionSex == y_genes$Sex ~ "no",
-  y_genes$expressionSex != y_genes$Sex ~ "yes"
+# replace the previous QC version
+system(paste0("rm ", bed_simplepath, "_QC.*"))
+system(paste0("mv ", bed_simplepath, "_QC_QC.bed ", bed_simplepath, "_QC.bed"))
+system(paste0("mv ", bed_simplepath, "_QC_QC.bim ", bed_simplepath, "_QC.bim"))
+system(paste0("mv ", bed_simplepath, "_QC_QC.fam ", bed_simplepath, "_QC.fam"))
+
+# Read in again QCd target genotype data
+target_bed <- bed(paste0(bed_simplepath, "_QC.bed"))
+temp_QC <- data.frame(stage = "Removed X/Y", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(target_bed$fam),
+Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]))
+summary_table <- rbind(summary_table, temp_QC)
+
+# Do heterozygosity check
+message("Do heterozygosity check.")
+
+# Get path where to write heterozygosity failed samples to
+het_failed_samples_out_path <- paste0(args$output, "/gen_data_QCd/HeterozygosityFailed.txt")
+
+# Prune variants
+system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --rm-dup 'exclude-mismatch' --indep-pairwise 50 1 0.2"))
+
+system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --extract plink2.prune.in --het"))
+het <- fread("plink2.het", header = T)
+het$het_rate <- (het$OBS_CT - het$`O(HOM)`) / het$OBS_CT
+
+het_fail_samples <- het[het$het_rate < mean(het$het_rate) - 3 * sd(het$het_rate) | het$het_rate > mean(het$het_rate) + 3 * sd(het$het_rate), ]
+
+# Get the indices of those samples that passed heterozygozity check
+indices_of_het_failed_samples <- match(het_fail_samples$IID, target_bed$fam$sample.ID)
+indices_of_het_passed_samples <- rows_along(target_bed)[-indices_of_het_failed_samples]
+
+print("het_failed_samples:")
+print(indices_of_het_failed_samples)
+print("het_passed_samples:")
+print(indices_of_het_passed_samples)
+
+fwrite(het_fail_samples, het_failed_samples_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
+
+
+het_s <- data.frame(ID = target_bed$.fam$sample.ID, FAMID = target_bed$.fam$family.ID)
+het_s <- het_s[!het_s$ID %in% het_fail_samples$IID, ]
+
+temp_QC <- data.frame(stage = "Excess heterozygosity (mean+/-3SD)", Nr_of_SNPs = target_bed$ncol, 
+Nr_of_samples = length(indices_of_het_passed_samples),
+Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% het_s$ID, ]))
+
+summary_table <- rbind(summary_table, temp_QC)
+
+p <- ggplot(het, aes(x = het_rate)) + geom_histogram(color = "#000000", fill = "#000000", alpha = 0.5) + 
+xlab("Heterozygosity rate") + 
+geom_vline(xintercept = c(mean(het$het_rate), mean(het$het_rate) + 3 * sd(het$het_rate), mean(het$het_rate) - 3 * sd(het$het_rate)), linetype = 2, colour = "red") + 
+theme_bw()
+
+ggsave(paste0(args$output, "/gen_plots/HetCheck.png"), type = "cairo", height = 7 / 2, width = 9, units = "in", dpi = 300)
+ggsave(paste0(args$output, "/gen_plots/HetCheck.pdf"), height = 7 / 2, width = 9, units = "in", dpi = 300)
+
+# Project the data on QCd 1000G reference
+message("Projecting samples to 1000G reference.")
+unrelated_ref_samples <- fread(args$sample_list)
+unrelated_ref_samples <- as.numeric(unrelated_ref_samples$ind.row)
+
+proj_PCA <- bed_projectPCA(
+  obj.bed.ref = ref_bed,
+  ind.row.ref = unrelated_ref_samples,
+  obj.bed.new = target_bed,
+  ind.row.new = indices_of_het_passed_samples,
+  k = 10,
+  strand_flip = TRUE,
+  join_by_pos = TRUE,
+  match.min.prop = 0.5,
+  build.new = "hg19",
+  build.ref = "hg19",
+  liftOver = NULL,
+  verbose = TRUE,
+  ncores = 4
 )
 
-x_expression_median <- median(y_genes[y_genes$Sex == 1 & y_genes$expressionSex == 1, "xist"])
-y_expression_median <- median(y_genes[y_genes$Sex == 2 & y_genes$expressionSex == 2, "y_genes"])
+## Visualise PCs
+abi <- as.data.frame(proj_PCA$OADP_proj)
+colnames(abi) <- paste0("PC", 1:10)
 
-lower_slope <- tan((45 - args$contamination_area / 2) / 180*pi)
-upper_slope <- tan((45 + args$contamination_area / 2) / 180*pi)
+PCs_ref <- predict(proj_PCA$obj.svd.ref)
+abi2 <- as.data.frame(PCs_ref)
+colnames(abi2) <- paste0("PC", 1:10)
 
-y_genes$contaminated <- case_when(
-  (y_genes$y_genes > ((y_genes$xist - x_expression_median) * lower_slope + y_expression_median)
-    & y_genes$y_genes < ((y_genes$xist - x_expression_median) * upper_slope + y_expression_median)) ~ "yes",
-  TRUE ~ "no"
-)
+abi2$sample <- ref_bed$fam$sample.ID[unrelated_ref_samples]
+abi2 <- abi2[, c(11, 1:10)]
 
-y_genes$status <- case_when(
-  y_genes$contaminated == "yes" & y_genes$mismatch == "yes" ~ "Contaminated and\nsex mismatch",
-  y_genes$contaminated == "yes" ~ "Likely contaminated",
-  y_genes$mismatch == "yes" ~ "Sex mismatch",
-  TRUE ~ "Passed"
-)
+pops <- fread(args$pops)
+pops <- pops[, c(2, 6, 7)]
+abi2 <- merge(abi2, pops, by.x = "sample", by.y = "SampleID")
+abi2 <- abi2[, c(1, 12, 13, 2:11)]
 
-#
-# y_genes$mismatch <- "no"
-#
-# y_genes$mismatch[y_genes$Sex == 0] <- "unknown"
-#
-# if (nrow(y_genes[(y_genes$y_genes > y_genes$xist & y_genes$Sex == 2) | (y_genes$y_genes < y_genes$xist & y_genes$Sex == 1), ]) > 0){
-# y_genes[(y_genes$y_genes > y_genes$xist & y_genes$Sex == 2) | (y_genes$y_genes < y_genes$xist & y_genes$Sex == 1), ]$mismatch <- "yes"
-# }
+abi <- data.frame(sample = target_bed$fam$sample.ID[indices_of_het_passed_samples],
+                  Population = "Target", Superpopulation = "Target", abi)
 
-exclusion_zone <- tibble(x = c(x_expression_median, max_exp)) %>%
-  mutate(lower_bound = (x - x_expression_median) * lower_slope + y_expression_median,
-         upper_bound = (x - x_expression_median) * upper_slope + y_expression_median)
+abi$type <- "Target"
+abi2$type <- "1000G"
 
-base_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
-  geom_ribbon(alpha = 0.2) +
-  geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
-  geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
-  scale_colour_manual(
-    values = alpha(c("Passed" = "black", "Likely contaminated" = "red",
-                     "Sex mismatch" = "#d79393", "Contaminated and\nsex mismatch" = "firebrick"), 0.5),
-    name = "Passed checks") +
-  coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
-  theme_bw() + ylab("mean of Y genes") + xlab("XIST")
+combined <- rbind(abi, abi2)
 
-ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
-ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.pdf"), height = 5, width = 7, units = "in", dpi = 300)
+combined$Superpopulation <- factor(combined$Superpopulation, levels = c("Target", "EUR", "EAS", "AMR", "SAS", "AFR"))
 
-# Filter out potential sex mismatches
-and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$mismatch != "yes", ]$sample]
+p00 <- ggplot(combined, aes(x = PC1, y = PC2, alpha = type)) + 
+geom_point() + 
+theme_bw() + 
+scale_alpha_manual(values = c("Target" = 1, "1000G" = 0)) + 
+ggtitle("Target sample projections\nin 1000G PC space")
 
-summary_table_temp <- data.table(Stage = "Samples after removal of sex errors", Nr_of_features = nrow(and_pp), Nr_of_samples = ncol(and_pp))
-summary_table <- rbind(summary_table, summary_table_temp)
+combined_h <- combined[combined$Superpopulation == "Target", ]
 
-and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$contaminated != "yes", ]$sample]
+p0 <- ggplot(combined_h, aes(x = PC1, y = PC2)) + 
+geom_point() + 
+theme_bw() + 
+ggtitle("Target sample projections\nzoomed in")
 
-summary_table_temp <- data.table(Stage = "Samples after removal of likely contaminated samples", Nr_of_features = nrow(and_pp), Nr_of_samples = ncol(and_pp))
-summary_table <- rbind(summary_table, summary_table_temp)
+p1 <- ggplot(combined, aes(x = PC1, y = PC2, colour = Superpopulation, alpha = type)) + 
+geom_point() + 
+theme_bw() + 
+scale_color_manual(values = c("Target" = "black", "EUR" = "blue", 
+"EAS" = "goldenrod", "AMR" = "lightgrey", "SAS" = "orange", "AFR" = "red")) +
+scale_alpha_manual(values = c("Target" = 1, "1000G" = 0.2))
 
-# Apply inverse normal transformation to normalised data.
-#and_p <- apply(and_p, 1, Z_transform) # No Z-transform as data will be forced to normal distribution anyway
-and_p <- apply(and_pp, 1, INT_transform)
-and_p <- t(and_p)
+p2 <- ggplot(combined, aes(x = PC3, y = PC4, colour = Superpopulation, alpha = type)) + 
+geom_point() + theme_bw() + 
+scale_color_manual(values = c("Target" = "black", "EUR" = "blue", 
+"EAS" = "goldenrod", "AMR" = "lightgrey", "SAS" = "orange", "AFR" = "red")) +
+scale_alpha_manual(values = c("Target" = 1, "1000G" = 0.2))
 
-pcs <- prcomp(t(and_p), center = FALSE, scale. = FALSE)
-PCs <- data.table(Sample = rownames(pcs$x), pcs$x)
+p3 <- ggplot(combined, aes(x = PC5, y = PC6, colour = Superpopulation, alpha = type)) + 
+geom_point() + theme_bw() + 
+scale_color_manual(values = c("Target" = "black", "EUR" = "blue", 
+"EAS" = "goldenrod", "AMR" = "lightgrey", "SAS" = "orange", "AFR" = "red")) +
+scale_alpha_manual(values = c("Target" = 1, "1000G" = 0.2))
 
-# Add info about sex
-message("Outline sex on the plots")
+p4 <- ggplot(combined, aes(x = PC7, y = PC8, colour = Superpopulation, alpha = type)) + 
+geom_point() + theme_bw() + 
+scale_color_manual(values = c("Target" = "black", "EUR" = "blue", 
+"EAS" = "goldenrod", "AMR" = "lightgrey", "SAS" = "orange", "AFR" = "red")) +
+scale_alpha_manual(values = c("Target" = 1, "1000G" = 0.2))
 
-PCs_int <- PCs
-PCs_norm <- iterative_outliers$PCs_first
+p5 <- ggplot(combined, aes(x = PC9, y = PC10, colour = Superpopulation, alpha = type)) + 
+geom_point() + theme_bw() + 
+scale_color_manual(values = c("Target" = "black", "EUR" = "blue", 
+"EAS" = "goldenrod", "AMR" = "lightgrey", "SAS" = "orange", "AFR" = "red")) +
+scale_alpha_manual(values = c("Target" = 1, "1000G" = 0.2))
 
-PCs_int <- merge(PCs_int, sex, by = "Sample")
-PCs_norm <- merge(PCs_norm, sex, by.x = "sample", by.y = "Sample")
+p <- p00 + p0 + p1 + p2 + p3 + p4 + p5 + plot_layout(nrow = 4)
 
-p5 <- ggplot(PCs_int, aes(x = PC1, y = PC2, shape = Sex)) + geom_point(alpha = 0.3) + theme_bw()
-p6 <- ggplot(PCs_int, aes(x = PC3, y = PC4, shape = Sex)) + geom_point(alpha = 0.3) + theme_bw()
-p7 <- ggplot(PCs_int, aes(x = PC5, y = PC6, shape = Sex)) + geom_point(alpha = 0.3) + theme_bw()
-p8 <- ggplot(PCs_int, aes(x = PC7, y = PC8, shape = Sex)) + geom_point(alpha = 0.3) + theme_bw()
+ggsave(paste0(args$output, "/gen_plots/SamplesPCsProjectedTo1000G.png"), type = "cairo", height = 20, width = 9.5 * 1.6, units = "in", dpi = 300)
+ggsave(paste0(args$output, "/gen_plots/SamplesPCsProjectedTo1000G.pdf"), height = 20, width = 9.5 * 1.6, units = "in", dpi = 300)
+fwrite(abi[, -c(2, 3, ncol(abi))], paste0(args$output, "/gen_data_summary/1000G_PC_projections.txt"), sep = "\t", quote = FALSE )
 
-p1 <- ggplot(PCs_norm, aes(x = PC1, y = PC2, colour = outlier, shape = Sex)) +
-      geom_point(alpha = 0.3) +
-      theme_bw() +
-      scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
-      ggtitle(paste0(1, ". iteration round"))
-p2 <- ggplot(PCs_norm, aes(x = PC3, y = PC4, colour = outlier, shape = Sex)) +
-      geom_point(alpha = 0.3) +
-      theme_bw() +
-      scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
-      ggtitle(paste0(1, ". iteration round"))
-p3 <- ggplot(PCs_norm, aes(x = PC5, y = PC6, colour = outlier, shape = Sex)) +
-      geom_point(alpha = 0.3) +
-      theme_bw() +
-      scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
-      ggtitle(paste0(1, ". iteration round"))
-p4 <- ggplot(PCs_norm, aes(x = PC7, y = PC8, colour = outlier, shape = Sex)) +
-      geom_point(alpha = 0.3) +
-      theme_bw() +
-      scale_colour_manual(values = c("no" = "black", "yes" = "red")) +
-      ggtitle(paste0(1, ". iteration round"))
+## Assign each sample to the superpopulation
+message("Assign each sample to 1000G superpopulation.")
+### Calculate distance of each sample to all samples per each population
+target_samples <- abi[, -c(2, 3, ncol(abi))]
 
-p <- (p1 | p2) / (p3 | p4)
+#### Use 3 PCs
+target_samples <- target_samples[, c(1:4)]
+rownames(target_samples) <- target_samples$sample
+target_samples <- target_samples[, -1]
 
-ggsave(paste0(args$output, "/exp_plots/PCA_before.png"), height = 9, width = 10.5, units = "in", dpi = 300, type = "cairo")
-ggsave(paste0(args$output, "/exp_plots/PCA_before.pdf"), height = 9, width = 10.5, units = "in", dpi = 300)
+population_assign_res <- data.frame(sample = rownames(target_samples), abi = rownames(target_samples))
 
-p <- (p5 | p6) / (p7 | p8)
-ggsave(paste0(args$output, "/exp_plots/PCA_after.png"), height = 7.5, width = 9, units = "in", dpi = 300, type = "cairo")
-ggsave(paste0(args$output, "/exp_plots/PCA_after.pdf"), height = 7.5, width = 9, units = "in", dpi = 300)
+#### EUR
+for(population in c("EUR", "EAS", "AMR", "SAS", "AFR")){
+abi_e <- abi2[abi2$Superpopulation == population, ]
+head(abi_e)
 
-# Convert to HASE format
-and_p2 <- as.data.table(t(and_p))
-and_p2 <- data.table(`ID` = colnames(and_p), and_p2)
+sup_pop_samples <- abi_e[, -c(2, 3, ncol(abi_e))]
 
-fwrite(and_p2, paste0(args$output, "/exp_data_QCd/exp_data_preprocessed.txt"), sep = "\t", quote = FALSE)
+sup_pop_samples <- sup_pop_samples[, c(1:4)]
+rownames(sup_pop_samples) <- sup_pop_samples$sample
+sup_pop_samples <- sup_pop_samples[, -1]
 
-# Write out importance of final PCs
-importance <- pcs$sdev^2 / sum(pcs$sdev^2)
-summary_pcs <- data.table(PC = paste0("PC", 1:100), explained_variance = importance[1:100])
-summary_pcs$PC <- factor(summary_pcs$PC, levels = paste0("PC", 1:100))
+head(sup_pop_samples)
 
-fwrite(PCs[, c(1:min(101, nrow(PCs))), with = F], paste0(args$output, "/exp_PCs/exp_PCs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
-fwrite(summary_pcs, paste0(args$output, "/exp_data_summary/", "summary_pcs.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
+comb <- rbind(target_samples, sup_pop_samples)
+head(comb)
+distance <- as.matrix(dist(comb, method = "euclidean"))
+head(distance)
+distance <- distance[c(1:nrow(target_samples)), -c(1:nrow(target_samples))]
+head(distance)
 
-p <- ggplot(summary_pcs, aes(x = PC, y = explained_variance)) + geom_bar(stat = "identity") + theme_bw() +
-theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
-ggsave(paste0(args$output, "/exp_plots/PCA_final_scree_plot.png"), height = 6, width = 17, units = "in", dpi = 300, type = "cairo")
-ggsave(paste0(args$output, "/exp_plots/PCA_final_scree_plot.pdf"), height = 6, width = 17, units = "in", dpi = 300)
+head(rowMeans(distance))
 
-# Summary statistics ----
-message("Calculating descriptive summary statistics for every gene...")
-# Per gene, calculate mean, median, min, max, sd, and shapiro test P-value
-# before preprocessing
-message("Before normalisation.")
-# Remove sample outliers
-sample_non_outliers <- colnames(and_p)
-sample_non_outliers <- gte[gte$V1 %in% sample_non_outliers, ]$V2
+distance <- data.frame(sample = rownames(target_samples), MeanDistance = rowMeans(distance))
+colnames(distance)[2] <- population
 
-and <- and[, colnames(and) %in% c("Feature", sample_non_outliers), with = FALSE]
+population_assign_res <- cbind(population_assign_res, distance[, -1])
 
-if (args$platform %in% c("HT12v3", "HT12v4", "HuRef8")){
-and_pp <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, normalize = FALSE)
-} else if (args$platform %in% c("RNAseq")){
-and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, normalize = FALSE)
-} else if (args$platform %in% c("AffyU219", "AffyHumanExon")){
-and_pp <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+print(paste("distance:", population))
+
 }
 
-gene_summary <- exp_summary(and_pp)
+colnames(population_assign_res)[3:ncol(population_assign_res)] <- c("EUR", "EAS", "AMR", "SAS", "AFR")
+fwrite(population_assign_res[, -1], paste0(args$output, "/gen_data_summary/PopAssignResults.txt"), sep = "\t", quote = FALSE )
 
-fwrite(gene_summary, paste0(args$output, "/exp_data_summary/", "raw_gene_summary.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
+# Find related samples
+message("Find related samples.")
+related <- snp_plinkKINGQC(
+  plink2.path = "plink/plink2",
+  bedfile.in = paste0(bed_simplepath, "_QC.bed"),
+  thr.king = 2^-4.5,
+  make.bed = FALSE,
+  ncores = 4,
+  extra.options = paste0("--remove ", het_failed_samples_out_path)
+)
 
-# on fully processed expression matrix
-message("After normalization.")
-if (args$platform %in% c("HT12v3", "HT12v4", "HuRef8")){
-and_pp <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, normalize = TRUE)
-} else if (args$platform %in% c("RNAseq")){
-and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, normalize = TRUE)
-} else if (args$platform %in% c("AffyU291", "AffyHuEx")){
-and_pp <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+# Filter in only related individuals from genotype-to-expression file
+
+related <- related[related$IID1 %in% gte$V1 | related$IID2 %in% gte$V1, ]
+
+fwrite(related, "related.txt", sep = "\t", quote = FALSE, row.names = FALSE)
+
+print(related)
+
+# Remove samples that are related to each other
+
+# First, get the total list of all samples with some relatedness above a predefined threshold (see above in plink call)
+related_individuals <- unique(c(related$IID1, related$IID2))
+
+# If there are related samples, find the samples that should be removed so that the maximum set of samples remains,
+# but that also guarantees that no relatedness remains.
+if (length(related_individuals) > 0) {
+
+  # Define a graph wherein each relation depicts an edge between vertices (samples)
+  relatedness_graph <- graph_from_edgelist(
+    as.matrix(related[,c("IID1", "IID2")]),
+    directed = F)
+
+  # For final version: do not write out, here are original sample IDs
+  pdf(paste0(args$output, "/gen_plots/relatedness.pdf"))
+  plot(relatedness_graph)
+  dev.off()
+
+  samples_to_remove_due_to_relatedness <- c()
+
+  # Now, get a list of samples that should be removed due to relatedness
+  # We get this through a greedy algorithm trying to find a large possible set of unrelated samples.
+  # This is a heuristic solution since the problem is really hard.
+  while (length(V(relatedness_graph)) > 1) {
+
+    # Get the degrees (how many edges does each vertex have)
+    degrees_named <- degree(relatedness_graph)
+
+    # Get the vertex with the least amount of degrees (edges)
+    least_vertex_samples <- names(degrees_named)[min(degrees_named) == degrees_named]
+
+    # Prioritize vertexes which are in genotype-to-expression file
+    if (length(least_vertex_samples[least_vertex_samples %in% gte$V1]) > 0){
+      curr_vertex <- least_vertex_samples[least_vertex_samples %in% gte$V1][1] # if there are multiple related sample IDs from GTE, then take just first 
+    } else {
+      curr_vertex <- least_vertex_samples[1]
+    }
+
+    # Get all vertices that have an edge with curr_vertex
+    related_vertices <- names(relatedness_graph[curr_vertex][relatedness_graph[curr_vertex] > 0])
+
+    # Add these vertexes to the list of vertices to remove
+    samples_to_remove_due_to_relatedness <- c(samples_to_remove_due_to_relatedness, related_vertices)
+
+    # Remove the vertices to remove
+    relatedness_graph <- delete_vertices(relatedness_graph, c(curr_vertex, related_vertices))
+  }
+
+  # Get the indices of those samples that should be removed.
+  indices_of_relatedness_failed <- match(
+    samples_to_remove_due_to_relatedness,
+    target_bed$fam$sample.ID)
+
+  # Remove these indices from the indices that remained after the previous check.
+  indices_of_passed_samples <- indices_of_het_passed_samples[
+    (!indices_of_het_passed_samples %in% indices_of_relatedness_failed)]
+
+  print("relatedness_failed_samples:")
+  #print(indices_of_relatedness_failed)
+  print("relatedness_passed_samples:")
+  #print(indices_of_passed_samples)
+
+} else {
+
+  # No relatedness observed, proceeding with all samples that passed the previous check.
+  indices_of_passed_samples <- indices_of_het_passed_samples
 }
 
-gene_summary <- exp_summary(and_pp)
-fwrite(gene_summary, paste0(args$output, "/exp_data_summary/", "processed_gene_summary.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
+temp_QC <- data.frame(stage = "Relatedness for eQTL samples: thr. KING>2^-4.5", Nr_of_SNPs = target_bed$ncol, 
+Nr_of_samples = length(indices_of_passed_samples),
+Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% het_s[!het_s$ID %in% samples_to_remove_due_to_relatedness, ]$ID, ]) 
+)
+summary_table <- rbind(summary_table, temp_QC)
 
-# Write out summary table about features and samples
-colnames(summary_table) <- c("Stage", "Nr. of features", "Nr. of samples")
-fwrite(summary_table, paste0(args$output, "/exp_data_summary/", "summary_table.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
+### Do PCA on target data
+message("Find genetic outliers.")
+message("Find genetic outliers: do PCA on QCd target data.")
+### PCA
+target_pca <- bed_autoSVD(target_bed, ind.row = indices_of_passed_samples, k = 10, ncores = 4)
+
+print(str(target_pca))
+
+### Find outlier samples
+prob <- bigutilsr::prob_dist(target_pca$u, ncores = 4)
+S <- prob$dist.self / sqrt(prob$dist.nn)
+
+# Put threshold for outlier samples, this is by default 0.4!
+Sthresh <- args$S_threshold
+
+p <- ggplot() +
+  geom_histogram(aes(S), color = "#000000", fill = "#000000", alpha = 0.5) +
+  scale_x_continuous(breaks = 0:5 / 5, limits = c(0, NA)) +
+  scale_y_sqrt(breaks = c(10, 100, 500)) +
+  theme_bigstatsr() +
+  labs(x = "Statistic of outlierness", y = "Frequency (sqrt-scale)") +
+  geom_vline(aes(xintercept = Sthresh), colour = "red", linetype = 2)
+
+print(head(S))
+
+ggsave(paste0(args$output, "/gen_plots/PC_dist_outliers_S.png"), type = "cairo", height = 7 / 2, width = 9, units = "in", dpi = 300)
+ggsave(paste0(args$output, "/gen_plots/PC_dist_outliers_S.pdf"), height = 7 / 2, width = 9, units = "in", dpi = 300)
+
+# Visualise PCs, outline individual outlier samples
+PCs <- predict(target_pca)
+
+PCs <- as.data.frame(PCs)
+colnames(PCs) <- paste0("PC", 1:10)
+PCs$S <- S
+
+PCs$outlier_ind <- "no"
+
+if (any(PCs$S > Sthresh)) {
+  PCs[PCs$S > Sthresh, ]$outlier_ind <- "yes"
+}
+PCs$sd_outlier <- "no"
+sd_outlier_selection <- ((PCs$PC1 > mean(PCs$PC1) + args$SD_threshold * sd(PCs$PC1)
+  | PCs$PC1 < mean(PCs$PC1) - args$SD_threshold * sd(PCs$PC1))
+  | (PCs$PC2 > mean(PCs$PC2) + args$SD_threshold * sd(PCs$PC2)
+  | PCs$PC2 < mean(PCs$PC2) - args$SD_threshold * sd(PCs$PC2)))
+if (any(sd_outlier_selection)) {
+  PCs[sd_outlier_selection, ]$sd_outlier <- "yes"
+}
+
+print(head(PCs))
+
+PCs$outlier <- "no"
+if (nrow(PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "no", ]) > 0){
+PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "no", ]$outlier <- "S outlier"}
+if(nrow(PCs[PCs$outlier_ind == "no" & PCs$sd_outlier == "yes", ]) > 0){
+PCs[PCs$outlier_ind == "no" & PCs$sd_outlier == "yes", ]$outlier <- "SD outlier"}
+if(nrow(PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "yes", ]) > 0){
+PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "yes", ]$outlier <- "S and SD outlier"
+}
+# For first 2 PCs also remove samples which deviate from the mean
+
+p1 <- ggplot(PCs, aes(x = PC1, y = PC2, colour = outlier)) + theme_bw() + geom_point(alpha = 0.5) + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick")) +
+geom_vline(xintercept = c(mean(PCs$PC1) + 3 * sd(PCs$PC1), mean(PCs$PC1) - 3 * sd(PCs$PC1)), colour = "firebrick", linetype = 2) + 
+geom_hline(yintercept = c(mean(PCs$PC2) + 3 * sd(PCs$PC2), mean(PCs$PC2) - 3 * sd(PCs$PC2)), colour = "firebrick", linetype = 2)
+p2 <- ggplot(PCs, aes(x = PC3, y = PC4, colour = outlier)) + theme_bw() + geom_point(alpha = 0.5) + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
+p3 <- ggplot(PCs, aes(x = PC5, y = PC6, colour = outlier)) + theme_bw() + geom_point(alpha = 0.5) + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
+p4 <- ggplot(PCs, aes(x = PC7, y = PC8, colour = outlier)) + theme_bw() + geom_point(alpha = 0.5) + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
+p5 <- ggplot(PCs, aes(x = PC9, y = PC10, colour = outlier)) + theme_bw() + geom_point(alpha = 0.5) + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
+
+p <- p1 + p2 + p3 + p4 + p5 + plot_layout(nrow = 3)
+
+ggsave(paste0(args$output, "/gen_plots/PCA_outliers.png"), type = "cairo", height = 10 * 1.5, width = 9 * 1.5, units = "in", dpi = 300)
+ggsave(paste0(args$output, "/gen_plots/PCA_outliers.pdf"), height = 10 * 1.5, width = 9 * 1.5, units = "in", dpi = 300)
+
+# Filter out related samples and outlier samples, write out QCd data
+message("Filter out related samples and outlier samples, write out QCd data.")
+indices_of_passed_samples <- indices_of_passed_samples[PCs$outlier == "no"]
+samples_to_include <- data.frame(family.ID = target_bed$.fam$family.ID[indices_of_passed_samples], sample.IDD2 = target_bed$.fam$sample.ID[indices_of_passed_samples])
+
+temp_QC <- data.frame(stage = paste0("Outlier samples: thr. S>", Sthresh, " PC1/PC2 SD deviation thresh ", args$SD_threshold), Nr_of_SNPs = target_bed$ncol, 
+Nr_of_samples = nrow(samples_to_include), 
+Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$`sample.IDD2`, ]))
+summary_table <- rbind(summary_table, temp_QC)
+
+fwrite(data.table::data.table(samples_to_include), "SamplesToInclude.txt", sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
+# Remove samples
+system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --output-chr 26 --keep SamplesToInclude.txt --make-bed --threads 4 --out ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation"))
+
+# Rerun PCA on QCd data
+bed_qc <- bed(paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.bed"))
+target_pca_qcd <- bed_autoSVD(bed_qc, k = 10, ncores = 4)
+
+PCsQ <- predict(target_pca_qcd)
+
+PCsQ <- as.data.frame(PCsQ)
+
+colnames(PCsQ) <- paste0("PC", 1:10)
+rownames(PCsQ) <- bed_qc$fam$sample.ID
+
+# Visualise
+p1 <- ggplot(PCsQ, aes(x = PC1, y = PC2)) + theme_bw() + geom_point(alpha = 0.5)
+p2 <- ggplot(PCsQ, aes(x = PC3, y = PC4)) + theme_bw() + geom_point(alpha = 0.5)
+p3 <- ggplot(PCsQ, aes(x = PC5, y = PC6)) + theme_bw() + geom_point(alpha = 0.5)
+p4 <- ggplot(PCsQ, aes(x = PC7, y = PC8)) + theme_bw() + geom_point(alpha = 0.5)
+p5 <- ggplot(PCsQ, aes(x = PC9, y = PC10)) + theme_bw() + geom_point(alpha = 0.5)
+p <- p1 + p2 + p3 + p4 + p5 + plot_layout(nrow = 3)
+
+ggsave(paste0(args$output, "/gen_plots/Target_PCs_postQC.png"), type = "cairo", height = 10 * 1.5, width = 9 * 1.3, units = "in", dpi = 300)
+ggsave(paste0(args$output, "/gen_plots/Target_PCs_postQC.pdf"), height = 10 * 1.5, width = 9 * 1.3, units = "in", dpi = 300)
+
+# Write out
+fwrite(PCsQ, paste0(args$output, "/gen_PCs/GenotypePCs.txt"), row.names = TRUE, sep = "\t", quote = FALSE)
+
+# Visualise loadings
+plot(target_pca_qcd, type = "loadings", loadings = 1:10, coeff = 0.6)
+ggsave(paste0(args$output, "/gen_plots/Target_PCs_postQC_Loadings.png"), type = "cairo", height = (5 * 7) * 0.7, width = (5 * 7) * 0.7, units = "in", dpi = 300)
+
+# Reorder the samples and write out the sample file
+message("Shuffle sample order.")
+rows <- sample(nrow(samples_to_include))
+samples_to_include2 <- samples_to_include[rows, ]
+fwrite(samples_to_include2, "ShuffledSampleOrder.txt", sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+system(paste0("plink/plink2 -bfile ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation ",
+"--indiv-sort f ShuffledSampleOrder.txt ",
+"--make-bed ",
+"--out ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp"))
+
+system(paste0("mv ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp.bed ",
+args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.bed"))
+system(paste0("mv ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp.bim ",
+args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.bim"))
+system(paste0("mv ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp.fam ",
+args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.fam"))
+
+# Count samples in overlapping with GTE
+final_samples <- fread(paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.fam"), header = FALSE)
+
+temp_QC <- data.frame(stage = "QCd samples overlapping with genotype-to-expression file", Nr_of_SNPs = target_bed$ncol, 
+Nr_of_samples = nrow(final_samples[final_samples$V1 %in% gte$V1, ]), 
+Nr_of_eQTL_samples = nrow(final_samples[final_samples$V1 %in% gte$V1, ]))
+summary_table <- rbind(summary_table, temp_QC)
+
+# Write out final summary
+colnames(summary_table) <- c("Stage", "Nr. of SNPs", "Nr. of genotype samples", "Nr. of eQTL samples")
+fwrite(summary_table, paste0(args$output, "/gen_data_summary/summary_table.txt"), sep = "\t", quote = FALSE)
