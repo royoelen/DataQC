@@ -34,7 +34,7 @@ Performs the following main steps:
 
 - Have access to HPC with multiple cores.
 - Have Bash >=3.2 installed.
-- Have Java 8 installed.
+- Have Java >=8 installed.
 - Have Slurm scheduler managing the jobs in the HPC.
 - HPC has Singularity installed and running.
 
