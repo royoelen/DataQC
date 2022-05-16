@@ -25,7 +25,7 @@ Post-QC sample size for this cohort is: **`r library(data.table); exp <- fread(p
 
 **Settings used for sample outlier detection:**
 
-Used LOF S-threhold for genetic outliers: `r params$S`
+LOF S-threhold for genetic outliers: `r params$S`
 
 Threshold of SD difference from mean genetic PC1 and PC2 is: `r params$SD`
 
