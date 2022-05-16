@@ -1,5 +1,7 @@
 library(data.table)
 
+setDTthreads(1)
+
 gen_cov <- fread("outputfolder_gen/gen_PCs/GenotypePCs.txt")
 exp_cov <- fread("outputfolder_exp/exp_PCs/exp_PCs.txt")
 

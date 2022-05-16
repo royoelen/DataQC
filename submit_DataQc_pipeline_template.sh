@@ -19,7 +19,7 @@ module load squashfs/4.4
 
 nextflow_path=../../tools # folder where Nextflow executable is
 
-geno_path=[full path to your input genotype folder]
+geno_path=[full path to your input genotype files without .bed/.bim/.fam extension]
 exp_path=[full path to your gene expression matrix]
 gte_path=[full path to your genotype-to-expression file]
 exp_platform=[expression platform name: HT12v3/HT12v4/HuRef8/RNAseq/AffyU219/AffyHumanExon]
@@ -31,6 +31,8 @@ output_path=../output # Output path, can be kept as is
 # --GenSdThresh [numeric threshold]
 # --ExpSdThresh [numeric threshold]
 # --ContaminationArea [number between 0 and 90, default 30]
+# --InclusionList [file with the list of samples to restrict the analysis]
+# --ExclusionList [file with the list of samples to remove from the analysis]
 
 # Command:
 NXF_VER=21.10.6 ${nextflow_path}/nextflow run DataQC.nf \

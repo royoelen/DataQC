@@ -26,9 +26,12 @@ def helpMessage() {
       --GenSdThresh                 Threshold for declaring samples outliers based on genetic PC1 and PC2. Defaults to 3 SD from the mean of PC1 and PC2 but should be adjusted according to visual inspection.
       --ExpSdThresh                 Standard deviation threshold for excluding gene expression outliers. By default, samples away by 3 SDs from the mean of PC1 are removed.
       --ContaminationArea           Area that marks likely contaminated samples based on sex chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function.
-
+ 
     Optional arguments
       --pruned_variants_sex_check   Path to a plink ranges file that defines which variants to use for the check-sex command. Use this when the automatic selection does not yield satisfactory results.
+      --InclusionList               File with sample IDs to restrict to the analysis. Useful for keeping in the inclusion list of the samples. By default, all samples are kept.
+      --ExclusionList               File with sample IDs to remove from the analysis. Useful for removing the ancestry outliers or restricting the genotype data to one superpopulation. Samples are also removed from the inclusion list. By default, all samples are kept.
+
     """.stripIndent()
 }
 
@@ -60,7 +63,6 @@ Channel
     .ifEmpty { exit 1, "Input report not found!" }
     .set { report_ch }
 
-params.pruned_variants_sex_check = ''
 
 params.GenOutThresh = 0.4
 params.GenSdThresh = 3
@@ -70,7 +72,10 @@ params.exp_platform = ''
 params.cohort_name = ''
 params.outdir = ''
 
+params.InclusionList = ''
+params.ExclusionList = ''
 
+params.pruned_variants_sex_check = ''
 
 // Header log info
 log.info """=======================================================
@@ -91,6 +96,8 @@ summary['Max CPUs']                 = params.max_cpus
 summary['Max Time']                 = params.max_time
 summary['Cohort name']              = params.cohort_name
 if(params.pruned_variants_sex_check) summary['Pruned variants for sex check'] = params.pruned_variants_sex_check
+if(params.InclusionList) summary['Inclusion list'] = params.InclusionList
+if(params.ExclusionList) summary['Exclusion list'] = params.ExclusionList
 summary['Expression platform']      = params.exp_platform
 summary['Output dir']               = params.outdir
 summary['Working dir']              = workflow.workDir
@@ -115,12 +122,13 @@ process GenotypeQC {
       val s_stat from params.GenOutThresh
       val sd_thresh from params.GenSdThresh
       val optional_pruned_variants_sex_check from params.pruned_variants_sex_check
+      val ExclusionList from params.ExclusionList
+      val InclusionList from params.InclusionList
 
     output:
       path ('outputfolder_gen') into output_ch_genotypes
       file 'outputfolder_gen/gen_data_QCd/SexCheck.txt' into sexcheck
       file 'outputfolder_gen/gen_data_QCd/*fam' into sample_qc
-
 
       """
       Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
@@ -130,6 +138,8 @@ process GenotypeQC {
       --pops $baseDir/data/1000G_pops.txt \
       --S_threshold ${s_stat} \
       --SD_threshold ${sd_thresh} \
+      --inclusion_list "${InclusionList}" \
+      --exclusion_list "${ExclusionList}" \
       --output outputfolder_gen \
       --pruned_variants_sex_check "${optional_pruned_variants_sex_check}"
       """
