@@ -511,6 +511,11 @@ related_individuals <- unique(c(related$IID1, related$IID2))
 
 # If there are related samples, find the samples that should be removed so that the maximum set of samples remains,
 # but that also guarantees that no relatedness remains.
+
+# First make an empty vector with samples to remove.
+samples_to_remove_due_to_relatedness <- c()
+
+# If there are related individuals, remove these in the following step.
 if (length(related_individuals) > 0) {
 
   # Define a graph wherein each relation depicts an edge between vertices (samples)
@@ -535,8 +540,6 @@ if (length(related_individuals) > 0) {
   pdf(paste0(args$output, "/gen_plots/relatedness.pdf"))
   plot(relatedness_graph)
   dev.off()
-
-  samples_to_remove_due_to_relatedness <- c()
 
   # Now, get a list of samples that should be removed due to relatedness
   # We get this through a greedy algorithm trying to find a large possible set of unrelated samples.
