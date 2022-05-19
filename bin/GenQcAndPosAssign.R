@@ -101,9 +101,9 @@ summary_table <- rbind(summary_table, temp_QC)
 samples_to_include_gte <- fam[fam$IID %in% gte$V1, ]
 
 print(paste("samples to include: ", exists("samples_to_include")))
-print(table(samples_to_include_gte$IID %in% samples_to_include$IID))
 
 if (exists("samples_to_include")){
+  print(table(samples_to_include_gte$IID %in% samples_to_include$IID))
   samples_to_include_gte <- samples_to_include_gte[samples_to_include_gte$IID %in% samples_to_include$IID, ]
   fam <- fam[fam$IID %in% samples_to_include$IID, ]
   }
