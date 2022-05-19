@@ -88,13 +88,14 @@ fam <- data.frame(FID = target_bed$.fam$family.ID, IID = target_bed$.fam$sample.
 
 ## If specified, keep in only samples which are in the sample whitelist
 if (args$inclusion_list != ""){
-inc_list <- fread(args$inclusion_list, header = FALSE)
-samples_to_include <- fam[fam$IID %in% inc_list$V1, ]
-message("Sample inclusion filter active!")
-temp_QC <- data.frame(stage = "Samples in inclusion list", Nr_of_SNPs = target_bed$ncol,
-Nr_of_samples = nrow(samples_to_include),
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
-summary_table <- rbind(summary_table, temp_QC)
+  inc_list <- fread(args$inclusion_list, header = FALSE)
+  samples_to_include <- fam[fam$IID %in% inc_list$V1, ]
+  message("Sample inclusion filter active!")
+  temp_QC <- data.frame(stage = "Samples in inclusion list",
+                        Nr_of_SNPs = target_bed$ncol,
+                        Nr_of_samples = nrow(samples_to_include),
+                        Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
+  summary_table <- rbind(summary_table, temp_QC)
 }
 
 ## Keep in only samples which are present in genotype-to-expression file AND additional up to 5000 samples (better phasing)
@@ -106,7 +107,8 @@ if (exists("samples_to_include")){
   print(table(samples_to_include_gte$IID %in% samples_to_include$IID))
   samples_to_include_gte <- samples_to_include_gte[samples_to_include_gte$IID %in% samples_to_include$IID, ]
   fam <- fam[fam$IID %in% samples_to_include$IID, ]
-  }
+}
+
 # Here add up to 5000 samples which are not already included
 if (nrow(fam[!fam$IID %in% samples_to_include_gte$IID, ]) > 0){
 set.seed(123)
@@ -116,7 +118,7 @@ fam2 <- fam[fam$IID %in% add_samples, ]
 samples_to_include_temp <- rbind(samples_to_include_gte, fam2)
 } else {samples_to_include_temp <- samples_to_include_gte}
 
-if (nrow(samples_to_include) > 0){
+if (exists("samples_to_include") && nrow(samples_to_include) > 0){
   samples_to_include <- samples_to_include[samples_to_include$IID %in% samples_to_include_temp$IID, ]
   print(nrow(samples_to_include))
 } else {samples_to_include <- samples_to_include_temp}
