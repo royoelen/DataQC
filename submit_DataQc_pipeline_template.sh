@@ -14,9 +14,11 @@ module load java-1.8.0_40
 module load singularity/3.5.3
 module load squashfs/4.4
 
-# Define paths
-# If you follow eQTLGen phase II cookbook, you can use some provided default paths
+# If you follow the eQTLGen phase II cookbook and analysis folder structure,
+# some of the following paths are pre-filled.
+# https://github.com/eQTLGen/eQTLGen-phase-2-cookbook/wiki/eQTLGen-phase-II-cookbook
 
+# Define paths 
 nextflow_path=../../tools # folder where Nextflow executable is
 
 geno_path=[full path to your input genotype files without .bed/.bim/.fam extension]
@@ -24,9 +26,10 @@ exp_path=[full path to your gene expression matrix]
 gte_path=[full path to your genotype-to-expression file]
 exp_platform=[expression platform name: HT12v3/HT12v4/HuRef8/RNAseq/AffyU219/AffyHumanExon]
 cohort_name=[name of the cohort]
-output_path=../output # Output path, can be kept as is
+output_path=../output # Output path
 
 # Optional arguments for the command
+
 # --GenOutThresh [numeric threshold]
 # --GenSdThresh [numeric threshold]
 # --ExpSdThresh [numeric threshold]
