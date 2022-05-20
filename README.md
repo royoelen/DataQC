@@ -77,7 +77,7 @@ Optional arguments:
 
 ### Running the data QC command
 
-Go to folder `dataqc` and modify the Slurm script template `submit_DataQc_pipeline_template.sh` with your input paths. This is an example template for Slurm scheduler:
+Go to folder `dataqc` and modify the Slurm script template `submit_DataQc_pipeline_template.sh` with your input paths. Below is an example template for Slurm scheduler. Some of the paths are pre-filled, assuming that you follow [eQTLGen phase II cookbook](https://github.com/eQTLGen/eQTLGen-phase-2-cookbook/wiki/eQTLGen-phase-II-cookbook) and its recommended folder structure, however you can also customise paths.
 
 ```bash
 #!/bin/bash
@@ -96,23 +96,27 @@ module load java-1.8.0_40
 module load singularity/3.5.3
 module load squashfs/4.4
 
-# Define paths
-# If you follow eQTLGen phase II cookbook, you can use some provided default paths
+# If you follow the eQTLGen phase II cookbook and analysis folder structure,
+# some of the following paths are pre-filled.
+# https://github.com/eQTLGen/eQTLGen-phase-2-cookbook/wiki/eQTLGen-phase-II-cookbook
 
+# Define paths 
 nextflow_path=../../tools # folder where Nextflow executable is
 
-geno_path=[full path to your input genotype file without bed/bim/fam extension]
+geno_path=[full path to your input genotype files without .bed/.bim/.fam extension]
 exp_path=[full path to your gene expression matrix]
 gte_path=[full path to your genotype-to-expression file]
 exp_platform=[expression platform name: HT12v3/HT12v4/HuRef8/RNAseq/AffyU219/AffyHumanExon]
 cohort_name=[name of the cohort]
-output_path=../output # Output path, can be kept as is
+output_path=../output # Output path
 
 # Optional arguments for the command
+
 # --GenOutThresh [numeric threshold]
 # --GenSdThresh [numeric threshold]
 # --ExpSdThresh [numeric threshold]
 # --ContaminationArea [number between 0 and 90, default 30]
+# --InclusionList [file with the list of samples to restrict the analysis]
 # --ExclusionList [file with the list of samples to remove from the analysis]
 
 # Command:
@@ -125,7 +129,6 @@ NXF_VER=21.10.6 ${nextflow_path}/nextflow run DataQC.nf \
 --outdir ${output_path}  \
 -profile slurm,singularity \
 -resume
-
 ```
 
 You can save the modified script version to informative name, e.g. `submit_DataQc_[**CohortName_PlatformName**].sh`.
