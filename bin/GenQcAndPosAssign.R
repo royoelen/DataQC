@@ -743,8 +743,8 @@ final_samples <- fread(paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_T
 
 temp_QC <- data.frame(stage = "QCd samples overlapping with genotype-to-expression file and SNP QC filters on full dataset",
 Nr_of_SNPs = bed_qc$ncol,
-Nr_of_samples = nrow(final_samples[final_samples$V1 %in% gte$V1, ]),
-Nr_of_eQTL_samples = nrow(final_samples[final_samples$V1 %in% gte$V1, ]))
+Nr_of_samples = nrow(final_samples),
+Nr_of_eQTL_samples = nrow(final_samples[final_samples$V2 %in% gte$V1, ]))
 summary_table <- rbind(summary_table, temp_QC)
 
 # Write out final summary
