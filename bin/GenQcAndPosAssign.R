@@ -525,18 +525,12 @@ if (length(related_individuals) > 0) {
     as.matrix(related[,c("IID1", "IID2")]),
     directed = F)
 
-  print(length(relatedness_graph))
-  print(gsize(relatedness_graph))
-
   relatedness_graph <- simplify(
     relatedness_graph,
     remove.multiple = TRUE,
     remove.loops = FALSE,
     edge.attr.comb = igraph_opt("edge.attr.comb")
   )
-
-  print(length(relatedness_graph))
-  print(gsize(relatedness_graph))
 
   # For final version: do not write out, here are original sample IDs
   pdf(paste0(args$output, "/gen_plots/relatedness.pdf"))
