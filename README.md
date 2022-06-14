@@ -42,7 +42,7 @@ Performs the following main steps:
 
 You can either clone it by using git (if available in HPC):
 
-`git clone (https://github.com/eQTLGen/DataQC.git)`
+`git clone https://github.com/eQTLGen/DataQC.git`
 
 Or just download this from the gitlab/github download link and unzip.
 
