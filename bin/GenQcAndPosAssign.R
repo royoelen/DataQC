@@ -81,32 +81,34 @@ target_bed <- bed(args$target_bed)
 # eQTL samples
 gte <- fread(args$gen_exp, sep = "\t", header = FALSE)
 
-summary_table <- data.frame(stage = "Raw file", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow, 
+summary_table <- data.frame(stage = "Raw file", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow,
 Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]))
 
 fam <- data.frame(FID = target_bed$.fam$family.ID, IID = target_bed$.fam$sample.ID)
 
 ## If specified, keep in only samples which are in the sample whitelist
 if (args$inclusion_list != ""){
-inc_list <- fread(args$inclusion_list, header = FALSE)
-samples_to_include <- fam[fam$IID %in% inc_list$V1, ]
-message("Sample inclusion filter active!")
-temp_QC <- data.frame(stage = "Samples in inclusion list", Nr_of_SNPs = target_bed$ncol, 
-Nr_of_samples = nrow(samples_to_include), 
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
-summary_table <- rbind(summary_table, temp_QC)
+  inc_list <- fread(args$inclusion_list, header = FALSE)
+  samples_to_include <- fam[fam$IID %in% inc_list$V1, ]
+  message("Sample inclusion filter active!")
+  temp_QC <- data.frame(stage = "Samples in inclusion list",
+                        Nr_of_SNPs = target_bed$ncol,
+                        Nr_of_samples = nrow(samples_to_include),
+                        Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
+  summary_table <- rbind(summary_table, temp_QC)
 }
 
 ## Keep in only samples which are present in genotype-to-expression file AND additional up to 5000 samples (better phasing)
 samples_to_include_gte <- fam[fam$IID %in% gte$V1, ]
 
 print(paste("samples to include: ", exists("samples_to_include")))
-print(table(samples_to_include_gte$IID %in% samples_to_include$IID))
 
 if (exists("samples_to_include")){
+  print(table(samples_to_include_gte$IID %in% samples_to_include$IID))
   samples_to_include_gte <- samples_to_include_gte[samples_to_include_gte$IID %in% samples_to_include$IID, ]
   fam <- fam[fam$IID %in% samples_to_include$IID, ]
-  }
+}
+
 # Here add up to 5000 samples which are not already included
 if (nrow(fam[!fam$IID %in% samples_to_include_gte$IID, ]) > 0){
 set.seed(123)
@@ -116,13 +118,13 @@ fam2 <- fam[fam$IID %in% add_samples, ]
 samples_to_include_temp <- rbind(samples_to_include_gte, fam2)
 } else {samples_to_include_temp <- samples_to_include_gte}
 
-if (nrow(samples_to_include) > 0){
+if (exists("samples_to_include") && nrow(samples_to_include) > 0){
   samples_to_include <- samples_to_include[samples_to_include$IID %in% samples_to_include_temp$IID, ]
   print(nrow(samples_to_include))
 } else {samples_to_include <- samples_to_include_temp}
 
-temp_QC <- data.frame(stage = "Samples in genotype-to-expression file + 5000", Nr_of_SNPs = target_bed$ncol, 
-Nr_of_samples = nrow(samples_to_include), 
+temp_QC <- data.frame(stage = "Samples in genotype-to-expression file + 5000", Nr_of_SNPs = target_bed$ncol,
+Nr_of_samples = nrow(samples_to_include),
 Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
 summary_table <- rbind(summary_table, temp_QC)
 
@@ -135,7 +137,7 @@ message("Sample exclusion filter active!")
 
 fwrite(samples_to_include, "SamplesToInclude.txt", sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
 
-temp_QC <- data.frame(stage = "Samples after removing exclusion list", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include), 
+temp_QC <- data.frame(stage = "Samples after removing exclusion list", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include),
 Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
 summary_table <- rbind(summary_table, temp_QC)
 
@@ -163,7 +165,7 @@ snp_plinkQC(
 ref_bed <- bed("data/1000G_phase3_common_norel.bed")
 # Read in QCd target genotype data
 target_bed <- bed(paste0(bed_simplepath, "_QC.bed"))
-temp_QC <- data.frame(stage = "SNP CR>0.95; HWE P>1e-6; MAF>0.01; GENO<0.05; MIND<0.05", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow, 
+temp_QC <- data.frame(stage = "SNP CR>0.95; HWE P>1e-6; MAF>0.01; GENO<0.05; MIND<0.05", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow,
 Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]))
 
 summary_table <- rbind(summary_table, temp_QC)
@@ -223,7 +225,7 @@ if (23 %in% sex_check_data_set_chromosomes) {
   sexcheck$F_PASS <- !(sexcheck$F > 0.2 & sexcheck$F < 0.8)
   temp_QC <- data.frame(stage = "Sex check (0.2<F<0.8)",
                         Nr_of_SNPs = target_bed$ncol,
-                        Nr_of_samples = sum(sexcheck$F_PASS), 
+                        Nr_of_samples = sum(sexcheck$F_PASS),
                         Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% sexcheck[sexcheck$F_PASS == TRUE, ]$IID, ]))
   summary_table <- rbind(summary_table, temp_QC)
 
@@ -237,7 +239,7 @@ if (23 %in% sex_check_data_set_chromosomes) {
 
     temp_QC <- data.frame(stage = "Sex check (reported and genetic sex mismatch)",
                           Nr_of_SNPs = target_bed$ncol,
-                          Nr_of_samples = sum(sexcheck$PASS), 
+                          Nr_of_samples = sum(sexcheck$PASS),
                           Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% sexcheck[sexcheck$PASS == TRUE, ]$IID, ]))
     summary_table <- rbind(summary_table, temp_QC)
 
@@ -328,15 +330,15 @@ fwrite(het_fail_samples, het_failed_samples_out_path, sep = "\t", quote = FALSE,
 het_s <- data.frame(ID = target_bed$.fam$sample.ID, FAMID = target_bed$.fam$family.ID)
 het_s <- het_s[!het_s$ID %in% het_fail_samples$IID, ]
 
-temp_QC <- data.frame(stage = "Excess heterozygosity (mean+/-3SD)", Nr_of_SNPs = target_bed$ncol, 
+temp_QC <- data.frame(stage = "Excess heterozygosity (mean+/-3SD)", Nr_of_SNPs = target_bed$ncol,
 Nr_of_samples = length(indices_of_het_passed_samples),
 Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% het_s$ID, ]))
 
 summary_table <- rbind(summary_table, temp_QC)
 
-p <- ggplot(het, aes(x = het_rate)) + geom_histogram(color = "#000000", fill = "#000000", alpha = 0.5) + 
-xlab("Heterozygosity rate") + 
-geom_vline(xintercept = c(mean(het$het_rate), mean(het$het_rate) + 3 * sd(het$het_rate), mean(het$het_rate) - 3 * sd(het$het_rate)), linetype = 2, colour = "red") + 
+p <- ggplot(het, aes(x = het_rate)) + geom_histogram(color = "#000000", fill = "#000000", alpha = 0.5) +
+xlab("Heterozygosity rate") +
+geom_vline(xintercept = c(mean(het$het_rate), mean(het$het_rate) + 3 * sd(het$het_rate), mean(het$het_rate) - 3 * sd(het$het_rate)), linetype = 2, colour = "red") +
 theme_bw()
 
 ggsave(paste0(args$output, "/gen_plots/HetCheck.png"), type = "cairo", height = 7 / 2, width = 9, units = "in", dpi = 300)
@@ -389,47 +391,47 @@ combined <- rbind(abi, abi2)
 
 combined$Superpopulation <- factor(combined$Superpopulation, levels = c("Target", "EUR", "EAS", "AMR", "SAS", "AFR"))
 
-p00 <- ggplot(combined, aes(x = PC1, y = PC2, alpha = type)) + 
-geom_point() + 
-theme_bw() + 
-scale_alpha_manual(values = c("Target" = 1, "1000G" = 0)) + 
+p00 <- ggplot(combined, aes(x = PC1, y = PC2, alpha = type)) +
+geom_point() +
+theme_bw() +
+scale_alpha_manual(values = c("Target" = 1, "1000G" = 0)) +
 ggtitle("Target sample projections\nin 1000G PC space")
 
 combined_h <- combined[combined$Superpopulation == "Target", ]
 
-p0 <- ggplot(combined_h, aes(x = PC1, y = PC2)) + 
-geom_point() + 
-theme_bw() + 
+p0 <- ggplot(combined_h, aes(x = PC1, y = PC2)) +
+geom_point() +
+theme_bw() +
 ggtitle("Target sample projections\nzoomed in")
 
-p1 <- ggplot(combined, aes(x = PC1, y = PC2, colour = Superpopulation, alpha = type)) + 
-geom_point() + 
-theme_bw() + 
-scale_color_manual(values = c("Target" = "black", "EUR" = "blue", 
+p1 <- ggplot(combined, aes(x = PC1, y = PC2, colour = Superpopulation, alpha = type)) +
+geom_point() +
+theme_bw() +
+scale_color_manual(values = c("Target" = "black", "EUR" = "blue",
 "EAS" = "goldenrod", "AMR" = "lightgrey", "SAS" = "orange", "AFR" = "red")) +
 scale_alpha_manual(values = c("Target" = 1, "1000G" = 0.2))
 
-p2 <- ggplot(combined, aes(x = PC3, y = PC4, colour = Superpopulation, alpha = type)) + 
-geom_point() + theme_bw() + 
-scale_color_manual(values = c("Target" = "black", "EUR" = "blue", 
+p2 <- ggplot(combined, aes(x = PC3, y = PC4, colour = Superpopulation, alpha = type)) +
+geom_point() + theme_bw() +
+scale_color_manual(values = c("Target" = "black", "EUR" = "blue",
 "EAS" = "goldenrod", "AMR" = "lightgrey", "SAS" = "orange", "AFR" = "red")) +
 scale_alpha_manual(values = c("Target" = 1, "1000G" = 0.2))
 
-p3 <- ggplot(combined, aes(x = PC5, y = PC6, colour = Superpopulation, alpha = type)) + 
-geom_point() + theme_bw() + 
-scale_color_manual(values = c("Target" = "black", "EUR" = "blue", 
+p3 <- ggplot(combined, aes(x = PC5, y = PC6, colour = Superpopulation, alpha = type)) +
+geom_point() + theme_bw() +
+scale_color_manual(values = c("Target" = "black", "EUR" = "blue",
 "EAS" = "goldenrod", "AMR" = "lightgrey", "SAS" = "orange", "AFR" = "red")) +
 scale_alpha_manual(values = c("Target" = 1, "1000G" = 0.2))
 
-p4 <- ggplot(combined, aes(x = PC7, y = PC8, colour = Superpopulation, alpha = type)) + 
-geom_point() + theme_bw() + 
-scale_color_manual(values = c("Target" = "black", "EUR" = "blue", 
+p4 <- ggplot(combined, aes(x = PC7, y = PC8, colour = Superpopulation, alpha = type)) +
+geom_point() + theme_bw() +
+scale_color_manual(values = c("Target" = "black", "EUR" = "blue",
 "EAS" = "goldenrod", "AMR" = "lightgrey", "SAS" = "orange", "AFR" = "red")) +
 scale_alpha_manual(values = c("Target" = 1, "1000G" = 0.2))
 
-p5 <- ggplot(combined, aes(x = PC9, y = PC10, colour = Superpopulation, alpha = type)) + 
-geom_point() + theme_bw() + 
-scale_color_manual(values = c("Target" = "black", "EUR" = "blue", 
+p5 <- ggplot(combined, aes(x = PC9, y = PC10, colour = Superpopulation, alpha = type)) +
+geom_point() + theme_bw() +
+scale_color_manual(values = c("Target" = "black", "EUR" = "blue",
 "EAS" = "goldenrod", "AMR" = "lightgrey", "SAS" = "orange", "AFR" = "red")) +
 scale_alpha_manual(values = c("Target" = 1, "1000G" = 0.2))
 
@@ -511,6 +513,11 @@ related_individuals <- unique(c(related$IID1, related$IID2))
 
 # If there are related samples, find the samples that should be removed so that the maximum set of samples remains,
 # but that also guarantees that no relatedness remains.
+
+# First make an empty vector with samples to remove.
+samples_to_remove_due_to_relatedness <- c()
+
+# If there are related individuals, remove these in the following step.
 if (length(related_individuals) > 0) {
 
   # Define a graph wherein each relation depicts an edge between vertices (samples)
@@ -518,12 +525,17 @@ if (length(related_individuals) > 0) {
     as.matrix(related[,c("IID1", "IID2")]),
     directed = F)
 
+  relatedness_graph <- simplify(
+    relatedness_graph,
+    remove.multiple = TRUE,
+    remove.loops = FALSE,
+    edge.attr.comb = igraph_opt("edge.attr.comb")
+  )
+
   # For final version: do not write out, here are original sample IDs
   pdf(paste0(args$output, "/gen_plots/relatedness.pdf"))
   plot(relatedness_graph)
   dev.off()
-
-  samples_to_remove_due_to_relatedness <- c()
 
   # Now, get a list of samples that should be removed due to relatedness
   # We get this through a greedy algorithm trying to find a large possible set of unrelated samples.
@@ -573,9 +585,9 @@ if (length(related_individuals) > 0) {
   indices_of_passed_samples <- indices_of_het_passed_samples
 }
 
-temp_QC <- data.frame(stage = "Relatedness for eQTL samples: thr. KING>2^-4.5", Nr_of_SNPs = target_bed$ncol, 
+temp_QC <- data.frame(stage = "Relatedness for eQTL samples: thr. KING>2^-4.5", Nr_of_SNPs = target_bed$ncol,
 Nr_of_samples = length(indices_of_passed_samples),
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% het_s[!het_s$ID %in% samples_to_remove_due_to_relatedness, ]$ID, ]) 
+Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% het_s[!het_s$ID %in% samples_to_remove_due_to_relatedness, ]$ID, ])
 )
 summary_table <- rbind(summary_table, temp_QC)
 
@@ -635,7 +647,7 @@ PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "yes", ]$outlier <- "S and SD o
 # For first 2 PCs also remove samples which deviate from the mean
 
 p1 <- ggplot(PCs, aes(x = PC1, y = PC2, colour = outlier)) + theme_bw() + geom_point(alpha = 0.5) + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick")) +
-geom_vline(xintercept = c(mean(PCs$PC1) + 3 * sd(PCs$PC1), mean(PCs$PC1) - 3 * sd(PCs$PC1)), colour = "firebrick", linetype = 2) + 
+geom_vline(xintercept = c(mean(PCs$PC1) + 3 * sd(PCs$PC1), mean(PCs$PC1) - 3 * sd(PCs$PC1)), colour = "firebrick", linetype = 2) +
 geom_hline(yintercept = c(mean(PCs$PC2) + 3 * sd(PCs$PC2), mean(PCs$PC2) - 3 * sd(PCs$PC2)), colour = "firebrick", linetype = 2)
 p2 <- ggplot(PCs, aes(x = PC3, y = PC4, colour = outlier)) + theme_bw() + geom_point(alpha = 0.5) + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
 p3 <- ggplot(PCs, aes(x = PC5, y = PC6, colour = outlier)) + theme_bw() + geom_point(alpha = 0.5) + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
@@ -652,8 +664,8 @@ message("Filter out related samples and outlier samples, write out QCd data.")
 indices_of_passed_samples <- indices_of_passed_samples[PCs$outlier == "no"]
 samples_to_include <- data.frame(family.ID = target_bed$.fam$family.ID[indices_of_passed_samples], sample.IDD2 = target_bed$.fam$sample.ID[indices_of_passed_samples])
 
-temp_QC <- data.frame(stage = paste0("Outlier samples: thr. S>", Sthresh, " PC1/PC2 SD deviation thresh ", args$SD_threshold), Nr_of_SNPs = target_bed$ncol, 
-Nr_of_samples = nrow(samples_to_include), 
+temp_QC <- data.frame(stage = paste0("Outlier samples: thr. S>", Sthresh, " PC1/PC2 SD deviation thresh ", args$SD_threshold), Nr_of_SNPs = target_bed$ncol,
+Nr_of_samples = nrow(samples_to_include),
 Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$`sample.IDD2`, ]))
 summary_table <- rbind(summary_table, temp_QC)
 
@@ -723,10 +735,10 @@ fwrite(PCsQ, paste0(args$output, "/gen_PCs/GenotypePCs.txt"), row.names = TRUE, 
 # Count samples in overlapping with GTE
 final_samples <- fread(paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.fam"), header = FALSE)
 
-temp_QC <- data.frame(stage = "QCd samples overlapping with genotype-to-expression file and SNP QC filters on full dataset", 
-Nr_of_SNPs = bed_qc$ncol, 
-Nr_of_samples = nrow(final_samples[final_samples$V1 %in% gte$V1, ]), 
-Nr_of_eQTL_samples = nrow(final_samples[final_samples$V1 %in% gte$V1, ]))
+temp_QC <- data.frame(stage = "QCd samples overlapping with genotype-to-expression file and SNP QC filters on full dataset",
+Nr_of_SNPs = bed_qc$ncol,
+Nr_of_samples = nrow(final_samples),
+Nr_of_eQTL_samples = nrow(final_samples[final_samples$V2 %in% gte$V1, ]))
 summary_table <- rbind(summary_table, temp_QC)
 
 # Write out final summary
