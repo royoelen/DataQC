@@ -533,9 +533,9 @@ if (length(related_individuals) > 0) {
   )
 
   # For final version: do not write out, here are original sample IDs
-  pdf(paste0(args$output, "/gen_plots/relatedness.pdf"))
-  plot(relatedness_graph)
-  dev.off()
+  # pdf(paste0(args$output, "/gen_plots/relatedness.pdf"))
+  # plot(relatedness_graph)
+  # dev.off()
 
   # Now, get a list of samples that should be removed due to relatedness
   # We get this through a greedy algorithm trying to find a large possible set of unrelated samples.
