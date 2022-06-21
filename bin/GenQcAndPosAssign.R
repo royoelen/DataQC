@@ -84,6 +84,8 @@ gte <- fread(args$gen_exp, sep = "\t", header = FALSE)
 summary_table <- data.frame(stage = "Raw file", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow,
 Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]))
 
+if(nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]) < 100){stop("Less than 100 samples are in genotype-to-expression file!")}
+
 fam <- data.frame(FID = target_bed$.fam$family.ID, IID = target_bed$.fam$sample.ID)
 
 ## If specified, keep in only samples which are in the sample whitelist
