@@ -383,6 +383,8 @@ gte <- gte[gte$V1 %in% gen_filter$V2, ]
 
 and <- and[, colnames(and) %in% c("Feature", gte$V2), with = FALSE]
 
+if (nrow(and) < 100){stop("Less than 100 samples overlap with QCd genotype data!")}
+
 summary_table_temp <- data.table(Stage = "Samples which overlap with QCd genotype info", Nr_of_features = nrow(and), Nr_of_samples = ncol(and) - 1)
 summary_table <- rbind(summary_table, summary_table_temp)
 
