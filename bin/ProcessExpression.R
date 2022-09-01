@@ -568,7 +568,7 @@ if (nrow(y_genes) > 0){
   summary_table <- rbind(summary_table, summary_table_temp)
 
 } else {
-  message("There is no Y chromosome genes in the expression data, omitting sex check.")
+  message("There are no Y chromosome genes in the expression data, omitting sex check.")
   }
 
 # Apply inverse normal transformation to normalised data.
