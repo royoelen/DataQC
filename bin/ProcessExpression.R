@@ -481,6 +481,8 @@ if (nrow(y_genes) > 0){
 
   y_mean <- apply(y_genes, 2, mean)
   min_y_mean <- min(y_mean)
+
+  message(print(min_y_mean))
   
   if (length(xist) == 0){
     message("XIST not detected, plotting the mean of X chr genes instead!")
@@ -491,7 +493,7 @@ if (nrow(y_genes) > 0){
     y_genes <- data.frame(sample = colnames(y_genes), xist = xist_mean - min_xist, y_genes = y_mean - min_y_mean)
     xist_missing <- TRUE
     } else {
-    min_sex_exp <- min(xist)
+    min_xist <- min(xist)
     y_genes <- data.frame(sample = colnames(y_genes), xist = xist - min_xist, y_genes = y_mean - min_y_mean)
     xist_missing <- FALSE
     }
@@ -514,8 +516,8 @@ if (nrow(y_genes) > 0){
     y_genes$expressionSex != y_genes$Sex ~ "yes"
   )
 
-  x_expression_median <- 0
-  y_expression_median <- 0
+  x_expression_median <- median(y_genes[y_genes$Sex == 1 & y_genes$expressionSex == 1, "xist"])
+  y_expression_median <- median(y_genes[y_genes$Sex == 2 & y_genes$expressionSex == 2, "y_genes"])
 
   lower_slope <- tan((45 - args$contamination_area / 2) / 180*pi)
   upper_slope <- tan((45 + args$contamination_area / 2) / 180*pi)
@@ -540,7 +542,7 @@ if (nrow(y_genes) > 0){
   if (xist_missing == FALSE){
   base_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
     geom_ribbon(alpha = 0.2) +
-    geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
+    geom_segment(aes(x = x_expression_median, y = y_expression_median, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
     geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
     scale_colour_manual(
       values = alpha(c("Passed" = "black", 
@@ -554,7 +556,7 @@ if (nrow(y_genes) > 0){
   } else {
     base_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
     geom_ribbon(alpha = 0.2) +
-    geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
+    geom_segment(aes(x = x_expression_median, y = y_expression_median, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
     geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
     scale_colour_manual(
       values = alpha(c("Passed" = "black", 
