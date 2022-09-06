@@ -130,7 +130,7 @@ Nr_of_samples = nrow(samples_to_include),
 Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
 summary_table <- rbind(summary_table, temp_QC)
 
-# Keep in only samples which are in the inclusion list
+# Keep in only samples which are in the exclusion list
 if (args$exclusion_list != ""){
 exc_list <- fread(args$exclusion_list, header = FALSE)
 samples_to_include <- samples_to_include[!samples_to_include$IID %in% exc_list$V1, ]
