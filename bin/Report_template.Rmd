@@ -48,7 +48,7 @@ knitr::kable(overview_table)
 
 ### Sex check
 
-`r if(!file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\begin{comment}"}`
+`r if (!file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\begin{comment}"}`
 Next plot summarises the genetically determined sex of the input samples. Samples which have unclear genetic sex (X chr heterozygosity >0.2 and <0.8) and hence might be contaminated, are removed. If reported sex is indicated in the input `.fam` file, this is also compared with genetic sex and problematic samples (potential mixups) are automatically excluded.
 
 `r nrow(fread("outputfolder_gen/gen_data_QCd/SexCheckFailed.txt"))` samples failed genotype check and were removed.
@@ -57,15 +57,15 @@ You can investigate the file `[your output folder]/outputfolder_gen/gen_data_QCd
 
 ![**Fig 1. Distribution of F-values representing X chromosome heterozygosity.** Genetically determined sex thresholds are shown as vertical lines. Samples with the F-value between those two lines are potentially contaminated samples and are automatically excluded.](outputfolder_gen/gen_plots/SexCheck.png)
 
-`r if(!file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\end{comment}"}`
+`r if (!file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\end{comment}"}`
 
-`r if(file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\begin{comment}"}`
+`r if (file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\begin{comment}"}`
 Warning! This step was skipped since no X chromosome was found in the genotype data.
 Use raw genotype that includes the X chromosome if possible.
 
 **Fig 1. Distribution of F-values representing X chromosome heterozygosity.** Not available!
 
-`r if(file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\end{comment}"}`
+`r if (file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\end{comment}"}`
 
 ### Excess heterozygosity
 
@@ -141,6 +141,7 @@ Again, please follow the following instructions:
 2. If you observe many (>100) samples which are different ancestry compared to the majority of samples (your dataset consists of individuals from several ancestries) then please split your genotype data, based on ancestry and rerun this and following pipelines on those datasets separately. This assumes that you know the ancestry information for your genotype data.
 
 The files `AssignedPopulations.txt` and `1000G_PC_projections.txt` have been written to the your output folder under folder `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. Please use optional `--ExclusionList` and specify the file with the list of samples you want to withhold from this dataset. If the large majority of your cohort is from specific superpopulation (e.g. EUR) but you observe a small number of samples which are not confidently assigned to this superpopulation (<2 fold difference with second most similar superpopulation), you can remove those too.
+
 
 ### Individual genetic outliers in the target population
 
@@ -241,7 +242,7 @@ knitr::kable(overview_pcs)
 
 ### Sex-based mix-up check
 
-`r if(file.exists("outputfolder_exp/exp_plots/SexSpecificGenes.png")) {"\\begin{comment}"}`
+`r if (!file.exists("outputfolder_exp/exp_plots/SexSpecificGenesXIST.png")) {"\\begin{comment}"}`
 
 Next plot shows the expression of the sex chromosomes genes. We assume that males have higher expression of genes encoded from Y-chromosome and females have higher expression of X chromosome gene *XIST*. Therefore, you should see that subsets of samples align parallel to x-axis (females) and y-axis (males). There should be no samples on the x-y diagonal since these are likely samples that are contaminated.
 Samples in the shaded area are automatically removed. The area is defined by an angle of `r params$Cont` degrees centered over the x-y diagonal. This is reasonable default, however you can adjust this with `--ContaminationArea` flag, if needed.
@@ -249,15 +250,28 @@ Samples in the shaded area are automatically removed. The area is defined by an 
 Samples for which the sex-specific expression does not align with genetic sex are potential sample mix-ups.
 These are outlined with red and automatically removed from further analyses. If the X chromosome was not present in the genotype data, expression is compared to reported sex instead.
 
-![**Fig 12. Expression of X/Y chromosome genes.** On the x-axis is the normalised expression level of *XIST*, on the y-axis is the mean of the normalised expression levels of several Y chromosome genes. Point type indicates the genetic sex and there should be no samples on the X-Y diagonal. Samples which are in the wrong sample cloud, are likely sample mixups and were automatically removed from the data. Samples which are in the shaded area, are likely contaminated and automatically removed.](outputfolder_exp/exp_plots/SexSpecificGenes.png) 
+![**Fig 12. Expression of X/Y chromosome genes.** On the x-axis is the normalised expression level of *XIST*, on the y-axis is the mean of the normalised expression levels of several Y chromosome genes. For the better separation of groups, minimal X and Y value was extracted from each value on X and Y axes. Point type indicates the genetic sex and there should be no samples on the X-Y diagonal. Samples which are in the wrong sample cloud, are likely sample mixups and were automatically removed from the data. Samples which are in the shaded area, are likely contaminated and automatically removed.](outputfolder_exp/exp_plots/SexSpecificGenes.png)
 
-`r if(file.exists("outputfolder_exp/exp_plots/SexSpecificGenes.png")) {"\\end{comment}"}`
+`r if (!file.exists("outputfolder_exp/exp_plots/SexSpecificGenesXIST.png")) {"\\end{comment}"}`
 
-`r if(!file.exists("outputfolder_exp/exp_plots/SexSpecificGenes.png")) {"\\begin{comment}"}`
+`r if (!file.exists("outputfolder_exp/exp_plots/SexSpecificGenes.png")) {"\\begin{comment}"}`
+
+Next plot shows the expression of the sex chromosomes genes. We assume that males have higher expression of genes encoded from Y-chromosome and females have higher expression of X chromosome genes. Therefore, you should see that subsets of samples align parallel to x-axis (females) and y-axis (males). There should be no samples on the x-y diagonal since these are likely samples that are contaminated.
+Samples in the shaded area are automatically removed. The area is defined by an angle of `r params$Cont` degrees centered over the x-y diagonal. This is reasonable default, however you can adjust this with `--ContaminationArea` flag, if needed.
+
+Samples for which the sex-specific expression does not align with genetic sex are potential sample mix-ups.
+These are outlined with red and automatically removed from further analyses. If the X chromosome was not present in the genotype data, expression is compared to reported sex instead.
+
+![**Fig 12. Expression of X/Y chromosome genes.** On the x-axis is the mean normalised expression level of X chromosome genes, on the y-axis is the mean of the normalised expression levels of Y chromosome genes. For the better separation of groups, minimal X and Y value was extracted from each value on X and Y axes. Point type indicates the genetic sex and there should be no samples on the X-Y diagonal. Samples which are in the wrong sample cloud, are likely sample mixups and were automatically removed from the data. Samples which are in the shaded area, are likely contaminated and automatically removed.](outputfolder_exp/exp_plots/SexSpecificGenes.png) 
+
+`r if (!file.exists("outputfolder_exp/exp_plots/SexSpecificGenes.png")) {"\\end{comment}"}`
+
+`r if (!file.exists("outputfolder_exp/exp_plots/SexSpecificGenes.png") || !file.exists("outputfolder_exp/exp_plots/SexSpecificGenesXIST.png")) {"\\begin{comment}"}`
 
 Warning! This step was skipped since relevant gene expression data from X and/or Y chromosome(s) was not available!
-Use the data which includes sex chromosomes if possible.
 
-**Fig 12. Expression of X/Y chromosome genes.** ** Not available!
+If possible, use the expression data which includes sex chromosomes.
 
-`r if(!file.exists("outputfolder_exp/exp_plots/SexSpecificGenes.png")) {"\\end{comment}"}`
+**Fig 12. Expression of X/Y chromosome genes.** Not available!
+
+`r if (!file.exists("outputfolder_exp/exp_plots/SexSpecificGenes.png") || !file.exists("outputfolder_exp/exp_plots/SexSpecificGenesXIST.png")) {"\\end{comment}"}`

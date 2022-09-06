@@ -469,22 +469,30 @@ and_pp <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotyp
 
 # Visualise the expression of X-specific and Y-specific genes
 # Read in emp probe mapping file with chr information
-emp_probe_mapping <- fread(args$genotype_to_expression_linking)
+emp_probe_mapping <- fread(args$emp_probe_mapping)
 
 xist <- and_pp[rownames(and_pp) == "ENSG00000229807", ]
 y_genes <- emp_probe_mapping[emp_probe_mapping$chromosome_name == "Y", ]$Ensembl
 y_genes <- and_pp[rownames(and_pp) %in% y_genes, ]
 
+nr_of_y_genes <- nrow(y_genes)
+
 if (nrow(y_genes) > 0){
 
-  if (nrow(xist) == 0){
-    y_mean <- apply(y_genes, 2, mean)
+  y_mean <- apply(y_genes, 2, mean)
+  min_y_mean <- min(y_mean)
+  
+  if (length(xist) == 0){
+    message("XIST not detected, plotting the mean of X chr genes instead!")
     xist <- and_pp[rownames(and_pp) %in% emp_probe_mapping[emp_probe_mapping$chromosome_name == "X", ]$Ensembl, ]
-    y_genes <- data.frame(sample = colnames(y_genes), xist = xist, y_genes = y_mean)
+    xist_mean <- apply(xist, 2, mean)
+    min_xist <- min(xist_mean)
+    nr_of_x_genes <- nrow(xist)
+    y_genes <- data.frame(sample = colnames(y_genes), xist = xist_mean - min_xist, y_genes = y_mean - min_y_mean)
     xist_missing <- TRUE
     } else {
-    y_mean <- apply(y_genes, 2, mean)
-    y_genes <- data.frame(sample = colnames(y_genes), xist = xist, y_genes = y_mean)
+    min_sex_exp <- min(xist)
+    y_genes <- data.frame(sample = colnames(y_genes), xist = xist - min_xist, y_genes = y_mean - min_y_mean)
     xist_missing <- FALSE
     }
 
@@ -506,8 +514,8 @@ if (nrow(y_genes) > 0){
     y_genes$expressionSex != y_genes$Sex ~ "yes"
   )
 
-  x_expression_median <- median(y_genes[y_genes$Sex == 1 & y_genes$expressionSex == 1, "xist"])
-  y_expression_median <- median(y_genes[y_genes$Sex == 2 & y_genes$expressionSex == 2, "y_genes"])
+  x_expression_median <- 0
+  y_expression_median <- 0
 
   lower_slope <- tan((45 - args$contamination_area / 2) / 180*pi)
   upper_slope <- tan((45 + args$contamination_area / 2) / 180*pi)
@@ -535,27 +543,37 @@ if (nrow(y_genes) > 0){
     geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
     geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
     scale_colour_manual(
-      values = alpha(c("Passed" = "black", "Likely contaminated" = "red",
-                      "Sex mismatch" = "#d79393", "Contaminated and\nsex mismatch" = "firebrick"), 0.5),
+      values = alpha(c("Passed" = "black", 
+      "Likely contaminated" = "red",
+      "Sex mismatch" = "#d79393", 
+      "Contaminated and\nsex mismatch" = "firebrick"), 
+      0.5),
       name = "Passed checks") +
     coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
-    theme_bw() + ylab("mean of Y genes") + xlab("XIST")
+    theme_bw() + ylab(paste0("mean of Y genes - min(mean of Y genes)\n(n=", nr_of_y_genes, ")")) + xlab("XIST - min(XIST)")
   } else {
     base_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
     geom_ribbon(alpha = 0.2) +
     geom_segment(aes(x = 0, y = 0, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
     geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
     scale_colour_manual(
-      values = alpha(c("Passed" = "black", "Likely contaminated" = "red",
-                      "Sex mismatch" = "#d79393", "Contaminated and\nsex mismatch" = "firebrick"), 0.5),
+      values = alpha(c("Passed" = "black", 
+      "Likely contaminated" = "red",
+      "Sex mismatch" = "#d79393", 
+      "Contaminated and\nsex mismatch" = "firebrick"), 
+      0.5),
       name = "Passed checks") +
     coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
-    theme_bw() + ylab("mean of Y genes") + xlab("mean of X genes")
+    theme_bw() + ylab(paste0("mean of Y genes - min(mean of Y genes)\n(n=", nr_of_y_genes, ")")) + xlab(paste0("mean of X genes - min(mean of X genes)\n(n=", nr_of_x_genes, ")"))
   }
 
-  ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
-  ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.pdf"), height = 5, width = 7, units = "in", dpi = 300)
-
+  if (xist_missing == FALSE){
+    ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
+    ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST.pdf"), height = 5, width = 7, units = "in", dpi = 300)
+  } else if (xist_missing == TRUE){
+    ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
+    ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.pdf"), height = 5, width = 7, units = "in", dpi = 300)
+  }
   # Filter out potential sex mismatches
   and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$mismatch != "yes", ]$sample]
 
@@ -568,7 +586,7 @@ if (nrow(y_genes) > 0){
   summary_table <- rbind(summary_table, summary_table_temp)
 
 } else {
-  message("There are no Y chromosome genes in the expression data, omitting sex check.")
+  message("There is no Y chromosome genes in the expression data, omitting sex check.")
   }
 
 # Apply inverse normal transformation to normalised data.
