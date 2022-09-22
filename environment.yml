@@ -18,4 +18,3 @@ dependencies:
   - conda-forge::r-cairo=1.5_12.2
   - bioconda::bioconductor-edger=3.32.1
   - conda-forge::r-hexbin=1.28.1
-  - conda-forge::r-igraph=1.2.11
