@@ -18,7 +18,12 @@ module load squashfs/4.4
 # some of the following paths are pre-filled.
 # https://github.com/eQTLGen/eQTLGen-phase-2-cookbook/wiki/eQTLGen-phase-II-cookbook
 
-# Define paths 
+# We set the following variables for nextflow to prevent writing to your home directory (and potentially filling it completely)
+# Feel free to change these as you wish.
+export SINGULARITY_CACHEDIR=../../singularitycache
+export NXF_HOME=../../nextflowcache
+
+# Define paths
 nextflow_path=../../tools # folder where Nextflow executable is
 
 geno_path=[full path to your input genotype files without .bed/.bim/.fam extension]
@@ -26,6 +31,7 @@ exp_path=[full path to your gene expression matrix]
 gte_path=[full path to your genotype-to-expression file]
 exp_platform=[expression platform name: HT12v3/HT12v4/HuRef8/RNAseq/AffyU219/AffyHumanExon]
 cohort_name=[name of the cohort]
+genome_build="GRCh37"
 output_path=../output # Output path
 
 # Optional arguments for the command
@@ -44,6 +50,7 @@ NXF_VER=21.10.6 ${nextflow_path}/nextflow run DataQC.nf \
 --gte ${gte_path} \
 --exp_platform ${exp_platform} \
 --cohort_name ${cohort_name} \
+--genome_build ${genome_build} \
 --outdir ${output_path}  \
 -profile slurm,singularity \
 -resume

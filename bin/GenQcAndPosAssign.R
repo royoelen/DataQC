@@ -25,13 +25,19 @@ option_list <- list(
     help = "Path to a file with pruned X-chromosome variants to use in the sex check"),
     make_option(c("-o", "--output"), type = "character", help = "Folder with all the output files."),
     make_option(c("-S", "--S_threshold"), default = 0.4,
-    help = "Numeric threshold to declare samples outliers, based on the genotype PCs. Defaults to 0.4 but should always be visually checked and changed, if needed."),
+    help = paste0("Numeric threshold to declare samples outliers, based on the genotype PCs. ", 
+                  "Defaults to 0.4 but should always be visually checked and changed, if needed.")),
     make_option(c("-d", "--SD_threshold"), default = 0.4,
-    help = "Numeric threshold to declare samples outliers, based on the genotype PCs. Defaults to 0.4 but should always be visually checked and changed, if needed."),
+    help = paste0("Numeric threshold to declare samples outliers, based on the genotype PCs. ", 
+                  "Defaults to 0.4 but should always be visually checked and changed, if needed.")),
     make_option(c("-i", "--inclusion_list"), type = "character",
     help = "Path to the file with sample IDs to include."),
     make_option(c("-e", "--exclusion_list"), type = "character",
-    help = "Path to the file with sample IDs to exclude. This also removes samples from inclusion list.")
+    help = "Path to the file with sample IDs to exclude. This also removes samples from inclusion list."),
+    make_option(c("-b", "--genome_build"), type = "character",
+    help = "Genome build of the target genotype file"),
+    make_option(c("--liftover_path"), type = "character",
+    help = "Liftover executable")
     )
 
 parser <- OptionParser(usage = "%prog [options] file", option_list = option_list)
@@ -42,6 +48,7 @@ options(bigstatsr.check.parallel.blas = FALSE)
 
 # Report settings
 print(args$target_bed)
+print(args$genome_build)
 print(args$gen_exp)
 print(args$sample_list)
 print(args$pops)
@@ -50,6 +57,7 @@ print(args$output)
 print(args$S_threshold)
 print(args$SD_threshold)
 print(args$exclusion_list)
+print(args$liftover_path)
 
 if (!is.numeric(args$S_threshold) | !is.numeric(args$SD_threshold) | !is.numeric(args$SD_threshold)){
   message("Some of the QC thresholds is not numeric!")
@@ -144,8 +152,36 @@ Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
 summary_table <- rbind(summary_table, temp_QC)
 
 # Remove samples not in GTE + 5k samples
-system(paste0("plink/plink2 --bfile ", bed_simplepath, " --output-chr 26 --keep SamplesToInclude.txt --make-bed --threads 4 --out ", bed_simplepath, "_filtered"))
+system(paste0("plink/plink2 --bfile ", 
+bed_simplepath, " --output-chr 26 --keep SamplesToInclude.txt --geno 0.05 --make-bed --threads 4 --out ", bed_simplepath, "_filtered"))
 
+# Do a first pass over variants to remove the bulk of highly missed variants
+# List the missingness per variant
+#system(paste0("plink/plink --bfile ",
+#              paste0(bed_simplepath, "_filtered"),
+#              " --threads 4 --missing --out initial_pass_missingness"))
+
+#initial_pass_missing_variants <- fread("initial_pass_missingness.lmiss") %>%
+#  filter(FMISS < 0.05) %>%
+#  pull(SNP)
+
+#fwrite(initial_pass_missing_variants, "variants_callrate_95.txt", sep = "\t", quote = FALSE, row.names = FALSE)
+
+# Map genome builds to build codes.
+build_code <- "b37"
+ucsc_code <- "hg19"
+variant_format <- r"(@:#[b37]\$r,\$a)"
+
+if (args$genome_build %in% c("hg19", "GRCh37")) {
+  message("Using genome build hg19/GRCh37")
+} else if (args$genome_build %in% c("hg38", "GRCh38")) {
+  message("Using genome build hg38/GRCh38")
+  variant_format <- r"(@:#[b38]\$r,\$a)"
+  build_code <- "b38"
+  ucsc_code <- "hg38"
+} else {
+  stop(sprintf("Genome build %s is not recognized as an available genome build!", args$genome_build))
+}
 
 # Do SNP and sample missingness QC on raw genotype bed
 message("Do SNP and genotype QC.")
@@ -159,9 +195,16 @@ snp_plinkQC(
   mind = 0.05,
   hwe = 1e-6,
   autosome.only = FALSE,
-  extra.options = paste0("--output-chr 26 --not-chr 0 25-26 --set-all-var-ids ", r"(@:#[b37]\$r,\$a)"),
+  extra.options = paste0("--output-chr 26 --not-chr 0 25-26 --set-all-var-ids ", variant_format, " --new-id-max-allele-len 10 truncate"),
   verbose = TRUE
 )
+
+qc_bim <- fread(paste0(bed_simplepath, "_QC.bim"), data.table=F)
+consecutive_runs <- unlist(lapply(rle(qc_bim[,2])$lengths, seq_len))
+consequtive_runs_values <- qc_bim[consecutive_runs != 1, 2]
+qc_bim[consecutive_runs != 1, 2] <- paste(qc_bim[consecutive_runs != 1, 2], consecutive_runs[consecutive_runs != 1], sep = "_")
+
+fwrite(qc_bim, paste0(bed_simplepath, "_QC.bim"), sep="\t", row.names=F, col.names=F)
 
 # Read in reference and target genotype data
 ref_bed <- bed("data/1000G_phase3_common_norel.bed")
@@ -193,24 +236,47 @@ if (23 %in% sex_check_data_set_chromosomes) {
   pruned_variants_sex_check <- args$pruned_variants_sex_check
 
   if (!is.null(pruned_variants_sex_check)
-    && pruned_variants_sex_check != ""
-    && file.exists(pruned_variants_sex_check)
-    && nrow(fread(pruned_variants_sex_check, header = F)) > 0) {
+    && pruned_variants_sex_check != "") {
+    
+    if (!file.exists(pruned_variants_sex_check)) {
+      stop(sprintf("file '%s' does not exist"))
+    }
 
     message("Using predefined pruned variants for sex-check:")
     message(pruned_variants_sex_check)
 
-    system(paste0(
-      "plink/plink --bfile ", bed_simplepath, "_QC", " --extract range ", pruned_variants_sex_check,
-      " --maf 0.05 --make-bed --out ", bed_simplepath, "_split"))
+    if (ucsc_code != "hg19") {
+      variants_sex_check <- fread(pruned_variants_sex_check, sep=" ", data.table=F, header=F, col.names=c("chr", "pos", "pos.end", "id"))
 
+      variants_sex_check$chr <- "X"
+
+      variants_sex_check_new <- snp_modifyBuild(
+        variants_sex_check, file.path(".", R.utils::getRelativePath(args$liftover_path)),
+        from = "hg19", to = ucsc_code)
+
+      variants_sex_check_new$chr <- "23"
+      variants_sex_check_new$pos.end <- variants_sex_check_new$pos
+
+      fwrite(variants_sex_check_new[!is.na(variants_sex_check_new$pos),], "mapped_sex_check_variants.txt", col.names=F, row.names=F, quote=F, sep=" ")
+
+      system(paste0(
+        "plink/plink --bfile ", bed_simplepath, "_QC", " --extract range mapped_sex_check_variants.txt",
+        " --maf 0.05 --make-bed --out ", bed_simplepath, "_split"))
+
+    } else {
+ 
+      system(paste0(
+        "plink/plink --bfile ", bed_simplepath, "_QC", " --extract range ", pruned_variants_sex_check,
+        " --maf 0.05 --make-bed --out ", bed_simplepath, "_split"))
+ 
+   }
   } else {
 
     message("Not using predefined pruned variants for sex-check")
 
     system(paste0(
       "plink/plink --bfile ", bed_simplepath, "_QC",
-      " --chr X --maf 0.05 --split-x hg19 no-fail --make-bed --out ", bed_simplepath, "_split"))
+      " --chr X --maf 0.05 --split-x ", build_code, " no-fail --make-bed --out ", bed_simplepath, "_split"))
 
   }
 
@@ -317,9 +383,14 @@ het$het_rate <- (het$OBS_CT - het$`O(HOM)`) / het$OBS_CT
 
 het_fail_samples <- het[het$het_rate < mean(het$het_rate) - 3 * sd(het$het_rate) | het$het_rate > mean(het$het_rate) + 3 * sd(het$het_rate), ]
 
+print(str(het_fail_samples))
+
 # Get the indices of those samples that passed heterozygozity check
 indices_of_het_failed_samples <- match(het_fail_samples$IID, target_bed$fam$sample.ID)
-indices_of_het_passed_samples <- rows_along(target_bed)[-indices_of_het_failed_samples]
+indices_of_het_passed_samples <- rows_along(target_bed)
+if (length(indices_of_het_failed_samples) > 0) {
+  indices_of_het_passed_samples <- rows_along(target_bed)[-indices_of_het_failed_samples]
+}
 
 print("het_failed_samples:")
 print(indices_of_het_failed_samples)
@@ -327,7 +398,6 @@ print("het_passed_samples:")
 print(indices_of_het_passed_samples)
 
 fwrite(het_fail_samples, het_failed_samples_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
-
 
 het_s <- data.frame(ID = target_bed$.fam$sample.ID, FAMID = target_bed$.fam$family.ID)
 het_s <- het_s[!het_s$ID %in% het_fail_samples$IID, ]
@@ -360,9 +430,9 @@ proj_PCA <- bed_projectPCA(
   strand_flip = TRUE,
   join_by_pos = TRUE,
   match.min.prop = 0.5,
-  build.new = "hg19",
+  build.new = ucsc_code,
   build.ref = "hg19",
-  liftOver = NULL,
+  liftOver = R.utils::getRelativePath(args$liftover_path),
   verbose = TRUE,
   ncores = 4
 )

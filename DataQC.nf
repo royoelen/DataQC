@@ -11,12 +11,14 @@ def helpMessage() {
         --gte gte_EstBB_HT12v3.txt\
         --exp_platform HT12v3\
         --cohort_name EstBB_HT12v3\
+        --genome_build GRCh37
         --outdir EstBB_HT12v3_PreImputationQCd\
         -profile slurm\
         -resume
 
     Mandatory arguments:
       --cohort_name                 Name of the cohort.
+      --genome_build                Genome build of the cohort. Either hg19, GRCh37, hg38 or GRCh38.
       --bfile                       Path to the unimputed genotype files in plink bed/bim/fam format (without extensions bed/bim/fam).
       --expfile                     Path to the un-preprocessed gene expression matrix (genes/probes in the rows, samples in the columns). Can be from RNA-seq experiment or from array. NB! For Affymetrix arrays (AffyU219, AffyExon) we assume that standard preprocessing and normalisation is already done.
       --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. Can be used to filter samples from the analysis.
@@ -28,7 +30,7 @@ def helpMessage() {
       --ContaminationArea           Area that marks likely contaminated samples based on sex chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function.
  
     Optional arguments
-      --pruned_variants_sex_check   Path to a plink ranges file that defines which variants to use for the check-sex command. Use this when the automatic selection does not yield satisfactory results.
+      --preselected_sex_check_vars  Path to a plink ranges file that defines which variants to use for the check-sex command. Use this when the automatic selection does not yield satisfactory results.
       --InclusionList               File with sample IDs to restrict to the analysis. Useful for keeping in the inclusion list of the samples. By default, all samples are kept.
       --ExclusionList               File with sample IDs to remove from the analysis. Useful for removing the ancestry outliers or restricting the genotype data to one superpopulation. Samples are also removed from the inclusion list. By default, all samples are kept.
 
@@ -38,6 +40,8 @@ def helpMessage() {
 // Define location of Report_template.Rmd
 params.report_template = "$baseDir/bin/Report_template.Rmd"
 
+// Define set of accepted genome builds:
+def genome_builds_accepted = ['hg19', 'GRCh37', 'hg38', 'GRCh38']
 
 // Define input channels
 Channel
@@ -71,11 +75,16 @@ params.ContaminationArea = 30
 params.exp_platform = ''
 params.cohort_name = ''
 params.outdir = ''
+params.genome_build = ''
 
 params.InclusionList = ''
 params.ExclusionList = ''
 
-params.pruned_variants_sex_check = ''
+params.preselected_sex_check_vars = ''
+
+if ((params.genome_build in genome_builds_accepted) == false) {
+  exit 1, "[Pipeline error] Genome build $params.genome_build not in accepted genome builds: $genome_builds_accepted \n"
+}
 
 // Header log info
 log.info """=======================================================
@@ -85,6 +94,7 @@ def summary = [:]
 summary['Pipeline Name']            = 'DataQC'
 summary['Pipeline Version']         = workflow.manifest.version
 summary['PLINK bfile']              = params.bfile
+summary['Genome Build']             = params.genome_build
 summary['S threshold']              = params.GenOutThresh
 summary['Gen SD threshold']         = params.GenSdThresh
 summary['Exp SD threshold']         = params.ExpSdThresh
@@ -95,7 +105,7 @@ summary['Max Memory']               = params.max_memory
 summary['Max CPUs']                 = params.max_cpus
 summary['Max Time']                 = params.max_time
 summary['Cohort name']              = params.cohort_name
-if(params.pruned_variants_sex_check) summary['Pruned variants for sex check'] = params.pruned_variants_sex_check
+if(params.preselected_sex_check_vars) summary['Pruned variants for sex check'] = params.preselected_sex_check_vars
 if(params.InclusionList) summary['Inclusion list'] = params.InclusionList
 if(params.ExclusionList) summary['Exclusion list'] = params.ExclusionList
 summary['Expression platform']      = params.exp_platform
@@ -121,9 +131,10 @@ process GenotypeQC {
       file gte from gte_ch_gen
       val s_stat from params.GenOutThresh
       val sd_thresh from params.GenSdThresh
-      val optional_pruned_variants_sex_check from params.pruned_variants_sex_check
+      val optional_pruned_variants_sex_check from params.preselected_sex_check_vars
       val ExclusionList from params.ExclusionList
       val InclusionList from params.InclusionList
+      val genome_build from params.genome_build
 
     output:
       path ('outputfolder_gen') into output_ch_genotypes
@@ -133,6 +144,7 @@ process GenotypeQC {
       """
       Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
       --target_bed ${bfile} \
+      --genome_build ${genome_build} \
       --gen_exp ${gte} \
       --sample_list $baseDir/data/unrelated_reference_samples_ids.txt \
       --pops $baseDir/data/1000G_pops.txt \
@@ -141,7 +153,8 @@ process GenotypeQC {
       --inclusion_list "${InclusionList}" \
       --exclusion_list "${ExclusionList}" \
       --output outputfolder_gen \
-      --pruned_variants_sex_check "${optional_pruned_variants_sex_check}"
+      --pruned_variants_sex_check "${optional_pruned_variants_sex_check}" \
+      --liftover_path $baseDir/bin/liftOver
       """
 }
 
