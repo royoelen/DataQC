@@ -248,7 +248,7 @@ process RenderReport {
     input:
       path output_gen from output_ch_genotypes
       path output_exp from output_ch_geneexpression
-      path report from report_c
+      path report from report_ch
       path ref_af from ref_allele_frequencies
       path target_af from target_allele_frequencies
       val exp_platform from params.exp_platform
