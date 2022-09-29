@@ -45,6 +45,46 @@ library(ggplot2)
 overview_table <- fread("outputfolder_gen/gen_data_summary/summary_table.txt")
 knitr::kable(overview_table)
 ```
+### Allele frequency concordance with reference
+
+In the following plot you see the comparison of allele frequencies between input genotypes and 1000G phase 3 reference panel. This lookup is done on SNP IDs, therefore many SNPs will be excluded. However, even with the subset of SNPs we can check if the allele frequencies correlate with each other. We should see that large majority of the variants are on the 0-1 diagonal and strong correlation between the allele frequencies of two datasets.
+
+However:
+
+- If you see the majority of the dots on 1-0 diagonal, this suggest that your input genotypes have incorrect encoding of the alleles for all SNPs.
+- If you see inverted "V" shape, this suggests that there are some subset of SNPs which have alleles mixed.
+
+In both of the cases you should check if the input `.bed/.bim/.fam` files are correct and there are no errors made in generating and/or processing those.
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE, fig.width = 6, fig.height = 6, fig.align = "center"}
+target <- fread("target.afreq.gz")
+ref <- fread("1000Gref.afreq.gz")
+
+target <- target[!is.na(target$ALT_FREQS), ]
+target <- target[, c(2:5), with = FALSE]
+colnames(target)[2:4] <- paste0("target_", colnames(target)[2:4])
+
+ref <- ref[, c(2:5), with = FALSE]
+colnames(ref)[2:4] <- paste0("ref_", colnames(ref)[2:4])
+
+comb <- merge(ref, target, by = "ID")
+
+comb2 <- comb[!(comb$ref_REF != comb$target_REF & comb$ref_REF != comb$target_ALT)]
+
+# Remove ambiguous SNPs
+comb2 <- comb2[!((comb2$ref_REF == "A" & comb2$ref_ALT == "T") | 
+(comb2$ref_REF == "T" & comb2$ref_ALT == "A") |
+(comb2$ref_REF == "C" & comb2$ref_ALT == "G") | 
+(comb2$ref_REF == "G" & comb2$ref_ALT == "C")), ]
+
+comb2[comb2$ref_REF == comb2$target_ALT & comb2$ref_ALT == comb2$target_REF, ]$target_ALT_FREQS <- 1 - comb2[comb2$ref_REF == comb2$target_ALT & comb2$ref_ALT == comb2$target_REF, ]$target_ALT_FREQS
+
+ggplot(comb2, aes(x = target_ALT_FREQS, y = ref_ALT_FREQS)) + geom_point(alpha = 0.2, size = 0.3) + 
+theme_bw() + xlab("AF (input data)") + ylab("AF (1000G reference)")
+
+```
+
+**Fig 1. Comparison of allele frequencies between input genotypes and 1000G phase 3 reference. Comparison is restricted to up to ~1.7M HapMap3 or UK Biobank SNPs as provided in the reference by `bigsnpr` R package.** Ambiguous variants (A/T, C/G SNPs) and variants whose alleles seem to be from opposite strands in two datasets were removed from this analysis. Out of `r nrow(target)` variants in the input genotype data, `r nrow(ref)` overlap with `r nrow(ref)` variants in the reference data. Out of those, `r nrow(comb[(comb$ref_REF != comb$target_REF & comb$ref_REF != comb$target_ALT)])` are removed from this lookup due to different strand between reference and input. The Pearson R of allele frequencies is `res_cor <- cor(comb2$ref_ALT_FREQS, comb2$target_ALT_FREQS, use = "complete.obs"); res_cor`, which suggests `r if(res_cor > 0 & res_cor < 0.5){quality_res <- "that there is something clearly wrong with your input genotypes. You should double-check your input data."} else if (res_cor > 0.5 & res_cor < 0.8){quality_res <- "that you might have something wrong with your input genotypes. Allele frequencies between two datasets correlate, however we would expect higher correlation. You should double-check your input data and contact with lead analysts for advice."} else if (res_cor > 0.8){quality_res <- "that your input data does not have major problems with alleles."} else if (res_cor < 0){quality_res <- "you might have systematic issues with allele encoding in your input genotypes. You should double-check your input data."}; quality_res`
 
 ### Sex check
 

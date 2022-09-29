@@ -74,10 +74,17 @@ download_plink("plink")
 # Download subsetted 1000G reference
 bedfile <- download_1000G("data")
 
+## Calculate AFs for reference data
+system("plink/plink2 --bfile data/1000G_phase3_common_nore --freq --out 1000Gref")
+system("gzip 1000Gref.afreq")
 # Target data
 ## Original file
 message("Read in target data.")
 target_bed <- bed(args$target_bed)
+## Calculate AFs for target data
+system(paste0("plink/plink2 --bfile ", args$target_bed, " --freq --out target")
+system("gzip target.afreq")
+
 # eQTL samples
 gte <- fread(args$gen_exp, sep = "\t", header = FALSE)
 
