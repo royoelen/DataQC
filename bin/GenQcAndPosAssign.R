@@ -82,7 +82,7 @@ system("gzip 1000Gref.afreq")
 message("Read in target data.")
 target_bed <- bed(args$target_bed)
 ## Calculate AFs for target data
-system(paste0("plink/plink2 --bfile ", args$target_bed, " --freq --out target")
+system(paste0("plink/plink2 --bfile ", args$target_bed, " --freq --out target"))
 system("gzip target.afreq")
 
 # eQTL samples
