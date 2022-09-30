@@ -84,7 +84,6 @@ target_bed <- bed(args$target_bed)
 ## Calculate AFs for target data
 system(paste0("plink/plink2 --bfile ", str_replace(args$target_bed, "\\..*", ""), " --freq --out target"))
 system("gzip target.afreq")
-message("Allele frequencies calculated.")
 
 # eQTL samples
 gte <- fread(args$gen_exp, sep = "\t", header = FALSE)
@@ -698,6 +697,8 @@ system(paste0("plink/plink2 -bfile ", args$output, "/gen_data_QCd/", bed_simplep
 # Remove unfiltered samples
 system(paste0("rm ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.*"))
 
+message("Final SNP QC.")
+
 snp_plinkQC(
   plink.path = "plink/plink2",
   prefix.in = paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp"),
@@ -715,10 +716,12 @@ snp_plinkQC(
 system(paste0("rm ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp*"))
 
 # Final rerun PCA on QCd data
+message("Final PCA on QCd data.")
 bed_qc <- bed(paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.bed"))
 target_pca_qcd <- bed_autoSVD(bed_qc, k = 10, ncores = 4)
 
 # Visualise loadings
+message("Plot PC post QC loadings.")
 plot(target_pca_qcd, type = "loadings", loadings = 1:10, coeff = 0.6)
 ggsave(paste0(args$output, "/gen_plots/Target_PCs_postQC_Loadings.png"), type = "cairo", height = (5 * 7) * 0.7, width = (5 * 7) * 0.7, units = "in", dpi = 300)
 
@@ -752,6 +755,7 @@ Nr_of_eQTL_samples = nrow(final_samples[final_samples$V2 %in% gte$V1, ]))
 summary_table <- rbind(summary_table, temp_QC)
 
 # Write out final summary
+message("Write out final sample summary table.")
 colnames(summary_table) <- c("Stage", "Nr. of SNPs", "Nr. of genotype samples", "Nr. of eQTL samples")
 fwrite(summary_table, paste0(args$output, "/gen_data_summary/summary_table.txt"), sep = "\t", quote = FALSE)
 
