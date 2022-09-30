@@ -140,6 +140,8 @@ process GenotypeQC {
       path ('outputfolder_gen') into output_ch_genotypes
       file 'outputfolder_gen/gen_data_QCd/SexCheck.txt' into sexcheck
       file 'outputfolder_gen/gen_data_QCd/*fam' into sample_qc
+      file '1000Gref.afreq.gz' into ref_allele_frequencies
+      file 'target.afreq.gz' into target_allele_frequencies
 
       """
       Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
@@ -260,6 +262,8 @@ process RenderReport {
       path output_gen from output_ch_genotypes
       path output_exp from output_ch_geneexpression
       path report from report_ch
+      path ref_af from ref_allele_frequencies
+      path target_af from target_allele_frequencies
       val exp_platform from params.exp_platform
       val stresh from params.GenOutThresh
       val sdtresh from params.GenSdThresh
