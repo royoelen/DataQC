@@ -86,7 +86,11 @@ res_cor <- cor(comb_f$ref_ALT_FREQS, comb_f$target_ALT_FREQS, use = "complete.ob
 
 ```
 
-**Fig 1. Comparison of allele frequencies between input genotypes and 1000G phase 3 reference. Comparison is restricted to up to ~1.7M HapMap3 or UK Biobank SNPs as provided by `bigsnpr` R package.** Ambiguous variants (A/T, C/G SNPs) and variants whose alleles seem to be from opposite strands in two datasets were removed from this analysis. Out of `r nrow(target)` variants in the input genotype data, `r nrow(comb)` overlap with `r nrow(ref)` variants in the reference data. Out of those, `r nrow(comb[(comb$ref_REF != comb$target_REF & comb$ref_REF != comb$target_ALT)])` are removed from this lookup due to difference of strand between reference and input and `r nrow(comb2[((comb2$ref_REF == "A" & comb2$ref_ALT == "T") | (comb2$ref_REF == "T" & comb2$ref_ALT == "A") | (comb2$ref_REF == "C" & comb2$ref_ALT == "G") | (comb2$ref_REF == "G" & comb2$ref_ALT == "C")), ])` are removed because these are ambiguous variants. The Pearson R of allele frequencies is `r res_cor`, which suggests `r if(res_cor > 0 & res_cor < 0.5){quality_res <- "that there is something clearly wrong with your input genotypes. You should double-check your input data."} else if (res_cor > 0.5 & res_cor < 0.8){quality_res <- "that you might have something wrong with your input genotypes. Allele frequencies between two datasets correlate, however we would expect higher correlation. You should double-check your input data and contact with lead analysts for advice."} else if (res_cor > 0.8){quality_res <- "that your input data does not have major problems with alleles."} else if (res_cor < 0){quality_res <- "you might have systematic issues with allele encoding in your input genotypes. You should double-check your input data."}; quality_res`
+**Fig 1. Comparison of allele frequencies between input genotypes and 1000G phase 3 reference. Comparison is restricted to up to ~1.7M HapMap3 or UK Biobank SNPs as provided by `bigsnpr` R package.** Ambiguous variants (A/T, C/G SNPs) and variants whose alleles seem to be from opposite strands in two datasets were removed from this analysis. 
+
+Out of `r nrow(target)` variants in the input genotype data, `r nrow(comb)` overlap with `r nrow(ref)` variants in the reference data. Out of those, `r nrow(comb[(comb$ref_REF != comb$target_REF & comb$ref_REF != comb$target_ALT)])` are removed from this lookup due to difference of strand between reference and input and `r nrow(comb2[((comb2$ref_REF == "A" & comb2$ref_ALT == "T") | (comb2$ref_REF == "T" & comb2$ref_ALT == "A") | (comb2$ref_REF == "C" & comb2$ref_ALT == "G") | (comb2$ref_REF == "G" & comb2$ref_ALT == "C")), ])` are removed because these are ambiguous variants. This leaves `r nrow(comb_f)` variants for calculating correlations.
+
+The Pearson R of allele frequencies is **`r res_cor`**, which suggests `r if(res_cor > 0 & res_cor < 0.5){quality_res <- "that there is something clearly wrong with your input genotypes. You should double-check your input data."} else if (res_cor > 0.5 & res_cor < 0.8){quality_res <- "that you might have something wrong with your input genotypes. Allele frequencies between two datasets correlate, however we would expect higher correlation. You should double-check your input data and contact with lead analysts for advice."} else if (res_cor > 0.8){quality_res <- "that your input data does not have major problems with allele encoding."} else if (res_cor < 0){quality_res <- "you might have systematic issues with allele encoding in your input genotypes. You should double-check your input data."}; quality_res`
 
 ### Sex check
 
@@ -320,7 +324,7 @@ If possible, use the expression data which includes sex chromosomes.
 
 # Acknowledgements
 
-The eQTLGen DataQC pipeline makes extensive use of the following bioinformatics packages:
+This report was generated with the help of following bioinformatics packages:
 
 `bigsnpr`
 
