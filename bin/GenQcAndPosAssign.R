@@ -75,15 +75,16 @@ download_plink("plink")
 bedfile <- download_1000G("data")
 
 ## Calculate AFs for reference data
-system("plink/plink2 --bfile data/1000G_phase3_common_nore --freq --out 1000Gref")
+system("plink/plink2 --bfile data/1000G_phase3_common_norel --freq --out 1000Gref")
 system("gzip 1000Gref.afreq")
 # Target data
 ## Original file
 message("Read in target data.")
 target_bed <- bed(args$target_bed)
 ## Calculate AFs for target data
-system(paste0("plink/plink2 --bfile ", args$target_bed, " --freq --out target"))
+system(paste0("plink/plink2 --bfile ", str_replace(args$target_bed, "\\..*", ""), " --freq --out target"))
 system("gzip target.afreq")
+message("Allele frequencies calculated.")
 
 # eQTL samples
 gte <- fread(args$gen_exp, sep = "\t", header = FALSE)
@@ -753,3 +754,11 @@ summary_table <- rbind(summary_table, temp_QC)
 # Write out final summary
 colnames(summary_table) <- c("Stage", "Nr. of SNPs", "Nr. of genotype samples", "Nr. of eQTL samples")
 fwrite(summary_table, paste0(args$output, "/gen_data_summary/summary_table.txt"), sep = "\t", quote = FALSE)
+
+system("rm *.bed")
+system("rm *.bim")
+system("rm *.fam")
+system("rm *.id")
+system("rm *.log")
+system("rm *.hh")
+message("Temporary genotype files cleaned up.")
