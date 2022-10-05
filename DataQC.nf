@@ -30,10 +30,11 @@ def helpMessage() {
       --ContaminationArea           Area that marks likely contaminated samples based on sex chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function.
  
     Optional arguments
-      --preselected_sex_check_vars  Path to a plink ranges file that defines which variants to use for the check-sex command. Use this when the automatic selection does not yield satisfactory results.
       --InclusionList               File with sample IDs to restrict to the analysis. Useful for keeping in the inclusion list of the samples. By default, all samples are kept.
       --ExclusionList               File with sample IDs to remove from the analysis. Useful for removing the ancestry outliers or restricting the genotype data to one superpopulation. Samples are also removed from the inclusion list. By default, all samples are kept.
-
+      --AdditionalCovariates        File with additional cohort-specific covariates. First column name SampleID is the sample ID. Following columns are named by covariates.  covariates (e.g. batch) need to be encoded 0, 1. 
+      --preselected_sex_check_vars  Path to a plink ranges file that defines which variants to use for the check-sex command. Use this when the automatic selection does not yield satisfactory results.
+ 
     """.stripIndent()
 }
 
@@ -80,6 +81,8 @@ params.genome_build = ''
 params.InclusionList = ''
 params.ExclusionList = ''
 
+params.AdditionalCovariates = ''
+
 params.preselected_sex_check_vars = ''
 
 if ((params.genome_build in genome_builds_accepted) == false) {
@@ -105,9 +108,10 @@ summary['Max Memory']               = params.max_memory
 summary['Max CPUs']                 = params.max_cpus
 summary['Max Time']                 = params.max_time
 summary['Cohort name']              = params.cohort_name
-if(params.preselected_sex_check_vars) summary['Pruned variants for sex check'] = params.preselected_sex_check_vars
+if(params.AdditionalCovariates) summary['Additional covariates'] = params.AdditionalCovariates
 if(params.InclusionList) summary['Inclusion list'] = params.InclusionList
 if(params.ExclusionList) summary['Exclusion list'] = params.ExclusionList
+if(params.preselected_sex_check_vars) summary['Pruned variants for sex check'] = params.preselected_sex_check_vars
 summary['Expression platform']      = params.exp_platform
 summary['Output dir']               = params.outdir
 summary['Working dir']              = workflow.workDir
@@ -269,6 +273,7 @@ process RenderReport {
       val sdtresh from params.GenSdThresh
       val expsdtresh from params.ExpSdThresh
       val contaminationarea from params.ContaminationArea
+      val additional_covariates from params.AdditionalCovariates
 
     output:
       path ('outputfolder_gen/*') into output_ch2
@@ -276,24 +281,46 @@ process RenderReport {
       path ('Report_DataQc*') into report_ch2
       path ('CovariatePCs.txt') into combined_covariates
 
-      """
-      # Make combined covariate file
-      Rscript --vanilla $baseDir/bin/MakeCovariateFile.R
 
-      # Make report
-      cp -L ${report} notebook.Rmd
+    script:
+    if (params.AdditionalCovariates == '')
+    """
+    # Make combined covariate file
+    Rscript --vanilla $baseDir/bin/MakeCovariateFile.R
 
-      R -e 'library(rmarkdown);rmarkdown::render("notebook.Rmd", "html_document", 
-      output_file = "Report_DataQc_${params.cohort_name}.html", 
-      params = list(
-      dataset_name = "${params.cohort_name}", 
-      platform = "${exp_platform}", 
-      N = "${output_exp}/exp_data_QCd/exp_data_preprocessed.txt",
-      S = ${stresh},
-      SD = ${sdtresh},
-      SD_exp = ${expsdtresh},
-      Cont = ${contaminationarea}))'
-      """
+    # Make report
+    cp -L ${report} notebook.Rmd
+
+    R -e 'library(rmarkdown);rmarkdown::render("notebook.Rmd", "html_document", 
+    output_file = "Report_DataQc_${params.cohort_name}.html", 
+    params = list(
+    dataset_name = "${params.cohort_name}", 
+    platform = "${exp_platform}", 
+    N = "${output_exp}/exp_data_QCd/exp_data_preprocessed.txt",
+    S = ${stresh},
+    SD = ${sdtresh},
+    SD_exp = ${expsdtresh},
+    Cont = ${contaminationarea}))'
+    """
+    else
+    """
+    # Make combined covariate file
+    Rscript --vanilla $baseDir/bin/MakeCovariateFile.R ${additional_covariates}
+
+    # Make report
+    cp -L ${report} notebook.Rmd
+
+    R -e 'library(rmarkdown);rmarkdown::render("notebook.Rmd", "html_document", 
+    output_file = "Report_DataQc_${params.cohort_name}.html", 
+    params = list(
+    dataset_name = "${params.cohort_name}", 
+    platform = "${exp_platform}", 
+    N = "${output_exp}/exp_data_QCd/exp_data_preprocessed.txt",
+    S = ${stresh},
+    SD = ${sdtresh},
+    SD_exp = ${expsdtresh},
+    Cont = ${contaminationarea}))'
+    """
 }
 
 workflow.onComplete {
