@@ -18,8 +18,18 @@ if (length(args) > 0){
     add_cov <- fread(args[1])
     add_cov <- add_cov[complete.cases(add_cov), ]
 
-    if (!all(apply(add_cov[, -1, with = FALSE], 2, is.numeric))){
-        stop("Error: all covariates have to be numeric and not include NA's. Binary covariates have to be encoded as 0/1.")
+    add_cov_sup <- add_cov[, sapply(add_cov, is.character), with = FALSE]
+
+    if (ncol(add_cov_sup) > 1){
+    add_cov_sup <- dcast(data = melt(add_cov_sup, id.vars = "SampleID"), SampleID ~ variable + value, length)
+
+    indik <- sapply(add_cov, is.numeric)
+    indik[1] <- TRUE
+
+    add_cov_sup2 <- add_cov[, indik, with = FALSE]
+
+    add_cov <- merge(add_cov_sup, add_cov_sup2, by = "SampleID")
+
     }
 
     if (all(cov$SampleID %in% add_cov$SampleID)){

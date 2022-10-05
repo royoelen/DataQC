@@ -18,7 +18,7 @@ def helpMessage() {
 
     Mandatory arguments:
       --cohort_name                 Name of the cohort.
-      --genome_build                Genome build of the cohort. Either hg19, GRCh37, hg38 or GRCh38.
+      --genome_build                Genome build of the cohort. Either hg19, GRCh37, hg38 or GRCh38. Defaults to hg19.
       --bfile                       Path to the unimputed genotype files in plink bed/bim/fam format (without extensions bed/bim/fam).
       --expfile                     Path to the un-preprocessed gene expression matrix (genes/probes in the rows, samples in the columns). Can be from RNA-seq experiment or from array. NB! For Affymetrix arrays (AffyU219, AffyExon) we assume that standard preprocessing and normalisation is already done.
       --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. Can be used to filter samples from the analysis.
@@ -76,7 +76,7 @@ params.ContaminationArea = 30
 params.exp_platform = ''
 params.cohort_name = ''
 params.outdir = ''
-params.genome_build = ''
+params.genome_build = 'hg19'
 
 params.InclusionList = ''
 params.ExclusionList = ''
