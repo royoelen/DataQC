@@ -18,7 +18,7 @@ sex <- fread(args[1])
 if (!(is.na(sex$STATUS[1]) & is.na(sex$F)[1])){
 
     message("Adding sex as covariate.")
-    sex <- sex[, c(1, 3), with = FALSE]
+    sex <- sex[, c(1, 4), with = FALSE]
     colnames(sex) <- c("SampleID", "GenSex")
     cov <- merge(cov, sex, by = "SampleID")
 
