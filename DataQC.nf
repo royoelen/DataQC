@@ -30,10 +30,11 @@ def helpMessage() {
       --ContaminationArea           Area that marks likely contaminated samples based on sex chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function.
  
     Optional arguments
-      --preselected_sex_check_vars  Path to a plink ranges file that defines which variants to use for the check-sex command. Use this when the automatic selection does not yield satisfactory results.
       --InclusionList               File with sample IDs to restrict to the analysis. Useful for keeping in the inclusion list of the samples. By default, all samples are kept.
       --ExclusionList               File with sample IDs to remove from the analysis. Useful for removing the ancestry outliers or restricting the genotype data to one superpopulation. Samples are also removed from the inclusion list. By default, all samples are kept.
-
+      --AdditionalCovariates        File with additional cohort-specific covariates. First column name SampleID is the sample ID. Following columns are named by covariates.  Categorical covariates need to be text-based (e.g. batch1, batch2, etc). 
+      --preselected_sex_check_vars  Path to a plink ranges file that defines which variants to use for the check-sex command. Use this when the automatic selection does not yield satisfactory results.
+ 
     """.stripIndent()
 }
 
@@ -67,7 +68,6 @@ Channel
     .ifEmpty { exit 1, "Input report not found!" }
     .set { report_ch }
 
-
 params.GenOutThresh = 0.4
 params.GenSdThresh = 3
 params.ExpSdThresh = 4
@@ -77,8 +77,11 @@ params.cohort_name = ''
 params.outdir = ''
 params.genome_build = ''
 
-params.InclusionList = ''
-params.ExclusionList = ''
+
+// By default define random non-colliding file names in data folder. If default, these are ignored by corresponding script.
+params.InclusionList = "$baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt"
+params.ExclusionList = "$baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt"
+params.AdditionalCovariates = "$baseDir/data/1000G_pops.txt"
 
 params.preselected_sex_check_vars = ''
 
@@ -105,9 +108,10 @@ summary['Max Memory']               = params.max_memory
 summary['Max CPUs']                 = params.max_cpus
 summary['Max Time']                 = params.max_time
 summary['Cohort name']              = params.cohort_name
+if(params.AdditionalCovariates!="$baseDir/data/1000G_pops.txt") summary['Additional covariates'] = params.AdditionalCovariates
+if(params.InclusionList!="$baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt") summary['Inclusion list'] = params.InclusionList
+if(params.ExclusionList!="$baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt") summary['Exclusion list'] = params.ExclusionList
 if(params.preselected_sex_check_vars) summary['Pruned variants for sex check'] = params.preselected_sex_check_vars
-if(params.InclusionList) summary['Inclusion list'] = params.InclusionList
-if(params.ExclusionList) summary['Exclusion list'] = params.ExclusionList
 summary['Expression platform']      = params.exp_platform
 summary['Output dir']               = params.outdir
 summary['Working dir']              = workflow.workDir
@@ -132,8 +136,8 @@ process GenotypeQC {
       val s_stat from params.GenOutThresh
       val sd_thresh from params.GenSdThresh
       val optional_pruned_variants_sex_check from params.preselected_sex_check_vars
-      val ExclusionList from params.ExclusionList
-      val InclusionList from params.InclusionList
+      path ExclusionList from params.ExclusionList
+      path InclusionList from params.InclusionList
       val genome_build from params.genome_build
 
     output:
@@ -269,6 +273,7 @@ process RenderReport {
       val sdtresh from params.GenSdThresh
       val expsdtresh from params.ExpSdThresh
       val contaminationarea from params.ContaminationArea
+      path additional_covariates from params.AdditionalCovariates
 
     output:
       path ('outputfolder_gen/*') into output_ch2
@@ -276,24 +281,25 @@ process RenderReport {
       path ('Report_DataQc*') into report_ch2
       path ('CovariatePCs.txt') into combined_covariates
 
-      """
-      # Make combined covariate file
-      Rscript --vanilla $baseDir/bin/MakeCovariateFile.R
+    script:
+    """
+    # Make combined covariate file
+    Rscript --vanilla $baseDir/bin/MakeCovariateFile.R "${additional_covariates}"
 
-      # Make report
-      cp -L ${report} notebook.Rmd
+    # Make report
+    cp -L ${report} notebook.Rmd
 
-      R -e 'library(rmarkdown);rmarkdown::render("notebook.Rmd", "html_document", 
-      output_file = "Report_DataQc_${params.cohort_name}.html", 
-      params = list(
-      dataset_name = "${params.cohort_name}", 
-      platform = "${exp_platform}", 
-      N = "${output_exp}/exp_data_QCd/exp_data_preprocessed.txt",
-      S = ${stresh},
-      SD = ${sdtresh},
-      SD_exp = ${expsdtresh},
-      Cont = ${contaminationarea}))'
-      """
+    R -e 'library(rmarkdown);rmarkdown::render("notebook.Rmd", "html_document", 
+    output_file = "Report_DataQc_${params.cohort_name}.html", 
+    params = list(
+    dataset_name = "${params.cohort_name}", 
+    platform = "${exp_platform}", 
+    N = "${output_exp}/exp_data_QCd/exp_data_preprocessed.txt",
+    S = ${stresh},
+    SD = ${sdtresh},
+    SD_exp = ${expsdtresh},
+    Cont = ${contaminationarea}))'
+    """
 }
 
 workflow.onComplete {

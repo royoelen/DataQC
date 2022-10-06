@@ -104,7 +104,7 @@ if(nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]) < 100){stop("Less than 100
 fam <- data.frame(FID = target_bed$.fam$family.ID, IID = target_bed$.fam$sample.ID)
 
 ## If specified, keep in only samples which are in the sample whitelist
-if (args$inclusion_list != ""){
+if (args$inclusion_list != "" & args$inclusion_list != "EmpiricalProbeMatching_AffyHumanExon.txt"){
   inc_list <- fread(args$inclusion_list, header = FALSE)
   samples_to_include <- fam[fam$IID %in% inc_list$V1, ]
   message("Sample inclusion filter active!")
@@ -117,8 +117,6 @@ if (args$inclusion_list != ""){
 
 ## Keep in only samples which are present in genotype-to-expression file AND additional up to 5000 samples (better phasing)
 samples_to_include_gte <- fam[fam$IID %in% gte$V1, ]
-
-print(paste("samples to include: ", exists("samples_to_include")))
 
 if (exists("samples_to_include")){
   print(table(samples_to_include_gte$IID %in% samples_to_include$IID))
@@ -145,8 +143,8 @@ Nr_of_samples = nrow(samples_to_include),
 Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
 summary_table <- rbind(summary_table, temp_QC)
 
-# Keep in only samples which are in the exclusion list
-if (args$exclusion_list != ""){
+# Remove samples which are in the exclusion list
+if (args$exclusion_list != "" & args$exclusion_list != "EmpiricalProbeMatching_AffyHumanExon.txt"){
 exc_list <- fread(args$exclusion_list, header = FALSE)
 samples_to_include <- samples_to_include[!samples_to_include$IID %in% exc_list$V1, ]
 message("Sample exclusion filter active!")
