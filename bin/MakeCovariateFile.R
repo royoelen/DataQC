@@ -12,10 +12,24 @@ colnames(exp_cov) <- c("SampleID", paste0("ExpPC", 1:min(100, ncol(exp_cov) - 1)
 
 cov <- merge(gen_cov, exp_cov, by = "SampleID")
 
-if (length(args) > 0){
+# Add sex
+sex <- fread(args[1])
+
+if (!(is.na(sex$STATUS[1]) & is.na(sex$F)[1])){
+
+    message("Adding sex as covariate.")
+    sex <- sex[, c(1, 3), with = FALSE]
+    colnames(sex) <- c("SampleID", "GenSex")
+    cov <- merge(cov, sex, by = "SampleID")
+
+} else {message("Chr X not present and sex not included.")}
 
 
-    add_cov <- fread(args[1])
+if (!args[2] == "1000G_pops.txt"){
+
+    message("Additional covariates are manually added.")
+
+    add_cov <- fread(args[2])
     add_cov <- add_cov[complete.cases(add_cov), ]
 
     add_cov_sup <- add_cov[, sapply(add_cov, is.character), with = FALSE]

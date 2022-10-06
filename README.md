@@ -70,9 +70,11 @@ There are five arguments which can be used to adjust certain outlier detection t
 
 Optional arguments:
 
-`--InclusionList` File with the genotype IDs to keep in the analysis (one per row). Useful for e.g. keeping in only the samples which have part of the biobank, etc. By default, pipeline keeps all samples in.
+`--AdditionalCovariates` Tab-separated file with additional external covariates deemed to be relevant for eQTL mapping in given dataset. First column must have header "SampleID" and following columns must include corresponding covariates with informative headers (E.g. "GenotypeBatch", etc.). Categorical covariates must be specified in text format (E.g. "Batch1", "Batch2", "Batch3"), not encoded as numbers. Pipeline does one-hot encoding for you. Numerical covariates are allowed as well. If specified, this file should include covariate information for each eQTL sample which passes QC and NAs are not allowed. 
 
-`--ExclusionList` File with the genotype IDs to remove from the analysis (one per row). Useful for removing part of the samples from the analysis if these are from different ancestry. In case of the overlap between inclusion list and exclusion list, intersect is kept in the analysis.
+`--InclusionList` File with the genotype IDs to keep in the analysis (one per row). Useful for e.g. keeping in only the samples which have part of the biobank, etc. By default, pipeline keeps all samples in. No header needed.
+
+`--ExclusionList` File with the genotype IDs to remove from the analysis (one per row). Useful for removing part of the samples from the analysis if these are from different ancestry. In case of the overlap between inclusion list and exclusion list, intersect is kept in the analysis. No header needed.
 
 
 ### Running the data QC command
@@ -110,12 +112,13 @@ exp_platform=[expression platform name: HT12v3/HT12v4/HuRef8/RNAseq/AffyU219/Aff
 cohort_name=[name of the cohort]
 output_path=../output # Output path
 
-# Optional arguments for the command
+# Additional settings and optional arguments for the command
 
 # --GenOutThresh [numeric threshold]
 # --GenSdThresh [numeric threshold]
 # --ExpSdThresh [numeric threshold]
 # --ContaminationArea [number between 0 and 90, default 30]
+# --AdditionalCovariates [file with additional covariates]
 # --InclusionList [file with the list of samples to restrict the analysis]
 # --ExclusionList [file with the list of samples to remove from the analysis]
 
