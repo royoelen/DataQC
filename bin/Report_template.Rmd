@@ -391,3 +391,10 @@ URL: https://bioconductor.org/packages/release/bioc/html/edgeR.html
 **Citations:**
 
 <div class="csl-entry">Robinson, M. D., McCarthy, D. J., &#38; Smyth, G. K. (2010). edgeR: a Bioconductor package for differential expression analysis of digital gene expression data. <i>Bioinformatics</i>, <i>26</i>(1), 139–140. https://doi.org/10.1093/BIOINFORMATICS/BTP616</div>
+
+\newline
+
+`PreprocessCore`
+
+URL: https://bioconductor.org/packages/release/bioc/html/preprocessCore.html
+
