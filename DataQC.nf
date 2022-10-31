@@ -18,7 +18,7 @@ def helpMessage() {
 
     Mandatory arguments:
       --cohort_name                 Name of the cohort.
-      --genome_build                Genome build of the cohort. Either hg19, GRCh37, hg38 or GRCh38.
+      --genome_build                Genome build of the cohort. Either hg19, GRCh37, hg38 or GRCh38. Defaults to hg19
       --bfile                       Path to the unimputed genotype files in plink bed/bim/fam format (without extensions bed/bim/fam).
       --expfile                     Path to the un-preprocessed gene expression matrix (genes/probes in the rows, samples in the columns). Can be from RNA-seq experiment or from array. NB! For Affymetrix arrays (AffyU219, AffyExon) we assume that standard preprocessing and normalisation is already done.
       --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. Can be used to filter samples from the analysis.
@@ -75,7 +75,7 @@ params.ContaminationArea = 30
 params.exp_platform = ''
 params.cohort_name = ''
 params.outdir = ''
-params.genome_build = ''
+params.genome_build = 'hg19'
 
 
 // By default define random non-colliding file names in data folder. If default, these are ignored by corresponding script.
@@ -179,6 +179,7 @@ process GeneExpressionQC {
 
     output:
       path ('outputfolder_exp') into output_ch_geneexpression
+      file 'SexCheck.txt' into sexcheck_to_report
 
       script:
       if (exp_platform == 'HT12v3')
@@ -274,6 +275,7 @@ process RenderReport {
       val expsdtresh from params.ExpSdThresh
       val contaminationarea from params.ContaminationArea
       path additional_covariates from params.AdditionalCovariates
+      path sexcheck from sexcheck_to_report
 
     output:
       path ('outputfolder_gen/*') into output_ch2
@@ -284,7 +286,7 @@ process RenderReport {
     script:
     """
     # Make combined covariate file
-    Rscript --vanilla $baseDir/bin/MakeCovariateFile.R "${additional_covariates}"
+    Rscript --vanilla $baseDir/bin/MakeCovariateFile.R ${sexcheck} "${additional_covariates}"
 
     # Make report
     cp -L ${report} notebook.Rmd

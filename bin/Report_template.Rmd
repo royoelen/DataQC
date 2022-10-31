@@ -241,9 +241,11 @@ In case of doubt please contact the lead analysts for advice and we will investi
 
 ![**Fig 8. PCA with all samples, outliers removed.** You should not see any dramatic outliers any more. These are the PCs which will be used as covariates in the eQTL meta-analysis.](outputfolder_gen/gen_plots/Target_PCs_postQC.png)
 
-If you still observe clusters in the data, that could indicate that you still have different genotype batches in the data. If you know genotype batches splitting data is unoptimal, you should specify the batch as additional covariate in `--AdditionalCovariates` argument.
+If you still observe clusters in the data, that could indicate that you still have different genotype batches in the data. If you know the genotype batches and splitting data is unoptimal, you should specify the batch as additional covariate, using `--AdditionalCovariates` argument.
 
 ![**Fig 9. Scree plot for PCA with all samples, outliers removed.** Visualised are the first 10 singular values.](outputfolder_gen/gen_plots/Target_PCs_scree_postQC.png)
+
+Scree plot can be used to see which genotype PCs are most informative and could be considered to be used as covariates.
 
 #### Loadings of PCs
 

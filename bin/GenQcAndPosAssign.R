@@ -814,13 +814,11 @@ ggsave(paste0(args$output, "/gen_plots/Target_PCs_postQC.pdf"), height = 10 * 1.
 fwrite(PCsQ, paste0(args$output, "/gen_PCs/GenotypePCs.txt"), row.names = TRUE, sep = "\t", quote = FALSE)
 
 # Write out scree plots
-png("/gen_plots/Target_PCs_scree_postQC.png", type = "cairo", height = 7, width = 9, units = "in", res = 300)
-plot(target_pca_qcd)
-dev.off()
 
-pdf("/gen_plots/Target_PCs_scree_postQC.pdf", height = 7, width = 9)
-plot(target_pca_qcd)
-dev.off()
+p <- plot(target_pca_qcd)
+ggsave(paste0(args$output, "/gen_plots/Target_PCs_scree_postQC.png"), type = "cairo", height = 5, width = 9, units = "in", dpi = 300)
+ggsave(paste0(args$output, "/gen_plots/Target_PCs_scree_postQC.pdf"), height = 5, width = 9, units = "in", dpi = 300)
+
 
 # Count samples in overlapping with GTE
 final_samples <- fread(paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.fam"), header = FALSE)
