@@ -92,7 +92,6 @@ Optional arguments:
 
 `--ExclusionList` File with the genotype IDs to remove from the analysis (one per row). Useful for removing part of the samples from the analysis if these are from different ancestry. In case of the overlap between inclusion list and exclusion list, intersect is kept in the analysis. No header needed.
 
-
 ### Running the data QC command
 
 Go to folder `dataqc` and modify the Slurm script template `submit_DataQc_pipeline_template.sh` with your input paths. Below is an example template for Slurm scheduler. Some of the paths are pre-filled, assuming that you follow [eQTLGen phase II cookbook](https://github.com/eQTLGen/eQTLGen-phase-2-cookbook/wiki/eQTLGen-phase-II-cookbook) and its recommended folder structure, however you can also use custom paths.
