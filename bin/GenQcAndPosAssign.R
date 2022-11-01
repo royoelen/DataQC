@@ -101,14 +101,14 @@ make_executable(PLINK)
 bedfile <- download_1000G("data")
 
 ## Calculate AFs for reference data
-system("plink/plink2 --bfile data/1000G_phase3_common_norel --freq --out 1000Gref")
+system("plink/plink2 --bfile data/1000G_phase3_common_norel --threads 4 --freq --out 1000Gref")
 system("gzip 1000Gref.afreq")
 # Target data
 ## Original file
 message("Read in target data.")
 target_bed <- bed(args$target_bed)
 ## Calculate AFs for target data
-system(paste0("plink/plink2 --bfile ", str_replace(args$target_bed, "\\..*", ""), " --freq --out target"))
+system(paste0("plink/plink2 --bfile ", str_replace(args$target_bed, "\\..*", ""), " --threads 4 --freq --out target"))
 system("gzip target.afreq")
 
 # eQTL samples
@@ -218,7 +218,7 @@ snp_plinkQC(
   mind = 0.05,
   hwe = 1e-6,
   autosome.only = FALSE,
-  extra.options = paste0("--output-chr 26 --not-chr 0 25-26 --set-all-var-ids ", variant_format, " --new-id-max-allele-len 10 truncate"),
+  extra.options = paste0("--output-chr 26 --not-chr 0 25-26 --set-all-var-ids ", variant_format, " --new-id-max-allele-len 10 truncate --threads 4"),
   verbose = TRUE
 )
 
@@ -305,9 +305,9 @@ if (23 %in% sex_check_data_set_chromosomes) {
 
   ## Pruning
   system(paste0("plink/plink2 --bfile ", bed_simplepath, "_split",
-                " --rm-dup 'exclude-mismatch' --indep-pairwise 20000 200 0.2 --out check_sex_x"))
+                " --rm-dup 'exclude-mismatch' --indep-pairwise 20000 200 0.2 --out check_sex_x --threads 4"))
   ## Sex check
-  system(paste0("plink/plink --bfile ", bed_simplepath, "_split --extract check_sex_x.prune.in --check-sex"))
+  system(paste0("plink/plink --bfile ", bed_simplepath, "_split --extract check_sex_x.prune.in --check-sex --threads 4"))
 
   ## If there is sex info in the fam file for all samples then remove samples which fail the sex check or genotype-based F is >0.2 & < 0.8
   sexcheck <- fread("plink.sexcheck")
@@ -375,7 +375,7 @@ snp_plinkQC(
   mind = 0.05,
   hwe = 1e-6,
   autosome.only = TRUE,
-  extra.options = paste0("--output-chr 26 --remove ", sex_check_removed_out_path),
+  extra.options = paste0("--output-chr 26 --remove ", sex_check_removed_out_path, " --threads 4"),
   verbose = TRUE
 )
 
@@ -398,9 +398,9 @@ message("Do heterozygosity check.")
 het_failed_samples_out_path <- paste0(args$output, "/gen_data_QCd/HeterozygosityFailed.txt")
 
 # Prune variants
-system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --rm-dup 'exclude-mismatch' --indep-pairwise 50 1 0.2"))
+system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --rm-dup 'exclude-mismatch' --indep-pairwise 50 1 0.2 --threads 4"))
 
-system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --extract plink2.prune.in --het"))
+system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --extract plink2.prune.in --het --threads 4"))
 het <- fread("plink2.het", header = T)
 het$het_rate <- (het$OBS_CT - het$`O(HOM)`) / het$OBS_CT
 
@@ -777,7 +777,7 @@ fwrite(samples_to_include2, "ShuffledSampleOrder.txt", sep = "\t", quote = FALSE
 system(paste0("plink/plink2 -bfile ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation ",
 "--indiv-sort f ShuffledSampleOrder.txt ",
 "--make-bed ",
-"--out ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp"))
+"--out ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp --threads 4"))
 
 # Do final SNP QC (for MAF, etc filters on filtered SNPs)
 # Remove unfiltered samples
@@ -795,7 +795,7 @@ snp_plinkQC(
   mind = 0.05,
   hwe = 1e-6,
   autosome.only = TRUE,
-  extra.options = "--output-chr 26",
+  extra.options = "--output-chr 26 --threads 4",
   verbose = TRUE
 )
 
@@ -833,7 +833,22 @@ fwrite(PCsQ, paste0(args$output, "/gen_PCs/GenotypePCs.txt"), row.names = TRUE, 
 
 # Write out scree plots
 
-p <- plot(target_pca_qcd)
+#p <- plot(target_pca_qcd)
+
+variance_explained <- data.frame(
+  PC = paste0("PC", 1:10), 
+  perc_var = target_pca_qcd$d^2 / sum(target_pca_qcd$d^2) * 100
+  )
+variance_explained$PC <- factor(variance_explained$PC, levels = as.character(variance_explained$PC))
+variance_explained$cum_var <- cumsum(variance_explained$perc_var)
+message("Plot scree plot.")
+
+p <- ggplot(variance_explained, aes(x = PC, y = perc_var)) + 
+geom_bar(stat = "identity") + 
+geom_point(aes(x = PC, y = cum_var)) +
+geom_line(aes(y = cum_var, group = 1)) + 
+theme_bw() + ylab("Percentage of variability explained")
+
 ggsave(paste0(args$output, "/gen_plots/Target_PCs_scree_postQC.png"), type = "cairo", height = 5, width = 9, units = "in", dpi = 300)
 ggsave(paste0(args$output, "/gen_plots/Target_PCs_scree_postQC.pdf"), height = 5, width = 9, units = "in", dpi = 300)
 

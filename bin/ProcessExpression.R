@@ -689,8 +689,10 @@ fwrite(gene_summary, paste0(args$output, "/exp_data_summary/", "raw_gene_summary
 message("After normalization.")
 if (args$platform %in% c("HT12v3", "HT12v4", "HuRef8")){
 and_pp <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, normalize = TRUE)
+and_pp <- log2(and_pp)
 } else if (args$platform %in% c("RNAseq")){
 and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, normalize = TRUE)
+and_pp <- log2(and_pp + 0.25)
 } else if (args$platform %in% c("AffyU291", "AffyHuEx")){
 and_pp <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
 }

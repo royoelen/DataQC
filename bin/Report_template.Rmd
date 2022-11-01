@@ -245,7 +245,7 @@ In case of doubt please contact the lead analysts for advice and we will investi
 
 ![**Fig 8. PCA with all samples, outliers outlined with red.** Different shades of red indicate different classes of outliers: difference in SD from mean of PC1 and PC2 (pink), statistic of outlierness S (red), or both (dark red). Dashed lines indicate the SD thresholds to consider samples to outliers.](outputfolder_gen/gen_plots/PCA_outliers.png)  
 
-![**Fig 9. PCA with all samples, outliers removed.** You should not see any dramatic outliers any more. These are the PCs which will be used as covariates in the eQTL meta-analysis.](outputfolder_gen/gen_plots/Target_PCs_postQC.png)
+![**Fig 9. PCA with all samples, outliers removed.** You should not see any dramatic outliers on first PCs any more. These are the PCs which will be used as covariates in the eQTL meta-analysis.](outputfolder_gen/gen_plots/Target_PCs_postQC.png)
 
 If you still observe clusters in the data, that could indicate that you still have different genotype batches in the data. If you know the genotype batches and splitting the data is unoptimal, you should specify the batch as additional covariate, using `--AdditionalCovariates` argument.
 
