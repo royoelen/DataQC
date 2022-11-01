@@ -74,10 +74,28 @@ dir.create(paste0(args$output, "/gen_data_QCd"))
 dir.create(paste0(args$output, "/gen_PCs"))
 dir.create(paste0(args$output, "/gen_data_summary"))
 
-# Download plink2 executable
-download_plink2("plink", AVX2 = FALSE)
+# Download plink executables
+make_executable <- function(exe) {
+  Sys.chmod(exe, mode = (file.info(exe)$mode | "111"))
+}
+
+dir.create("plink")
+
+# Download plink 2 executable
+utils::download.file("https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_20221024.zip",
+destfile = "plink/plink2.zip", verbose = TRUE)
+PLINK <- utils::unzip("plink/plink2.zip",
+                        files = "plink2",
+                        exdir = "plink")
+make_executable(PLINK)
+
 # Download plink 1.9 executable
-download_plink("plink")
+utils::download.file("https://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20220402.zip",
+destfile = "plink/plink.zip", verbose = TRUE)
+PLINK <- utils::unzip("plink/plink.zip",
+                        files = "plink",
+                        exdir = "plink")
+make_executable(PLINK)
 
 # Download subsetted 1000G reference
 bedfile <- download_1000G("data")
