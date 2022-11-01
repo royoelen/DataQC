@@ -49,7 +49,7 @@ cov <- fread("CovariatePCs.txt")
 
 `r if (ncol(cov) - 1 > 110){outp <- paste0('The names of additional covariates are: ', paste(colnames(cov)[-c(1:111)], collapse = ", "), '.'); outp}`
 
-```{r, message = FALSE, warning = FALSE, echo = FALSE}
+```{r, message = FALSE, eval = ncol(cov) - 1 > 110, warning = FALSE, echo = FALSE}
 cov_specific <- melt(cov, id.vars = "SampleID")
 colnames(cov_specific) <- c("SampleID", "covariate", "value")
 cov_specific <- cov_specific[!(str_detect(cov_specific$covariate, "GenPC") | str_detect(cov_specific$covariate, "ExpPC")), ]
@@ -58,6 +58,13 @@ cov_specific$covariate <- as.character(cov_specific$covariate)
 
 ggplot(cov_specific, aes(x = value)) + geom_histogram(colour = "white") + facet_wrap(~ covariate, scales = "free") + theme_bw() + xlab("Covariate value")
 ```
+`r if (ncol(cov) - 1 > 110) {"\\begin{comment}"}`
+**Fig 1. Histograms for additional covariates.**
+`r if (ncol(cov) - 1 > 110) {"\\end{comment}"}`
+
+`r if (ncol(cov) == 110) {"\\begin{comment}"}`
+**Fig 1. Histograms for additional covariates.** Not available, there are no additional covariates prepared on top of genotype PCs and expression PCs.
+`r if (ncol(cov) == 110) {"\\end{comment}"}`
 
 ## Genotype QC report
 
@@ -69,14 +76,14 @@ knitr::kable(overview_table)
 ```
 ### Allele frequency concordance with reference panel
 
-In the following plot you will see the comparison of allele frequencies between input genotypes and 1000G phase 3 reference panel. This lookup is done on SNP IDs, therefore many SNPs will be excluded. However, even with the subset of SNPs we can check if the allele frequencies generally correlate with each other. We should see that large majority of the variants are on the 0-1 diagonal and strong correlation between the allele frequencies of two datasets.
+In the following plot you will see the comparison of allele frequencies between input genotypes and 1000G phase 3 reference panel. This lookup is done on SNP IDs, therefore many SNPs will be excluded. However, even with the subset of SNPs we can check if the allele frequencies generally correlate between cohort and reference. We should see that large majority of the variants are on the 0-1 diagonal and strong correlation between the allele frequencies of two datasets.
 
 However:
 
 - If you see the majority of the dots on 1-0 diagonal (you see strong **negative** correlation), this suggest that your input genotypes have incorrect encoding of the alleles for all SNPs.
 - If you see inverted "V" shape, this suggests that there are some subset of SNPs which have alleles incorrectly encoded.
 
-In both of the cases you should check if the input `.bed/.bim/.fam` files are correct and there are no errors made in generating and/or processing those. If you do not pinpoint any issues with the input, please contact with the lead analyst(s) for advice.
+In both of the cases you should check if the input `.bed/.bim/.fam` files are correct and there are no errors made in generating and/or processing those. If you do not pinpoint any issues with the input, please contact the lead analyst(s) for advice.
 
 ```{r, message = FALSE, warning = FALSE, echo = FALSE, fig.width = 6, fig.height = 6, fig.align = "center"}
 target <- fread("target.afreq.gz")
@@ -108,7 +115,7 @@ res_cor <- cor(comb_f$ref_ALT_FREQS, comb_f$target_ALT_FREQS, use = "complete.ob
 
 ```
 
-**Fig 1. Comparison of allele frequencies between input genotypes and 1000G phase 3 reference.** Comparison is restricted to up to ~1.7M HapMap3 or UK Biobank SNPs as provided by `bigsnpr` R package. Ambiguous variants (A/T, C/G SNPs) and variants whose alleles seem to be from opposite strands in two datasets were removed from this analysis. 
+**Fig 2. Comparison of allele frequencies between input genotypes and 1000G phase 3 reference.** Comparison is restricted to up to ~1.7M HapMap3 or UK Biobank SNPs as provided by `bigsnpr` R package. Ambiguous variants (A/T, C/G SNPs) and variants whose alleles seem to be from opposite strands in two datasets were removed from this analysis. 
 
 Out of `r nrow(target)` variants in the input genotype data, `r nrow(comb)` overlap with `r nrow(ref)` variants in the reference data. Out of those, `r nrow(comb[(comb$ref_REF != comb$target_REF & comb$ref_REF != comb$target_ALT)])` are removed from this lookup due to difference of strand between reference and input and `r nrow(comb2[((comb2$ref_REF == "A" & comb2$ref_ALT == "T") | (comb2$ref_REF == "T" & comb2$ref_ALT == "A") | (comb2$ref_REF == "C" & comb2$ref_ALT == "G") | (comb2$ref_REF == "G" & comb2$ref_ALT == "C")), ])` are removed because these are ambiguous variants. This leaves `r nrow(comb_f)` variants for calculating correlations.
 
@@ -123,7 +130,7 @@ Next plot summarises the genetically determined sex of the input samples. Sample
 
 You can investigate the file `[your output folder]/outputfolder_gen/gen_data_QCd/SexCheckFailed.txt` to see which samples failed the sex check.
 
-![**Fig 2. Distribution of F-values representing X chromosome heterozygosity.** Genetically determined sex thresholds are shown as vertical lines. Samples with the F-value between those two lines are potentially contaminated samples and are automatically excluded.](outputfolder_gen/gen_plots/SexCheck.png)
+![**Fig 3. Distribution of F-values representing X chromosome heterozygosity.** Genetically determined sex thresholds are shown as vertical lines. Samples with the F-value between those two lines are potentially contaminated samples and are automatically excluded.](outputfolder_gen/gen_plots/SexCheck.png)
 
 `r if (!file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\end{comment}"}`
 
@@ -131,7 +138,7 @@ You can investigate the file `[your output folder]/outputfolder_gen/gen_data_QCd
 Warning! This step was skipped since no X chromosome was found in the genotype data.
 Use raw genotype data that includes the X chromosome if possible.
 
-**Fig 2. Distribution of F-values representing X chromosome heterozygosity.** Not available!
+**Fig 3. Distribution of F-values representing X chromosome heterozygosity.** Not available!
 
 `r if (file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\end{comment}"}`
 
@@ -139,7 +146,7 @@ Use raw genotype data that includes the X chromosome if possible.
 
 Next plot summarises the heterozygosity of the input samples. Samples showing excess/depleted heterozygosity rate (mean+/-3SD) have potential issues with contamination or inbreeding, and are automatically excluded.
 
-![**Fig 3. Distribution of heterozygosity rate.** Thresholds for declaring excess/depleted heterozygosity for sample (mean+/-3SD) are shown as vertical lines. ](outputfolder_gen/gen_plots/HetCheck.png)  
+![**Fig 4. Distribution of heterozygosity rate.** Thresholds for declaring excess/depleted heterozygosity for sample (mean+/-3SD) are shown as vertical lines. ](outputfolder_gen/gen_plots/HetCheck.png)  
 
 ### Ancestry outliers
 
@@ -152,7 +159,7 @@ Here we project your genotype samples into 1000G p3v5 superpopulations to check 
 
 The files `AssignedPopulations.txt` and `1000G_PC_projections.txt` have been written to the your output folder under folder `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. Please use optional `--ExclusionList` and specify the file with the list of samples you want to withhold from this dataset.
 
-![**Fig 4. Genotype samples projected to 1000G superpopulations.** First two plots show only target dataset in the 1000G PC space. Rest of the plots visualise target dataset, as well as samples from 1000G superpopulations by plotting first 10 genotype PCs.](outputfolder_gen/gen_plots/SamplesPCsProjectedTo1000G.png)  
+![**Fig 5. Genotype samples projected to 1000G superpopulations.** First two plots show only target dataset in the 1000G PC space. Rest of the plots visualise target dataset, as well as samples from 1000G superpopulations by plotting first 10 genotype PCs.](outputfolder_gen/gen_plots/SamplesPCsProjectedTo1000G.png)  
 
 #### Assign superpopulation for each sample
 
@@ -189,7 +196,7 @@ scale_fill_manual(values = c("Target" = "black",
 fwrite(res, "outputfolder_gen/gen_data_summary/AssignedPopulations.txt", sep = "\t", quote = FALSE, row.names = FALSE)
 ```
 
-**Fig 5. Euclidean distance between target samples and samples from each 1000G superpopulation.** 
+**Fig 6. Euclidean distance between target samples and samples from each 1000G superpopulation.** 
 
 `r nrow(res[res$SamplePopAssign == "EUR",])` samples in the data are most similar to EUR superpopulation.
 
@@ -210,7 +217,6 @@ Again, please follow the following instructions:
 
 The files `AssignedPopulations.txt` and `1000G_PC_projections.txt` have been written to the your output folder under folder `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. Please use optional `--ExclusionList` and specify the file with the list of samples you want to withhold from this dataset. If the large majority of your cohort is from specific superpopulation (e.g. EUR) but you observe a small number of samples which are not confidently assigned to this superpopulation (<2 fold difference with second most similar superpopulation), you can remove those too.
 
-
 ### Individual genetic outliers in the target population
 
 Here we conduct PCA on the genotypes of eQTL samples only and investigate if there are any individual outliers. These are samples which have the same ancestry as bulk of the samples, however still show somewhat different genetic makeup. This might be due to considerable population stratification (different populations or ethnicities in the same superpopulation) or due to technical reasons. By default, we remove clear outliers.
@@ -221,7 +227,7 @@ On the next plot you can see the distribution of Probabilistic Local Outlier Fac
 
 If you observe bimodal distribution on the histogram then it might indicate substratification in the genotype data. Check the following section, Figure 5 and 6. 
 
-![**Fig 6. Statistic of outlierness with threshold used to remove ethnic outliers.**](outputfolder_gen/gen_plots/PC_dist_outliers_S.png)  
+![**Fig 7. Statistic of outlierness with threshold used to remove ethnic outliers.**](outputfolder_gen/gen_plots/PC_dist_outliers_S.png)  
 
 On the next two plots we visualise genetic principal components to check if genetic outliers were removed. If you observe unsolved sub-clusters on following PCA plots, this might indicate that you have different genotyping batches in the data, or large fraction of samples (e.g. >10%) from somewhat different ancestry. In this case, the algorithm migh not assign all deviating samples as outliers or remove unreasonably large fraction of samples. 
 
@@ -237,21 +243,21 @@ If the pipelines does not remove all clear outlier samples, adjust `--GenSdThres
 
 In case of doubt please contact the lead analysts for advice and we will investigate further.
 
-![**Fig 7. PCA with all samples, outliers outlined with red.** Different shades of red indicate different classes of outliers: difference in SD from mean of PC1 and PC2 (pink), statistic of outlierness S (red), or both (dark red). Dashed lines indicate the SD thresholds to consider samples to outliers.](outputfolder_gen/gen_plots/PCA_outliers.png)  
+![**Fig 8. PCA with all samples, outliers outlined with red.** Different shades of red indicate different classes of outliers: difference in SD from mean of PC1 and PC2 (pink), statistic of outlierness S (red), or both (dark red). Dashed lines indicate the SD thresholds to consider samples to outliers.](outputfolder_gen/gen_plots/PCA_outliers.png)  
 
-![**Fig 8. PCA with all samples, outliers removed.** You should not see any dramatic outliers any more. These are the PCs which will be used as covariates in the eQTL meta-analysis.](outputfolder_gen/gen_plots/Target_PCs_postQC.png)
+![**Fig 9. PCA with all samples, outliers removed.** You should not see any dramatic outliers any more. These are the PCs which will be used as covariates in the eQTL meta-analysis.](outputfolder_gen/gen_plots/Target_PCs_postQC.png)
 
-If you still observe clusters in the data, that could indicate that you still have different genotype batches in the data. If you know the genotype batches and splitting data is unoptimal, you should specify the batch as additional covariate, using `--AdditionalCovariates` argument.
+If you still observe clusters in the data, that could indicate that you still have different genotype batches in the data. If you know the genotype batches and splitting the data is unoptimal, you should specify the batch as additional covariate, using `--AdditionalCovariates` argument.
 
-![**Fig 9. Scree plot for PCA with all samples, outliers removed.** Visualised are the first 10 singular values.](outputfolder_gen/gen_plots/Target_PCs_scree_postQC.png)
+![**Fig 10. Scree plot for PCA with all samples, outliers removed.** Visualised are the first 10 singular values.](outputfolder_gen/gen_plots/Target_PCs_scree_postQC.png)
 
-Scree plot can be used to see which genotype PCs are most informative and could be considered to be used as covariates.
+Scree plot shows which genotype PCs are the most informative.
 
 #### Loadings of PCs
 
 Visualise the loadings of 10 first PCs calculated on final quality-controlled genotype data. Because PC calculation command removed long-range LD, you should not see any clear peaks on the plots any more, those would indicate that PC is still driven variants in long-range LD regions.
 
-![**Fig 10. Loadings of 10 first PCs.**](outputfolder_gen/gen_plots/Target_PCs_postQC_Loadings.png)
+![**Fig 11. Loadings of 10 first PCs.**](outputfolder_gen/gen_plots/Target_PCs_postQC_Loadings.png)
 
 ## Gene expression QC report
 
@@ -266,19 +272,19 @@ knitr::kable(overview_table)
 
 On the following plots, 8 first PCs are calculated on normalised and log~2~-transformed expression matrix. Samples were declared as outliers based on first two PCs, when they deviate from the mean value by `r params$SD_exp` standard deviations (SDs). Analysis was run iteratively, data was pre-processed and PCA was calculated until there were no further expression otliers to remove. Because there might be expected difference based on the sex, we also indicate the genetic sex of each sample on the plot.
 
-![**Fig 11. PCA on all samples** Genetic sex of the individual is shown as shape of the dot, outliers from all iterations are outlined as red.](outputfolder_exp/exp_plots/PCA_before.png)
+![**Fig 12. PCA on all samples** Genetic sex of the individual is shown as shape of the dot, outliers from all iterations are outlined as red.](outputfolder_exp/exp_plots/PCA_before.png)
 
 In order to visualise non-linear patterns in the data, we calculated 2 first multidimensional scaling (MDS) components and visualise those as well. This analysis were done on the data where outliers from previous step were already removed. Similarly to PCs, samples were declared as outliers when they deviate from the mean value of MDS 1 and MDS 2 by `r params$SD_exp` SDs. If you still observe outlier groups on this plot, you should try to reduce the SDs allowed to deviate (parameter `--ExpSdThreshold` of the pipeline) and re-run the pipeline.
 
-![**Fig 12. MDS on all samples** Genetic sex of the individual is shown as shape of the dot, outliers are outlined as red.](outputfolder_exp/exp_plots/MDS_before.png)
+![**Fig 13. MDS on all samples** Genetic sex of the individual is shown as shape of the dot, outliers are outlined as red.](outputfolder_exp/exp_plots/MDS_before.png)
 
 These are 8 first expression PCs, calculated on fully processed expression data (normalised and INT-transformed) after removal of outlier samples. Genetic sex of the individual is shown as shape of the dot. You should not see any dramatic outliers any more on first two PCs.
 
-![**Fig 13. PCA on all samples, outliers removed.** Genetic sex of the individual is shown as shape of the dot.](outputfolder_exp/exp_plots/PCA_after.png) 
+![**Fig 14. PCA on all samples, outliers removed.** Genetic sex of the individual is shown as shape of the dot.](outputfolder_exp/exp_plots/PCA_after.png) 
 
 #### Explained variance of expression PCs
 
-![**Fig 14. PCA scree plot for normalised and inverse normal transformed expression matrix.** Outlier samples were removed before re-calculating PCA.](outputfolder_exp/exp_plots/PCA_final_scree_plot.png)
+![**Fig 15. PCA scree plot for normalised and inverse normal transformed expression matrix.** Outlier samples were removed before re-calculating PCA.](outputfolder_exp/exp_plots/PCA_final_scree_plot.png)
 
 Explained variance of final 100 first PCs which are used as covariates in the analysis (normalised and inverse normal transformed expression matrix).
 
@@ -300,7 +306,7 @@ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 p
 ```
 
-**Fig 15. Cumulative explained variance for first 100 PCs.**
+**Fig 16. Cumulative explained variance for first 100 PCs.**
 
 First 5 PCs explain cumulatively `r overview_pcs_cumulative$cumulative[5] * 100`% of variance.
 
@@ -326,7 +332,7 @@ Samples in the shaded area are automatically removed. The area is defined by an 
 Samples for which the sex-specific expression does not align with genetic sex are potential sample mix-ups.
 These are outlined with red and automatically removed from further analyses. If the X chromosome was not present in the genotype data, expression is compared to reported sex instead.
 
-![**Fig 16. Expression of X/Y chromosome genes.** On the x-axis is the normalised expression level of *XIST*, on the y-axis is the mean of the normalised expression levels of several Y chromosome genes. For the better separation of groups, minimal X and Y value was extracted from each value on X and Y axes. Point type indicates the genetic sex and there should be no samples on the X-Y diagonal. Samples which are in the wrong sample cloud, are likely sample mixups and were automatically removed from the data. Samples which are in the shaded area, are likely contaminated and automatically removed. Start of the separating line is set at median Y value of female samples and median X value of male samples.](outputfolder_exp/exp_plots/SexSpecificGenesXIST.png)
+![**Fig 17. Expression of X/Y chromosome genes.** On the x-axis is the normalised expression level of *XIST*, on the y-axis is the mean of the normalised expression levels of several Y chromosome genes. For the better separation of groups, minimal X and Y value was extracted from each value on X and Y axes. Point type indicates the genetic sex and there should be no samples on the X-Y diagonal. Samples which are in the wrong sample cloud, are likely sample mixups and were automatically removed from the data. Samples which are in the shaded area, are likely contaminated and automatically removed. Start of the separating line is set at median Y value of female samples and median X value of male samples.](outputfolder_exp/exp_plots/SexSpecificGenesXIST.png)
 
 `r if (!file.exists("outputfolder_exp/exp_plots/SexSpecificGenesXIST.png")) {"\\end{comment}"}`
 
@@ -338,7 +344,7 @@ Samples in the shaded area are automatically removed. The area is defined by an 
 Samples for which the sex-specific expression does not align with genetic sex are potential sample mix-ups.
 These are outlined with red and automatically removed from further analyses. If the X chromosome was not present in the genotype data, expression is compared to reported sex instead.
 
-![**Fig 17. Expression of X/Y chromosome genes.** On the x-axis is the mean normalised expression level of X chromosome genes, on the y-axis is the mean of the normalised expression levels of Y chromosome genes. For the better separation of groups, minimal X and Y value was extracted from each value on X and Y axes. Point type indicates the genetic sex and there should be no samples on the X-Y diagonal. Samples which are in the wrong sample cloud, are likely sample mixups and were automatically removed from the data. Samples which are in the shaded area, are likely contaminated and automatically removed. Start of the separating line is set at median Y value of female samples and median X value of male samples.](outputfolder_exp/exp_plots/SexSpecificGenes.png) 
+![**Fig 18. Expression of X/Y chromosome genes.** On the x-axis is the mean normalised expression level of X chromosome genes, on the y-axis is the mean of the normalised expression levels of Y chromosome genes. For the better separation of groups, minimal X and Y value was extracted from each value on X and Y axes. Point type indicates the genetic sex and there should be no samples on the X-Y diagonal. Samples which are in the wrong sample cloud, are likely sample mixups and were automatically removed from the data. Samples which are in the shaded area, are likely contaminated and automatically removed. Start of the separating line is set at median Y value of female samples and median X value of male samples.](outputfolder_exp/exp_plots/SexSpecificGenes.png) 
 
 `r if (!file.exists("outputfolder_exp/exp_plots/SexSpecificGenes.png")) {"\\end{comment}"}`
 

@@ -48,7 +48,7 @@ Or just download this from the gitlab/github download link and unzip.
 
 ### Input files
 
-- Unimputed genotype file in plink .bed format (https://www.cog-genomics.org/plink/1.9/input#bed). Genome build to be in **hg19**. It is advisable that .fam file also includes observed sex for all samples (format: males=1, females=2), so that pipeline does extra check on that. However, if this information is not available for all samples, pipeline just skips this check. Input path has to be without .bed/.bim/.fam extension.
+- Unimputed genotype file in plink .bed format (https://www.cog-genomics.org/plink/1.9/input#bed). Genome build has to be in **hg19/GRCh37 (default)** or **hg38/GRCh38**. It is advisable that .fam file also includes observed sex for all samples (format: males=1, females=2), so that pipeline does extra check on that. However, if this information is not available for all samples, pipeline just skips this check. Input path has to be without `.bed/.bim/.fam` extension.
 - Raw, unprocessed gene expression matrix. Tab-delimited file, genes/probes in the rows, samples in the columns.
     - First column has header "-".
     - For Illumina arrays, probe ID has to be Illumina ArrayAddress.
@@ -56,9 +56,26 @@ Or just download this from the gitlab/github download link and unzip.
     - For Affymetrix arrays we expect that gene **expression matrix has already gone through the standard preprocessing** and is in the same format as was used in eQTLGen phase 1 analyses (incl. array probe names).
 - Genotype-to-expression linking file (gte). Tab-delimited file, no header, 2 columns: sample ID in genotype data, corresponding sample ID in gene expression data.
 
+### Required inputs
+
+`--cohort_name`                 Name of the cohort.
+
+`--bfile`                       Path to the unimputed genotype files in plink bed/bim/fam format (without extensions bed/bim/fam).
+
+`--genome_build`                Genome build of the cohort. Either hg19, GRCh37, hg38 or GRCh38. Defaults to hg19.
+
+`--expfile`                     Path to the un-preprocessed gene expression matrix (genes/probes in the rows, samples in the columns). Can be from RNA-seq experiment or from array. NB! For Affymetrix arrays (AffyU219, AffyExon) we assume that standard preprocessing and normalisation is already done.
+
+`--gte`                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. Can be used to filter samples from the analysis.
+
+`--exp_platform`                Gene expression platform. HT12v3, HT12v4, HuRef8, RNAseq, AffyU219, AffyHumanExon.
+
+`--outdir`                      Path to the output directory.
+    
 ### Additional settings
 
 There are five arguments which can be used to adjust certain outlier detection thresholds. These should be adjusted after initial run with the default settings and after investigating the diagnostic plots in the `Report_DataQc_[cohort name].html`. Then the pipeline should be re-run with adjusted settings.
+
 
 `--GenOutThresh` Threshold for declaring genotype sample genetic outlier, based on LOF "outlierness" metric. Default is 0.4.
 
@@ -70,7 +87,7 @@ There are five arguments which can be used to adjust certain outlier detection t
 
 Optional arguments:
 
-`--AdditionalCovariates` Tab-separated file with additional external covariates deemed to be relevant for eQTL mapping in given dataset. First column must have header "SampleID" and following columns must include corresponding covariates with informative headers (E.g. "GenotypeBatch", etc.). Categorical covariates must be specified in text format (E.g. "Batch1", "Batch2", "Batch3"), not encoded as numbers. Pipeline does one-hot encoding for you. Numerical covariates are allowed as well. If specified, this file should include covariate information for each eQTL sample which passes QC and NAs are not allowed. 
+`--AdditionalCovariates` Tab-separated file with additional external covariates deemed to be relevant for eQTL mapping in given dataset. First column must have header "SampleID" and following columns must include corresponding covariates with informative headers (E.g. "GenotypeBatch", etc.). Categorical covariates must be specified in the text format (E.g. "Batch1", "Batch2", "Batch3"), not encoded as numbers. Pipeline does one-hot encoding for you. Numerical covariates are allowed as well. If specified, this file should include covariate information for each eQTL sample which passes QC and NAs are not allowed. 
 
 `--InclusionList` File with the genotype IDs to keep in the analysis (one per row). Useful for e.g. keeping in only the samples which have part of the biobank, etc. By default, pipeline keeps all samples in. No header needed.
 
@@ -205,7 +222,7 @@ When all issues are solved:
 - `output/outputfolder_exp/exp_data_summary/raw_gene_summary.txt`: gene expression summary statistics (mean, median, sd, min, max, nr of unique values, Shapiro test P) before normalisation, used in central site to filter out lowly expressed genes, genes having outliers, etc.
 - `output/outputfolder_exp/exp_data_summary/processed_gene_summary.txt`: gene expression summary statistics (mean, median, sd, min, max, nr of unique values, Shapiro test P) after normalisation, used in central site to filter out lowly expressed genes, genes having outliers, etc.
 - `output/outputfolder_gen/plots/*`, `output/outputfolder_exp/plots/*`: Separate diagnostic plots which can be later used in the manuscript materials.
-- `output/pipeline_info/DataQc_report.html`: Technical pipeline runtime report, it can be used in central site for debugging.
+- `output/pipeline_info/DataQc_report.html`: Technical pipeline runtime report. It is not automatically added to shared folder, however it can be used in the central site for debugging, if need arises.
 
 ## Acknowledgements
 
