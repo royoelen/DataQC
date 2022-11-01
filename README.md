@@ -76,14 +76,13 @@ Or just download this from the gitlab/github download link and unzip.
 
 There are five arguments which can be used to adjust certain outlier detection thresholds. These should be adjusted after initial run with the default settings and after investigating the diagnostic plots in the `Report_DataQc_[cohort name].html`. Then the pipeline should be re-run with adjusted settings.
 
-
 `--GenOutThresh` Threshold for declaring genotype sample genetic outlier, based on LOF "outlierness" metric. Default is 0.4.
 
 `--GenSdThresh` Threshold for declaring genotype sample genetic outlier, based on the deviation from the means of first two genetic PCs. Defaults to 3 SD from the mean.
 
 `--ExpSdThresh` Threshold for declaring expression sample outlier, based on the deviation from the means of first two expression PCs. Defaults to 4 SD from the mean.
 
-`--ContaminationArea` Threshold for declaring samples as contaminated on XIST vs Y-chr gene expression plot. Defaults to 30 degrees, meaning that samples which have high expression of both, X-chr and Y-chr genes are likely contaminated.
+`--ContaminationArea` Threshold for declaring samples as contaminated based on X chr vs Y chr gene expression plot. Defaults to 30 degrees, meaning that samples which have high expression of both, X chr and Y chr genes are likely to be contaminated.
 
 Optional arguments:
 
