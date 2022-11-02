@@ -74,23 +74,41 @@ dir.create(paste0(args$output, "/gen_data_QCd"))
 dir.create(paste0(args$output, "/gen_PCs"))
 dir.create(paste0(args$output, "/gen_data_summary"))
 
-# Download plink2 executable
-download_plink2("plink", AVX2 = FALSE)
+# Download plink executables
+make_executable <- function(exe) {
+  Sys.chmod(exe, mode = (file.info(exe)$mode | "111"))
+}
+
+dir.create("plink")
+
+# Download plink 2 executable
+utils::download.file("https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_20221024.zip",
+destfile = "plink/plink2.zip", verbose = TRUE)
+PLINK <- utils::unzip("plink/plink2.zip",
+                        files = "plink2",
+                        exdir = "plink")
+make_executable(PLINK)
+
 # Download plink 1.9 executable
-download_plink("plink")
+utils::download.file("https://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20220402.zip",
+destfile = "plink/plink.zip", verbose = TRUE)
+PLINK <- utils::unzip("plink/plink.zip",
+                        files = "plink",
+                        exdir = "plink")
+make_executable(PLINK)
 
 # Download subsetted 1000G reference
 bedfile <- download_1000G("data")
 
 ## Calculate AFs for reference data
-system("plink/plink2 --bfile data/1000G_phase3_common_norel --freq --out 1000Gref")
+system("plink/plink2 --bfile data/1000G_phase3_common_norel --threads 4 --freq --out 1000Gref")
 system("gzip 1000Gref.afreq")
 # Target data
 ## Original file
 message("Read in target data.")
 target_bed <- bed(args$target_bed)
 ## Calculate AFs for target data
-system(paste0("plink/plink2 --bfile ", str_replace(args$target_bed, "\\..*", ""), " --freq --out target"))
+system(paste0("plink/plink2 --bfile ", str_replace(args$target_bed, "\\..*", ""), " --threads 4 --freq --out target"))
 system("gzip target.afreq")
 
 # eQTL samples
@@ -200,7 +218,7 @@ snp_plinkQC(
   mind = 0.05,
   hwe = 1e-6,
   autosome.only = FALSE,
-  extra.options = paste0("--output-chr 26 --not-chr 0 25-26 --set-all-var-ids ", variant_format, " --new-id-max-allele-len 10 truncate"),
+  extra.options = paste0("--output-chr 26 --not-chr 0 25-26 --set-all-var-ids ", variant_format, " --new-id-max-allele-len 10 truncate --threads 4"),
   verbose = TRUE
 )
 
@@ -287,9 +305,9 @@ if (23 %in% sex_check_data_set_chromosomes) {
 
   ## Pruning
   system(paste0("plink/plink2 --bfile ", bed_simplepath, "_split",
-                " --rm-dup 'exclude-mismatch' --indep-pairwise 20000 200 0.2 --out check_sex_x"))
+                " --rm-dup 'exclude-mismatch' --indep-pairwise 20000 200 0.2 --out check_sex_x --threads 4"))
   ## Sex check
-  system(paste0("plink/plink --bfile ", bed_simplepath, "_split --extract check_sex_x.prune.in --check-sex"))
+  system(paste0("plink/plink --bfile ", bed_simplepath, "_split --extract check_sex_x.prune.in --check-sex --threads 4"))
 
   ## If there is sex info in the fam file for all samples then remove samples which fail the sex check or genotype-based F is >0.2 & < 0.8
   sexcheck <- fread("plink.sexcheck")
@@ -357,7 +375,7 @@ snp_plinkQC(
   mind = 0.05,
   hwe = 1e-6,
   autosome.only = TRUE,
-  extra.options = paste0("--output-chr 26 --remove ", sex_check_removed_out_path),
+  extra.options = paste0("--output-chr 26 --remove ", sex_check_removed_out_path, " --threads 4"),
   verbose = TRUE
 )
 
@@ -380,9 +398,9 @@ message("Do heterozygosity check.")
 het_failed_samples_out_path <- paste0(args$output, "/gen_data_QCd/HeterozygosityFailed.txt")
 
 # Prune variants
-system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --rm-dup 'exclude-mismatch' --indep-pairwise 50 1 0.2"))
+system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --rm-dup 'exclude-mismatch' --indep-pairwise 50 1 0.2 --threads 4"))
 
-system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --extract plink2.prune.in --het"))
+system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --extract plink2.prune.in --het --threads 4"))
 het <- fread("plink2.het", header = T)
 het$het_rate <- (het$OBS_CT - het$`O(HOM)`) / het$OBS_CT
 
@@ -759,7 +777,7 @@ fwrite(samples_to_include2, "ShuffledSampleOrder.txt", sep = "\t", quote = FALSE
 system(paste0("plink/plink2 -bfile ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation ",
 "--indiv-sort f ShuffledSampleOrder.txt ",
 "--make-bed ",
-"--out ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp"))
+"--out ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp --threads 4"))
 
 # Do final SNP QC (for MAF, etc filters on filtered SNPs)
 # Remove unfiltered samples
@@ -777,7 +795,7 @@ snp_plinkQC(
   mind = 0.05,
   hwe = 1e-6,
   autosome.only = TRUE,
-  extra.options = "--output-chr 26",
+  extra.options = "--output-chr 26 --threads 4",
   verbose = TRUE
 )
 
@@ -812,6 +830,26 @@ ggsave(paste0(args$output, "/gen_plots/Target_PCs_postQC.pdf"), height = 10 * 1.
 
 # Write out
 fwrite(PCsQ, paste0(args$output, "/gen_PCs/GenotypePCs.txt"), row.names = TRUE, sep = "\t", quote = FALSE)
+
+# Write out scree plots
+
+#p <- plot(target_pca_qcd)
+
+singlar_value <- data.frame(
+  PC = paste0("PC", 1:10), 
+  sv = target_pca_qcd$d
+  )
+singlar_value$PC <- factor(singlar_value$PC, levels = as.character(singlar_value$PC))
+message("Plot scree plot.")
+
+p <- ggplot(singlar_value, aes(x = PC, y = sv)) + 
+geom_bar(stat = "identity") + 
+theme_bw() + 
+ylab("Singular value")
+
+ggsave(paste0(args$output, "/gen_plots/Target_PCs_scree_postQC.png"), type = "cairo", height = 5, width = 9, units = "in", dpi = 300)
+ggsave(paste0(args$output, "/gen_plots/Target_PCs_scree_postQC.pdf"), height = 5, width = 9, units = "in", dpi = 300)
+
 
 # Count samples in overlapping with GTE
 final_samples <- fread(paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.fam"), header = FALSE)

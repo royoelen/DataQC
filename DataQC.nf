@@ -18,16 +18,16 @@ def helpMessage() {
 
     Mandatory arguments:
       --cohort_name                 Name of the cohort.
-      --genome_build                Genome build of the cohort. Either hg19, GRCh37, hg38 or GRCh38.
+      --genome_build                Genome build of the genotype data. Either hg19, GRCh37, hg38 or GRCh38. Defaults to hg19.
       --bfile                       Path to the unimputed genotype files in plink bed/bim/fam format (without extensions bed/bim/fam).
       --expfile                     Path to the un-preprocessed gene expression matrix (genes/probes in the rows, samples in the columns). Can be from RNA-seq experiment or from array. NB! For Affymetrix arrays (AffyU219, AffyExon) we assume that standard preprocessing and normalisation is already done.
       --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. Can be used to filter samples from the analysis.
       --exp_platform                Indicator indicating the gene expression platform. HT12v3, HT12v4, HuRef8, RNAseq, AffyU219, AffyHumanExon.
       --outdir                      Path to the output directory.
-      --GenOutThresh                "Outlierness" score threshold for excluding ethnic outliers. Defaults to 0.4 but should be adjusted according to visual inspection.
+      --GenOutThresh                "Outlierness" score threshold for excluding ethnic outliers. Defaults to 0.4 but it should be adjusted according to visual inspection.
       --GenSdThresh                 Threshold for declaring samples outliers based on genetic PC1 and PC2. Defaults to 3 SD from the mean of PC1 and PC2 but should be adjusted according to visual inspection.
       --ExpSdThresh                 Standard deviation threshold for excluding gene expression outliers. By default, samples away by 3 SDs from the mean of PC1 are removed.
-      --ContaminationArea           Area that marks likely contaminated samples based on sex chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function.
+      --ContaminationArea           Area that marks likely contaminated samples based on sex chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function. Defaults to 30 degrees.
  
     Optional arguments
       --InclusionList               File with sample IDs to restrict to the analysis. Useful for keeping in the inclusion list of the samples. By default, all samples are kept.
@@ -75,7 +75,7 @@ params.ContaminationArea = 30
 params.exp_platform = ''
 params.cohort_name = ''
 params.outdir = ''
-params.genome_build = ''
+params.genome_build = 'hg19'
 
 
 // By default define random non-colliding file names in data folder. If default, these are ignored by corresponding script.
@@ -179,6 +179,7 @@ process GeneExpressionQC {
 
     output:
       path ('outputfolder_exp') into output_ch_geneexpression
+      file 'SexCheck.txt' into sexcheck_to_report
 
       script:
       if (exp_platform == 'HT12v3')
@@ -274,6 +275,7 @@ process RenderReport {
       val expsdtresh from params.ExpSdThresh
       val contaminationarea from params.ContaminationArea
       path additional_covariates from params.AdditionalCovariates
+      path sexcheck from sexcheck_to_report
 
     output:
       path ('outputfolder_gen/*') into output_ch2
@@ -284,7 +286,7 @@ process RenderReport {
     script:
     """
     # Make combined covariate file
-    Rscript --vanilla $baseDir/bin/MakeCovariateFile.R "${additional_covariates}"
+    Rscript --vanilla $baseDir/bin/MakeCovariateFile.R ${sexcheck} "${additional_covariates}"
 
     # Make report
     cp -L ${report} notebook.Rmd
