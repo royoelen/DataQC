@@ -835,19 +835,17 @@ fwrite(PCsQ, paste0(args$output, "/gen_PCs/GenotypePCs.txt"), row.names = TRUE, 
 
 #p <- plot(target_pca_qcd)
 
-variance_explained <- data.frame(
+singlar_value <- data.frame(
   PC = paste0("PC", 1:10), 
-  perc_var = target_pca_qcd$d^2 / sum(target_pca_qcd$d^2) * 100
+  sv = target_pca_qcd$d
   )
 variance_explained$PC <- factor(variance_explained$PC, levels = as.character(variance_explained$PC))
-variance_explained$cum_var <- cumsum(variance_explained$perc_var)
 message("Plot scree plot.")
 
-p <- ggplot(variance_explained, aes(x = PC, y = perc_var)) + 
+p <- ggplot(variance_explained, aes(x = PC, y = sv)) + 
 geom_bar(stat = "identity") + 
-geom_point(aes(x = PC, y = cum_var)) +
-geom_line(aes(y = cum_var, group = 1)) + 
-theme_bw() + ylab("Percentage of variability explained")
+theme_bw() + 
+ylab("Singular value")
 
 ggsave(paste0(args$output, "/gen_plots/Target_PCs_scree_postQC.png"), type = "cairo", height = 5, width = 9, units = "in", dpi = 300)
 ggsave(paste0(args$output, "/gen_plots/Target_PCs_scree_postQC.pdf"), height = 5, width = 9, units = "in", dpi = 300)

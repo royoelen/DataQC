@@ -58,9 +58,9 @@ cov_specific$covariate <- as.character(cov_specific$covariate)
 
 ggplot(cov_specific, aes(x = value)) + geom_histogram(colour = "white") + facet_wrap(~ covariate, scales = "free") + theme_bw() + xlab("Covariate value")
 ```
-`r if (ncol(cov) - 1 > 110) {"\\begin{comment}"}`
+`r if (ncol(cov) > 110) {"\\begin{comment}"}`
 **Fig 1. Histograms for additional covariates.**
-`r if (ncol(cov) - 1 > 110) {"\\end{comment}"}`
+`r if (ncol(cov) > 110) {"\\end{comment}"}`
 
 `r if (ncol(cov) == 110) {"\\begin{comment}"}`
 **Fig 1. Histograms for additional covariates.** Not available, there are no additional covariates prepared on top of genotype PCs and expression PCs.
