@@ -839,10 +839,10 @@ singlar_value <- data.frame(
   PC = paste0("PC", 1:10), 
   sv = target_pca_qcd$d
   )
-variance_explained$PC <- factor(variance_explained$PC, levels = as.character(variance_explained$PC))
+singlar_value$PC <- factor(singlar_value$PC, levels = as.character(singlar_value$PC))
 message("Plot scree plot.")
 
-p <- ggplot(variance_explained, aes(x = PC, y = sv)) + 
+p <- ggplot(singlar_value, aes(x = PC, y = sv)) + 
 geom_bar(stat = "identity") + 
 theme_bw() + 
 ylab("Singular value")
