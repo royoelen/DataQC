@@ -41,6 +41,11 @@ params.report_template = "$baseDir/bin/Report_template.Rmd"
 
 // Define input channels
 Channel
+    .fromPath(params.vcf_split, type: 'file')
+    .ifEmpty { exit 1, "Input vcf files not found!" }
+    .set { vcffile_ch }
+
+Channel
     .from(params.bfile)
     .map { study -> [file("${study}.bed"), file("${study}.bim"), file("${study}.fam")]}
     .ifEmpty { exit 1, "Input genotype files not found!" }
@@ -77,6 +82,8 @@ params.ExclusionList = ''
 
 params.pruned_variants_sex_check = ''
 
+multi_part_vcf = vcffile_ch.count() > 1
+
 // Header log info
 log.info """=======================================================
 DataQC v${workflow.manifest.version}"
@@ -111,6 +118,107 @@ summary['Script dir']               = workflow.projectDir
 summary['Config Profile']           = workflow.profile
 log.info summary.collect { k,v -> "${k.padRight(21)}: $v" }.join("\n")
 log.info "========================================="
+
+process ListChromosomes {
+    tag {ListChromosomes}
+
+    input:
+      file(vcf) from  ( multi_part_vcf ? Channel.empty() : vcffile_ch)
+
+    output:
+      channels.fromPath("chromosomes.txt").splitText() into vcf_chromosome_list
+
+    when:
+      multi_part_vcf == false
+
+    script:
+      """
+      bcftools index ${input_vcf}
+      tabix -l ${input_vcf} > chromosomes.txt
+      """
+}
+
+process SplitVcf {
+
+    tag {SplitVcf}
+
+    input:
+      file(input_vcf) from vcffile_ch
+      each chr from vcf_chromosome_list
+
+    output:
+      val(chr), file("split.bcf"), file("split.bcf.csi") into wgs_specific_qc
+
+    when:
+      multi_part_vcf == false
+
+    script:
+      """
+      bcftools index ${input_vcf}.gz
+      bcftools view {input_vcf} -r ${chromosome} -Ou -out ${output}
+      """
+}
+
+process WgsNorm {
+
+    tag {WgsNorm}
+
+    input:
+      file(input_vcf) from ( multi_part_vcf ? vcffile_ch : multi_part_vcf)
+
+    output:
+      val(chr), file("norm.vcf.gz"), file("norm.vcf.gz.csi") into wgs_specific_qc
+
+    script:
+      """
+      bcftools norm -m -any ${vcf} -o "norm.vcf.gz"
+      """
+}
+
+
+process WgsQC {
+
+    tag {WgsQC}
+
+    input:
+      tuple val(chr), file(input_vcf), file(input_vcf_index) from wgs_specific_qc
+
+    output:
+      val(chr), file("passed.vcf.gz"), file("passed.vcf.gz.csi") into wgs_specific_qc_out
+
+    script:
+      """
+      customVCFFilterV4.py ${input_vcf} "passed.vcf.gz"
+      """
+}
+
+process VcfToPlink {
+
+    tag {VcfToPlink}
+
+    input:
+      tuple file(vcf), file(vcf_index) from wgs_specific_qc_out
+
+    output:
+      set file(bfile), file(bim), file(fam) into plink_dataset
+
+    script:
+      """
+      # Split multi-allelic sites
+      # Remove 'compound HET calls' (multiallelic SNPs with heterozygous alt allele (Alt1/Alt2))
+      # Make plink file
+
+      plink2 --vcf processed_vcf 'dosage=PL'
+      """
+}
+
+process MergePlink {
+
+    tag {MergePlink}
+
+    input:
+      tuple
+}
 
 process GenotypeQC {
 
@@ -161,7 +269,7 @@ process GeneExpressionQC {
     output:
       path ('outputfolder_exp') into output_ch_geneexpression
 
-      script:
+    script:
       if (exp_platform == 'HT12v3')
       """
       Rscript --vanilla $baseDir/bin/ProcessExpression.R  \
