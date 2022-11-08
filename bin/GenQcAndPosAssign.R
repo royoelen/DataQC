@@ -64,6 +64,21 @@ if (!is.numeric(args$S_threshold) | !is.numeric(args$SD_threshold) | !is.numeric
   stop()
 }
 
+# Map genome builds to build codes.
+build_code <- "b37"
+ucsc_code <- "hg19"
+variant_format <- r"(@:#[b37]\$r,\$a)"
+
+if (args$genome_build %in% c("hg19", "GRCh37")) {
+  message("Using genome build hg19/GRCh37")
+} else if (args$genome_build %in% c("hg38", "GRCh38")) {
+  message("Using genome build hg38/GRCh38")
+  variant_format <- r"(@:#[b38]\$r,\$a)"
+  build_code <- "b38"
+  ucsc_code <- "hg38"
+} else {
+  stop(sprintf("Genome build %s is not recognized as an available genome build!", args$genome_build))
+}
 
 bed_simplepath <- stringr::str_replace(args$target_bed, ".bed", "")
 
@@ -101,14 +116,31 @@ make_executable(PLINK)
 bedfile <- download_1000G("data")
 
 ## Calculate AFs for reference data
-system("plink/plink2 --bfile data/1000G_phase3_common_norel --threads 4 --freq --out 1000Gref")
-system("gzip 1000Gref.afreq")
+system("plink/plink2 --bfile data/1000G_phase3_common_norel --threads 4 --freq 'cols=+pos' --out 1000Gref")
+
+if ("hg19" != ucsc_code) {
+  target_frequencies <- fread("1000Gref.afreq", sep="\t", data.table=F, header=T,
+                 col.names=c("chr", "pos", "ID", "REF", "ALT", "ALT_FREQS", "OBS_CT"))
+
+  target_frequencies_mapped <- snp_modifyBuild(
+    target_frequencies, file.path(".", R.utils::getRelativePath(args$liftover_path)),
+    from = "hg19", to = ucsc_code)
+
+  colnames(target_frequencies_mapped)[1:2] <- c("#CHROM", "POS")
+
+  fwrite(target_frequencies_mapped[!is.na(target_frequencies_mapped$POS),], "1000Gref.afreq.gz", col.names=T, row.names=F, quote=F, sep="\t")
+
+  system("rm 1000Gref.afreq")
+} else {
+  system("gzip 1000Gref.afreq")
+}
+
 # Target data
 ## Original file
 message("Read in target data.")
 target_bed <- bed(args$target_bed)
 ## Calculate AFs for target data
-system(paste0("plink/plink2 --bfile ", str_replace(args$target_bed, "\\..*", ""), " --threads 4 --freq --out target"))
+system(paste0("plink/plink2 --bfile ", str_replace(args$target_bed, "\\..*", ""), " --threads 4 --freq 'cols=+pos' --out target"))
 system("gzip target.afreq")
 
 # eQTL samples
@@ -189,22 +221,6 @@ bed_simplepath, " --output-chr 26 --keep SamplesToInclude.txt --geno 0.05 --make
 #  pull(SNP)
 
 #fwrite(initial_pass_missing_variants, "variants_callrate_95.txt", sep = "\t", quote = FALSE, row.names = FALSE)
-
-# Map genome builds to build codes.
-build_code <- "b37"
-ucsc_code <- "hg19"
-variant_format <- r"(@:#[b37]\$r,\$a)"
-
-if (args$genome_build %in% c("hg19", "GRCh37")) {
-  message("Using genome build hg19/GRCh37")
-} else if (args$genome_build %in% c("hg38", "GRCh38")) {
-  message("Using genome build hg38/GRCh38")
-  variant_format <- r"(@:#[b38]\$r,\$a)"
-  build_code <- "b38"
-  ucsc_code <- "hg38"
-} else {
-  stop(sprintf("Genome build %s is not recognized as an available genome build!", args$genome_build))
-}
 
 # Do SNP and sample missingness QC on raw genotype bed
 message("Do SNP and genotype QC.")
