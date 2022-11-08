@@ -19,3 +19,7 @@ dependencies:
   - bioconda::bioconductor-edger=3.32.1
   - conda-forge::r-hexbin=1.28.1
   - conda-forge::r-remotes=2.4.2
+  - bioconda::tabix=0.2.6
+  - bioconda::bcftools=1.10.2
+  - bioconda::plink2=1.90b3.35
+  
