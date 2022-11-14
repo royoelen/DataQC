@@ -86,8 +86,8 @@ However:
 In both of the cases you should check if the input `.bed/.bim/.fam` files are correct and there are no errors made in generating and/or processing those. If you do not pinpoint any issues with the input, please contact the lead analyst(s) for advice.
 
 ```{r, message = FALSE, warning = FALSE, echo = FALSE, fig.width = 6, fig.height = 6, fig.align = "center"}
-target <- fread("target.afreq.gz")
-ref <- fread("1000Gref.afreq.gz")
+target <- fread("target.afreq.gz", colClasses=c("character", "integer", "character", "character", "character", "numeric", "integer"))
+ref <- fread("1000Gref.afreq.gz", colClasses=c("character", "integer", "character", "character", "character", "numeric", "integer"))
 
 target <- target[!is.na(target$ALT_FREQS), ]
 target <- target[, c(1:6), with = FALSE]
