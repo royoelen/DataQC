@@ -19,7 +19,9 @@ def helpMessage() {
     Mandatory arguments:
       --cohort_name                 Name of the cohort.
       --genome_build                Genome build of the cohort. Either hg19, GRCh37, hg38 or GRCh38.
-      --bfile                       Path to the unimputed genotype files in plink bed/bim/fam format (without extensions bed/bim/fam).
+      --bfile                       Path to unimputed genotype files in plink bed/bim/fam format (without extensions bed/bim/fam).
+      --vcf                         Path to a vcf file
+      --fam                         Path to a plink fam file. This is especially helpful for sex annotation of samples in VCF files.
       --expfile                     Path to the un-preprocessed gene expression matrix (genes/probes in the rows, samples in the columns). Can be from RNA-seq experiment or from array. NB! For Affymetrix arrays (AffyU219, AffyExon) we assume that standard preprocessing and normalisation is already done.
       --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. Can be used to filter samples from the analysis.
       --exp_platform                Indicator indicating the gene expression platform. HT12v3, HT12v4, HuRef8, RNAseq, AffyU219, AffyHumanExon.
@@ -28,13 +30,14 @@ def helpMessage() {
       --GenSdThresh                 Threshold for declaring samples outliers based on genetic PC1 and PC2. Defaults to 3 SD from the mean of PC1 and PC2 but should be adjusted according to visual inspection.
       --ExpSdThresh                 Standard deviation threshold for excluding gene expression outliers. By default, samples away by 3 SDs from the mean of PC1 are removed.
       --ContaminationArea           Area that marks likely contaminated samples based on sex chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function.
- 
+      --gen_qc_steps                Either generic, array-based, QC or including also WGS specific QC (only valid with VCF datasets). 'Array' (default) or 'WGS' (Generic + WGS qc).)
+
     Optional arguments
       --InclusionList               File with sample IDs to restrict to the analysis. Useful for keeping in the inclusion list of the samples. By default, all samples are kept.
       --ExclusionList               File with sample IDs to remove from the analysis. Useful for removing the ancestry outliers or restricting the genotype data to one superpopulation. Samples are also removed from the inclusion list. By default, all samples are kept.
       --AdditionalCovariates        File with additional cohort-specific covariates. First column name SampleID is the sample ID. Following columns are named by covariates.  Categorical covariates need to be text-based (e.g. batch1, batch2, etc). 
       --preselected_sex_check_vars  Path to a plink ranges file that defines which variants to use for the check-sex command. Use this when the automatic selection does not yield satisfactory results.
- 
+
     """.stripIndent()
 }
 
@@ -43,13 +46,56 @@ params.report_template = "$baseDir/bin/Report_template.Rmd"
 
 // Define set of accepted genome builds:
 def genome_builds_accepted = ['hg19', 'GRCh37', 'hg38', 'GRCh38']
+def genotyping_platforms_accepted = ['Array', 'WGS']
 
 // Define input channels
-Channel
-    .from(params.bfile)
-    .map { study -> [file("${study}.bed"), file("${study}.bim"), file("${study}.fam")]}
-    .ifEmpty { exit 1, "Input genotype files not found!" }
+
+// Take care of the following options:
+// --bfile <single_plink_dataset>
+// --vcf <single_vcf_file>
+// --vcf <vcf_files_through_globbing>
+
+params.vcf = ''
+params.bfile = ''
+params.fam = ''
+
+if (params.vcf != '') {
+
+  Channel
+      .fromPath(params.vcf, checkIfExists: true).view()
+      .ifEmpty { exit 1, "Input vcf files not found!" }
+      .into { vcffile_ch; vcffile_ch2; vcf_contig_counter }
+
+  Channel.empty()
     .set { bfile_ch }
+
+} else {
+
+  Channel.empty()
+    .into { vcffile_ch; vcffile_ch2; vcf_contig_counter }
+
+  Channel
+    .from(params.bfile)
+    .ifEmpty { exit 1, "Input plink prefix not found!" }
+    .map { study -> [file("${study}.bed"), file("${study}.bim"), file("${study}.fam")]}
+    .set { bfile_ch }
+
+}
+
+vcf_contig_counter.count().view().set { vcf_contig_count }
+
+if (params.fam != '') {
+
+  Channel
+    .fromPath(params.fam, checkIfExists: true)
+    .set { fam_annot_ch }
+
+} else {
+
+  Channel.empty()
+    .set { fam_annot_ch }
+
+}
 
 Channel
     .from(params.expfile)
@@ -75,15 +121,19 @@ params.ContaminationArea = 30
 params.exp_platform = ''
 params.cohort_name = ''
 params.outdir = ''
-params.genome_build = ''
-
-
+params.genome_build = 'GRCh37'
+ 
 // By default define random non-colliding file names in data folder. If default, these are ignored by corresponding script.
 params.InclusionList = "$baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt"
 params.ExclusionList = "$baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt"
 params.AdditionalCovariates = "$baseDir/data/1000G_pops.txt"
 
 params.preselected_sex_check_vars = ''
+params.gen_qc_steps = 'Array'
+
+if ((params.gen_qc_steps in genotyping_platforms_accepted) == false) {
+  exit 1, "[Pipeline error] Genotype QC steps $params.gen_qc_steps not one of: $genotyping_platforms_accepted \n"
+}
 
 if ((params.genome_build in genome_builds_accepted) == false) {
   exit 1, "[Pipeline error] Genome build $params.genome_build not in accepted genome builds: $genome_builds_accepted \n"
@@ -97,6 +147,9 @@ def summary = [:]
 summary['Pipeline Name']            = 'DataQC'
 summary['Pipeline Version']         = workflow.manifest.version
 summary['PLINK bfile']              = params.bfile
+summary['VCF dataset']              = params.vcf
+summary['FAM file']                 = params.fam
+summary['Gen QC steps']             = params.gen_qc_steps
 summary['Genome Build']             = params.genome_build
 summary['S threshold']              = params.GenOutThresh
 summary['Gen SD threshold']         = params.GenSdThresh
@@ -126,12 +179,147 @@ summary['Config Profile']           = workflow.profile
 log.info summary.collect { k,v -> "${k.padRight(21)}: $v" }.join("\n")
 log.info "========================================="
 
+process ListChromosomes {
+    tag {ListChromosomes}
+
+    input:
+      file(input_vcf) from ( vcf_contig_count.value > 1 ? Channel.empty() : vcffile_ch)
+
+    output:
+      file("chromosomes.txt") into vcf_chromosome_list_file
+      file("${input_vcf}.csi") into input_vcf_all_index
+
+    when:
+      vcf_contig_count.value == 1
+
+    script:
+      """
+      bcftools index ${input_vcf}
+      tabix -l ${input_vcf} > "chromosomes.txt"
+      """
+}
+
+vcf_chromosome_list_file.splitText().map{ line -> line.trim() }.view().set { chromosome_channel }
+
+process SplitVcf {
+
+    tag {SplitVcf}
+
+    input:
+      file(input_vcf) from vcffile_ch2.collect()
+      file(index_file) from input_vcf_all_index.collect()
+      val(chr) from chromosome_channel
+
+    output:
+      tuple val(chr), file("split_${chr}.vcf.gz") into split_vcf
+
+    script:
+      """
+      bcftools view ${input_vcf} -r ${chr} -Oz -o "split_${chr}.vcf.gz"
+      """
+}
+
+process WgsNorm {
+
+    tag {WgsNorm}
+
+    input:
+      tuple val(chr), file(input_vcf) from split_vcf
+
+    output:
+      tuple val(chr), file("norm.vcf.gz") into vcf_normalised
+
+    script:
+      """
+      bcftools norm -m -any ${input_vcf} -o "norm.vcf.gz"
+      """
+}
+
+process WgsQC {
+
+    tag {WgsQC}
+
+    input:
+      tuple val(chr), file(input_vcf) from ( params.gen_qc_steps == 'WGS' ? vcf_normalised : Channel.empty() )
+
+    output:
+      tuple val(chr), file("filtered.vcf.gz") into vcf_wgs_qced
+
+    when:
+      params.gen_qc_steps == 'WGS'
+
+    script:
+      if (chr in ["X", "Y"]) 
+      """
+      custom_vcf_filter.py --input ${input_vcf} --hardy_weinberg_equilibrium 0 --output "filtered"
+      
+      print_WGS_VCF_filter_overview.py \
+        --workdir . \
+        --vcf_file_format ${input_vcf}
+      
+      bcftools index "filtered.vcf.gz"
+      """
+      else
+      """
+      custom_vcf_filter.py --input ${input_vcf} --output "filtered"
+      
+      print_WGS_VCF_filter_overview.py \
+        --workdir . \
+        --vcf_file_format ${input_vcf}
+
+      bcftools index "filtered.vcf.gz"
+      """
+}
+
+process VcfToPlink {
+
+    tag {VcfToPlink}
+
+    input:
+      tuple val(chr), file(vcf) from ( params.gen_qc_steps == 'WGS' ? vcf_wgs_qced : vcf_normalised )
+
+    output:
+      file("converted_vcf.bed") into vcf_to_plink_bed_ch
+      file("converted_vcf.bim") into vcf_to_plink_bim_ch
+      file("converted_vcf.fam") into vcf_to_plink_fam_ch
+      val(prefix) into vcf_to_plink_prefix_ch
+
+    script:
+      """
+      # Make plink file
+      prefix="converted_vcf"
+
+      plink2 --vcf processed_vcf --split-par 'hg38' --not-chr par1 par2 --make-bed --out ${converted_vcf}
+      """
+}
+
+process MergePlink {
+
+    tag {MergePlink}
+
+    input:
+      file(bed) from vcf_to_plink_bed_ch.collect()
+      file(bim) from vcf_to_plink_bim_ch.collect()
+      file(fam) from vcf_to_plink_fam_ch.collect()
+      val(prefix) from vcf_to_plink_prefix_ch.collect()
+      
+    output:
+      tuple file("chrAll.bed"), file("chrAll.bim"), file("chrAll.fam") into plink_merged
+
+    script:
+      """
+      echo ${plink_prefix} > mergelist.txt
+      plink --bmerge-list mergelist.txt --make-bed --out "chrAll"
+      """
+}
+
 process GenotypeQC {
 
     tag {GenotypeQC}
 
     input:
-      set file(bfile), file(bim), file(fam) from bfile_ch
+      set file(bfile), file(bim), file(fam) from ( vcf_contig_count.value > 0 ? plink_merged : bfile_ch )
+      file(fam_annot) from fam_annot_ch
       file gte from gte_ch_gen
       val s_stat from params.GenOutThresh
       val sd_thresh from params.GenSdThresh
@@ -150,6 +338,7 @@ process GenotypeQC {
       """
       Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
       --target_bed ${bfile} \
+      --fam ${fam_annot} \
       --genome_build ${genome_build} \
       --gen_exp ${gte} \
       --sample_list $baseDir/data/unrelated_reference_samples_ids.txt \
@@ -180,7 +369,7 @@ process GeneExpressionQC {
     output:
       path ('outputfolder_exp') into output_ch_geneexpression
 
-      script:
+    script:
       if (exp_platform == 'HT12v3')
       """
       Rscript --vanilla $baseDir/bin/ProcessExpression.R  \

@@ -488,6 +488,34 @@ scale_color_manual(values = c("Target" = "black", "EUR" = "blue",
 "EAS" = "goldenrod", "AMR" = "lightgrey", "SAS" = "orange", "AFR" = "red")) +
 scale_alpha_manual(values = c("Target" = 1, "1000G" = 0.2))
 
+
+p1 <- ggplot(combined_h2 %>% filter(Superpopulation %in% c("Target", "EUR")),
+             aes(x = PC1, y = PC2, colour = SMGEBTCHT, alpha = type)) +
+  geom_point() +
+  theme_bw() +
+  scale_alpha_manual(values = c("Target" = 1, "1000G" = 0.5))
+
+p2 <- ggplot(combined_h2 %>% filter(Superpopulation %in% c("Target", "EUR")),
+             aes(x = PC3, y = PC4, colour = SMGEBTCHT, alpha = type)) +
+  geom_point() +
+  theme_bw() +
+  scale_alpha_manual(values = c("Target" = 1, "1000G" = 0.5))
+
+p3 <- ggplot(combined_h2 %>% filter(Superpopulation %in% c("Target", "EUR")),
+             aes(x = PC5, y = PC6, colour = SMGEBTCHT, alpha = type)) +
+  geom_point() +
+  theme_bw() +
+  scale_alpha_manual(values = c("Target" = 1, "1000G" = 0.5))
+
+p4 <- ggplot(combined_h2 %>% filter(Superpopulation %in% c("Target", "EUR")),
+             aes(x = PC7, y = PC8, colour = SMGEBTCHT, alpha = type)) +
+  geom_point() +
+  theme_bw() +
+  scale_alpha_manual(values = c("Target" = 1, "1000G" = 0.5))
+
+p <- p1 + p2 + p3 + p4 + plot_layout(nrow = 2)
+
+
 p2 <- ggplot(combined, aes(x = PC3, y = PC4, colour = Superpopulation, alpha = type)) +
 geom_point() + theme_bw() +
 scale_color_manual(values = c("Target" = "black", "EUR" = "blue",
@@ -721,20 +749,25 @@ PCs[PCs$outlier_ind == "no" & PCs$sd_outlier == "yes", ]$outlier <- "SD outlier"
 if(nrow(PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "yes", ]) > 0){
 PCs[PCs$outlier_ind == "yes" & PCs$sd_outlier == "yes", ]$outlier <- "S and SD outlier"
 }
-# For first 2 PCs also remove samples which deviate from the mean
 
-p1 <- ggplot(PCs, aes(x = PC1, y = PC2, colour = outlier)) + theme_bw() + geom_point(alpha = 0.5) + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick")) +
-geom_vline(xintercept = c(mean(PCs$PC1) + 3 * sd(PCs$PC1), mean(PCs$PC1) - 3 * sd(PCs$PC1)), colour = "firebrick", linetype = 2) +
-geom_hline(yintercept = c(mean(PCs$PC2) + 3 * sd(PCs$PC2), mean(PCs$PC2) - 3 * sd(PCs$PC2)), colour = "firebrick", linetype = 2)
-p2 <- ggplot(PCs, aes(x = PC3, y = PC4, colour = outlier)) + theme_bw() + geom_point(alpha = 0.5) + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
-p3 <- ggplot(PCs, aes(x = PC5, y = PC6, colour = outlier)) + theme_bw() + geom_point(alpha = 0.5) + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
-p4 <- ggplot(PCs, aes(x = PC7, y = PC8, colour = outlier)) + theme_bw() + geom_point(alpha = 0.5) + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
-p5 <- ggplot(PCs, aes(x = PC9, y = PC10, colour = outlier)) + theme_bw() + geom_point(alpha = 0.5) + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
+# For first 2 PCs also remove samples which deviate from the mean
+p1 <- ggplot(PCs3, aes(x = PC1, y = PC2)) + theme_bw() + geom_point(alpha = 0.5) + #scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick")) +
+  geom_vline(xintercept = c(mean(PCs3$PC1) + 3 * sd(PCs3$PC1), mean(PCs3$PC1) - 3 * sd(PCs3$PC1)), colour = "firebrick", linetype = 2) +
+  geom_hline(yintercept = c(mean(PCs3$PC2) + 3 * sd(PCs3$PC2), mean(PCs3$PC2) - 3 * sd(PCs3$PC2)), colour = "firebrick", linetype = 2)
+p2 <- ggplot(PCs3, aes(x = PC3, y = PC4)) + theme_bw() + geom_point(alpha = 0.5)# + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
+p3 <- ggplot(PCs3, aes(x = PC5, y = PC6)) + theme_bw() + geom_point(alpha = 0.5)# + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
+p4 <- ggplot(PCs3, aes(x = PC7, y = PC8)) + theme_bw() + geom_point(alpha = 0.5)# + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
+p5 <- ggplot(PCs3, aes(x = PC9, y = PC10)) + theme_bw() + geom_point(alpha = 0.5)# + scale_color_manual(values = c("no" = "black", "SD outlier" = "#d79393", "S outlier" = "red", "S and SD outlier" = "firebrick"))
 
 p <- p1 + p2 + p3 + p4 + p5 + plot_layout(nrow = 3)
 
-ggsave(paste0(args$output, "/gen_plots/PCA_outliers.png"), type = "cairo", height = 10 * 1.5, width = 9 * 1.5, units = "in", dpi = 300)
-ggsave(paste0(args$output, "/gen_plots/PCA_outliers.pdf"), height = 10 * 1.5, width = 9 * 1.5, units = "in", dpi = 300)
+
+ggsave(paste0(args$output, "/gen_plots/PCA_outliers_gteVar_.png"), type = "cairo", height = 10 * 1.5, width = 9 * 1.5, units = "in", dpi = 300)
+#ggsave(paste0(args$output, "/gen_plots/PCA_outliers_batchVar.pdf"), height = 10 * 1.5, width = 9 * 1.5, units = "in", dpi = 300)
+
+
+ggsave(paste0(args$output, "/gen_plots/PCA_outliers_batchVar.png"), type = "cairo", height = 10 * 1.5, width = 9 * 1.5, units = "in", dpi = 300)
+ggsave(paste0(args$output, "/gen_plots/PCA_outliers_batchVar.pdf"), height = 10 * 1.5, width = 9 * 1.5, units = "in", dpi = 300)
 
 # Filter out related samples and outlier samples, write out QCd data
 message("Filter out related samples and outlier samples, write out QCd data.")
