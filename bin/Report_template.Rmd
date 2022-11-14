@@ -42,7 +42,6 @@ library(ggplot2)
 library(stringr)
 
 cov <- fread("CovariatePCs.txt")
-
 ```
 
 `DataQC` pipeline has prepared `r ncol(cov) - 1` covariates: 10 first genetic PCs`r if (ncol(cov) > 111){ab <- ','}else{ab <- ' and'}; ab` 100 first expression PCs`r if (ncol(cov)> 111){outp <- paste0(' and ', ncol(cov)- 111, ' additional covariates.')} else {outp <- '.'}; outp`
@@ -74,6 +73,11 @@ ggplot(cov_specific, aes(x = value)) + geom_histogram(colour = "white") + facet_
 overview_table <- fread("outputfolder_gen/gen_data_summary/summary_table.txt")
 knitr::kable(overview_table)
 ```
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+wgs_table <- fread("wgs_qc_table_combined.txt", header=T)
+print(wgs_table)
+```
+
 ### Allele frequency concordance with reference panel
 
 In the following plot you will see the comparison of allele frequencies between input genotypes and 1000G phase 3 reference panel. This lookup is done on SNP IDs, therefore many SNPs will be excluded. However, even with the subset of SNPs we can check if the allele frequencies generally correlate between cohort and reference. We should see that large majority of the variants are on the 0-1 diagonal and strong correlation between the allele frequencies of two datasets.

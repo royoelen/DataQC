@@ -244,6 +244,7 @@ process WgsQC {
 
     output:
       tuple val(chr), file("filtered.vcf.gz") into vcf_wgs_qced
+      file("VCFFilterSummaryStats.txt.gz") into wgs_qc_stats
 
     when:
       params.gen_qc_steps == 'WGS'
@@ -465,6 +466,7 @@ process RenderReport {
       val contaminationarea from params.ContaminationArea
       path additional_covariates from params.AdditionalCovariates
       path sexcheck from sexcheck_to_report
+      file wgs_qc_stats_collected from wgs_qc_stats.collectFile(name: 'wgs_qc_table_combined.txt', skip: 1, newLine: true, keepHeader: true)
 
     output:
       path ('outputfolder_gen/*') into output_ch2
