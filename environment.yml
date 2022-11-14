@@ -9,6 +9,7 @@ dependencies:
   - bioconda::tabix=0.2.6
   - bioconda::bcftools=1.10.2
   - bioconda::plink2=1.90b3.35
+  - python=3.7.4
   - conda-forge::r-igraph=1.2.6
   - conda-forge::cairo=1.16.0
   - conda-forge::r-data.table=1.14.0
