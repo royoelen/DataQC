@@ -96,7 +96,7 @@ colnames(target)[3:6] <- paste0("target_", colnames(target)[3:6])
 ref <- ref[, c(1:6), with = FALSE]
 colnames(ref)[3:6] <- paste0("ref_", colnames(ref)[3:6])
 
-comb <- merge(ref, target, by = c("#CRHOM", "POS"))
+comb <- merge(ref, target, by = c("#CHROM", "POS"))
 
 comb2 <- comb[!(comb$ref_REF != comb$target_REF & comb$ref_REF != comb$target_ALT)]
 
