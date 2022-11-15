@@ -212,6 +212,7 @@ process SplitVcf {
 
     output:
       tuple val(chr), file("split_${chr}.vcf.gz") into split_vcf
+      tuple val(chr), file("split_${chr}.vcf.gz") into split_vcf_to_clean
 
     script:
       """
@@ -228,6 +229,8 @@ process WgsNorm {
 
     output:
       tuple val(chr), file("norm.vcf.gz") into vcf_normalised
+      tuple val(chr), file("norm.vcf.gz") into vcf_normalised_to_clean
+      set val(chr), val(1) into clean_split_vcf_signal
 
     script:
       """
@@ -244,6 +247,8 @@ process WgsQC {
 
     output:
       tuple val(chr), file("filtered.vcf.gz") into vcf_wgs_qced
+      tuple val(chr), file("filtered.vcf.gz") into vcf_wgs_qced_to_clean
+
       file("VCFFilterSummaryStats.txt.gz") into wgs_qc_stats
 
     when:
@@ -284,6 +289,8 @@ process VcfToPlink {
       file("converted_vcf.bim") into vcf_to_plink_bim_ch
       file("converted_vcf.fam") into vcf_to_plink_fam_ch
       val(prefix) into vcf_to_plink_prefix_ch
+      set val(chr), val(1) into clean_wgs_norm_signal
+      set val(chr), val(1) into clean_wgs_qc_signal
 
     script:
       """
@@ -309,9 +316,51 @@ process MergePlink {
 
     script:
       """
-      echo ${plink_prefix} > mergelist.txt
+      echo ${prefix} > mergelist.txt
       plink --bmerge-list mergelist.txt --make-bed --out "chrAll"
       """
+}
+
+split_vcf_to_clean.mix(clean_split_vcf_signal).groupTuple(size: 2).view().set {clean_split_vcf_ready}
+
+process CleanSplitVcf {
+    tag {CleanSplitVcf}
+
+    input:
+        val(files_list) from clean_split_vcf_ready
+
+    script:
+    """
+    clean_work_files.sh "${files_list[0]}"
+    """
+}
+
+vcf_normalised_to_clean.mix(clean_wgs_norm_signal).groupTuple(size: 2).view().set { clean_wgs_norm_ready }
+
+process CleanWgsNorm {
+    tag {CleanWgsNorm}
+
+    input:
+        val(files_list) from clean_wgs_norm_ready
+
+    script:
+    """
+    clean_work_files.sh "${files_list[0]}"
+    """
+}
+
+vcf_wgs_qced_to_clean.mix(clean_wgs_qc_signal).groupTuple(size: 2).view().set { clean_wgs_qc_ready }
+
+process CleanWgsQc {
+    tag {CleanWgsQc}
+
+    input:
+        val(files_list) from clean_wgs_qc_ready
+
+    script:
+    """
+    clean_work_files.sh "${files_list[0]}"
+    """
 }
 
 process GenotypeQC {
