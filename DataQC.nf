@@ -231,7 +231,7 @@ process WgsNorm {
 
     script:
       """
-      bcftools norm -m -any ${input_vcf} -o "norm.vcf.gz"
+      bcftools norm -m -any ${input_vcf} -o -Oz "norm.vcf.gz"
       """
 }
 
@@ -252,9 +252,9 @@ process WgsQC {
     script:
       if (chr in ["X", "Y"]) 
       """
-      custom_vcf_filter.py --input ${input_vcf} --hardy_weinberg_equilibrium 0 --output "filtered"
+      python3 $baseDir/bin/custom_vcf_filter.py --input ${input_vcf} --hardy_weinberg_equilibrium 0 --output filtered
       
-      print_WGS_VCF_filter_overview.py \
+      python3 $baseDir/bin/print_WGS_VCF_filter_overview.py \
         --workdir . \
         --vcf_file_format ${input_vcf}
       
@@ -262,9 +262,9 @@ process WgsQC {
       """
       else
       """
-      custom_vcf_filter.py --input ${input_vcf} --output "filtered"
+      python3 $baseDir/bin/custom_vcf_filter.py --input ${input_vcf} --output filtered
       
-      print_WGS_VCF_filter_overview.py \
+      python3 $baseDir/bin/print_WGS_VCF_filter_overview.py \
         --workdir . \
         --vcf_file_format ${input_vcf}
 
