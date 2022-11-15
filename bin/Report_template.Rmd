@@ -70,12 +70,24 @@ ggplot(cov_specific, aes(x = value)) + geom_histogram(colour = "white") + facet_
 ### Overview of the QC steps
 
 ```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+wgs_table <- fread("wgs_qc_table_combined.txt", header=T)
+
+# Check what the number of SNPs is that went into WGS specific QC
+
+# List the set of variants
+
 overview_table <- fread("outputfolder_gen/gen_data_summary/summary_table.txt")
 knitr::kable(overview_table)
 ```
+
 ```{r, message = FALSE, warning = FALSE, echo = FALSE}
-wgs_table <- fread("wgs_qc_table_combined.txt", header=T)
 print(wgs_table)
+```
+
+### WGS specific variant-level QC
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+knitr::kable(wgs_table)
 ```
 
 ### Allele frequency concordance with reference panel
