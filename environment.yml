@@ -7,8 +7,8 @@ channels:
   - anaconda
 dependencies:
   - gcc_linux-64=7.3.0
-  - conda-forge::numpy
-  - conda-forge::pandas
+  - conda-forge::numpy=1.23.4
+  - conda-forge::pandas=1.5.1
   - bioconda::tabix=0.2.6
   - bioconda::bcftools=1.10.2
   - bioconda::plink2=1.90b3.35
