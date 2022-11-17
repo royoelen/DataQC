@@ -322,7 +322,7 @@ process CleanSplitVcf {
     tag {CleanSplitVcf}
 
     input:
-        val(files_list) from clean_split_vcf_ready
+        set val(chr), val(files_list) from clean_split_vcf_ready
 
     script:
     """
@@ -336,7 +336,7 @@ process CleanWgsNorm {
     tag {CleanWgsNorm}
 
     input:
-        val(files_list) from clean_wgs_norm_ready
+        set val(chr), val(files_list) from clean_wgs_norm_ready
 
     script:
     """
@@ -350,7 +350,7 @@ process CleanWgsQc {
     tag {CleanWgsQc}
 
     input:
-        val(files_list) from clean_wgs_qc_ready
+        set val(chr), val(files_list) from clean_wgs_qc_ready
 
     script:
     """
