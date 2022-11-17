@@ -234,7 +234,7 @@ process WgsNorm {
 
     script:
       """
-      bcftools norm -m -any ${input_vcf} -o -Oz "norm.vcf.gz"
+      bcftools norm -m -any ${input_vcf} -Oz -o "norm.vcf.gz"
       """
 }
 
@@ -246,34 +246,32 @@ process WgsQC {
       tuple val(chr), file(input_vcf) from ( params.gen_qc_steps == 'WGS' ? vcf_normalised : Channel.empty() )
 
     output:
-      tuple val(chr), file("filtered.vcf.gz") into vcf_wgs_qced
-      tuple val(chr), file("filtered.vcf.gz") into vcf_wgs_qced_to_clean
+      tuple val(chr), file("norm-filtered.vcf.gz") into vcf_wgs_qced
+      tuple val(chr), file("norm-filtered.vcf.gz") into vcf_wgs_qced_to_clean
 
-      file("VCFFilterSummaryStats.txt.gz") into wgs_qc_stats
+      file("VCFFilterSummaryStats.txt") into wgs_qc_stats
 
     when:
       params.gen_qc_steps == 'WGS'
 
     script:
-      if (chr in ["X", "Y"]) 
+      if (chr in ["X", "Y", "chrX", "chrY"]) 
       """
-      python3 $baseDir/bin/custom_vcf_filter.py --input ${input_vcf} --hardy_weinberg_equilibrium 0 --output filtered
+      python3 $baseDir/bin/custom_vcf_filter.py --input ${input_vcf} --hardy_weinberg_equilibrium 0 --output norm
       
       python3 $baseDir/bin/print_WGS_VCF_filter_overview.py \
-        --workdir . \
-        --vcf_file_format ${input_vcf}
+        --workdir . --chr ${chr} \
+        --vcf_file_format "norm.vcf.gz"
       
-      bcftools index "filtered.vcf.gz"
       """
       else
       """
-      python3 $baseDir/bin/custom_vcf_filter.py --input ${input_vcf} --output filtered
+      python3 $baseDir/bin/custom_vcf_filter.py --input ${input_vcf} --output norm
       
       python3 $baseDir/bin/print_WGS_VCF_filter_overview.py \
-        --workdir . \
-        --vcf_file_format ${input_vcf}
+        --workdir .  --chr ${chr} \
+        --vcf_file_format "norm.vcf.gz"
 
-      bcftools index "filtered.vcf.gz"
       """
 }
 
@@ -285,19 +283,17 @@ process VcfToPlink {
       tuple val(chr), file(vcf) from ( params.gen_qc_steps == 'WGS' ? vcf_wgs_qced : vcf_normalised )
 
     output:
-      file("converted_vcf.bed") into vcf_to_plink_bed_ch
-      file("converted_vcf.bim") into vcf_to_plink_bim_ch
-      file("converted_vcf.fam") into vcf_to_plink_fam_ch
-      val(prefix) into vcf_to_plink_prefix_ch
+      file("${chr}_converted_vcf.bed") into vcf_to_plink_bed_ch
+      file("${chr}_converted_vcf.bim") into vcf_to_plink_bim_ch
+      file("${chr}_converted_vcf.fam") into vcf_to_plink_fam_ch
+      val("${chr}_converted_vcf") into vcf_to_plink_prefix_ch
       set val(chr), val(1) into clean_wgs_norm_signal
       set val(chr), val(1) into clean_wgs_qc_signal
 
     script:
       """
       # Make plink file
-      prefix="converted_vcf"
-
-      plink2 --vcf processed_vcf --split-par 'hg38' --not-chr par1 par2 --make-bed --out ${converted_vcf}
+      plink2 --vcf ${vcf} --split-x 'hg38' --make-bed --out "${chr}_converted_vcf"
       """
 }
 
@@ -309,15 +305,14 @@ process MergePlink {
       file(bed) from vcf_to_plink_bed_ch.collect()
       file(bim) from vcf_to_plink_bim_ch.collect()
       file(fam) from vcf_to_plink_fam_ch.collect()
-      val(prefix) from vcf_to_plink_prefix_ch.collect()
+      file(mergelist) from vcf_to_plink_prefix_ch.collectFile(name: 'mergelist.txt', newLine: true)
       
     output:
       tuple file("chrAll.bed"), file("chrAll.bim"), file("chrAll.fam") into plink_merged
 
     script:
       """
-      echo ${prefix} > mergelist.txt
-      plink --bmerge-list mergelist.txt --make-bed --out "chrAll"
+      plink2 --merge-list ${mergelist} --make-bed --out "chrAll"
       """
 }
 
@@ -369,7 +364,7 @@ process GenotypeQC {
 
     input:
       set file(bfile), file(bim), file(fam) from ( vcf_contig_count.value > 0 ? plink_merged : bfile_ch )
-      file(fam_annot) from fam_annot_ch
+      file(fam_annot) from fam_annot_ch.ifEmpty { 'EMPTY' }
       file gte from gte_ch_gen
       val s_stat from params.GenOutThresh
       val sd_thresh from params.GenSdThresh
@@ -385,6 +380,24 @@ process GenotypeQC {
       file '1000Gref.afreq.gz' into ref_allele_frequencies
       file 'target.afreq.gz' into target_allele_frequencies
 
+    script:
+    if (fam_annot == 'EMPTY')
+      """
+      Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
+      --target_bed ${bfile} \
+      --genome_build ${genome_build} \
+      --gen_exp ${gte} \
+      --sample_list $baseDir/data/unrelated_reference_samples_ids.txt \
+      --pops $baseDir/data/1000G_pops.txt \
+      --S_threshold ${s_stat} \
+      --SD_threshold ${sd_thresh} \
+      --inclusion_list "${InclusionList}" \
+      --exclusion_list "${ExclusionList}" \
+      --output outputfolder_gen \
+      --pruned_variants_sex_check "${optional_pruned_variants_sex_check}" \
+      --liftover_path $baseDir/bin/liftOver
+      """
+    else
       """
       Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
       --target_bed ${bfile} \
@@ -401,6 +414,7 @@ process GenotypeQC {
       --pruned_variants_sex_check "${optional_pruned_variants_sex_check}" \
       --liftover_path $baseDir/bin/liftOver
       """
+    
 }
 
 process GeneExpressionQC {

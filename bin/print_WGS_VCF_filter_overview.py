@@ -69,6 +69,7 @@ class main():
         self.workdir = getattr(arguments, 'workdir')
         self.vcf_file_format = getattr(arguments, 'vcf_file_format')
         self.exclude = getattr(arguments, 'exclude')
+        self.chromosome = getattr(arguments, 'chr')
 
         self.chromosomes = [CHR for CHR in CHROMOSOMES if (self.exclude is None) or (CHR not in self.exclude)]
 
@@ -93,6 +94,10 @@ class main():
                             required=True,
                             help="The file format of the VCF files. CHR"
                                  "will be replaced with the chromosome number.")
+        parser.add_argument("--chr",
+                            type=str,
+                            required=True,
+                            help="the chromosome number.")
         parser.add_argument("--exclude",
                             nargs="*",
                             type=str,
@@ -109,59 +114,54 @@ class main():
         data = []
         prev_filter_thresh = None
         prev_failed_var_thresh = None
-        for chr in self.chromosomes:
-            print("  > CHR{}".format(chr))
-            row = [chr, False, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, np.nan, False, ""]
 
-            job_logfile_path = os.path.join(self.workdir, "jobs", "output", "CUSTOMVCFFILTER_CHR{}.out".format(chr))
-            if os.path.exists(job_logfile_path):
-                row[1] = True
-                row[15:] = self.read_job_logfile(filepath=job_logfile_path)
+        row = [self.chromosome, False, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, np.nan, False, ""]
 
-            # Parse thresholds
-            job_file_path_prefix = os.path.join(self.workdir, "2-custom_vcffilter", self.vcf_file_format.replace("CHR", chr).replace(".vcf.gz", "_norm_vcffilter-filtered"))
-            job_vcffile_path = job_file_path_prefix + ".vcf.gz"
-            job_logfile_path = job_file_path_prefix + ".log.gz"
-            if os.path.exists(job_vcffile_path) and os.path.exists(job_logfile_path):
-                filter_thresh = self.parse_thresholds(
-                    filepath=job_vcffile_path
-                )
-                # first check the settings that matter.
-                failed_var_thresh = dict((key, filter_thresh[key]) for key in ('tresh_MAF', 'tresh_CR', 'tresh_HWE'))
-                if prev_failed_var_thresh is not None:
-                    if failed_var_thresh != prev_failed_var_thresh:
-                        print("Error, not all VCF files are filtered with "
-                              "the same MAF, CR, or HWE settings.")
-                        exit()
+        job_logfile_path = os.path.join(self.workdir, "jobs", "output", "CUSTOMVCFFILTER_CHR{}.out".format(chr))
+        if os.path.exists(job_logfile_path):
+            row[1] = True
+            row[15:] = self.read_job_logfile(filepath=job_logfile_path)
 
-                # give warning if other settings differ.
-                if prev_filter_thresh is not None:
-                    if filter_thresh != prev_filter_thresh:
-                        print("Warning, not all VCF files are filtered with "
-                              "the same settings.")
+        # Parse thresholds
+        job_file_path_prefix = os.path.join(self.workdir, self.vcf_file_format.replace(".vcf.gz", "-filtered"))
+        job_vcffile_path = job_file_path_prefix + ".vcf.gz"
+        job_logfile_path = job_file_path_prefix + ".log.gz"
+        if os.path.exists(job_vcffile_path) and os.path.exists(job_logfile_path):
+            filter_thresh = self.parse_thresholds(
+                filepath=job_vcffile_path
+            )
+            # first check the settings that matter.
+            failed_var_thresh = dict((key, filter_thresh[key]) for key in ('tresh_MAF', 'tresh_CR', 'tresh_HWE'))
+            if prev_failed_var_thresh is not None:
+                if failed_var_thresh != prev_failed_var_thresh:
+                    print("Error, not all VCF files are filtered with "
+                          "the same MAF, CR, or HWE settings.")
+                    exit()
 
-                row[2:15] = self.read_filter_logfile(
-                    filepath=job_logfile_path,
-                    thresh_maf=failed_var_thresh["tresh_MAF"],
-                    thresh_cr=failed_var_thresh["tresh_CR"],
-                    thresh_hwe=failed_var_thresh["tresh_HWE"]
-                )
+            # give warning if other settings differ.
+            if prev_filter_thresh is not None:
+                if filter_thresh != prev_filter_thresh:
+                    print("Warning, not all VCF files are filtered with "
+                          "the same settings.")
 
-                prev_filter_thresh = filter_thresh
-                prev_failed_var_thresh = failed_var_thresh
+            row[2:15] = self.read_filter_logfile(
+                filepath=job_logfile_path,
+                thresh_maf=failed_var_thresh["tresh_MAF"],
+                thresh_cr=failed_var_thresh["tresh_CR"],
+                thresh_hwe=failed_var_thresh["tresh_HWE"]
+            )
 
-            data.append(row)
-        data.append([])
+            prev_filter_thresh = filter_thresh
+            prev_failed_var_thresh = failed_var_thresh
+
+        data.append(row)
 
         df = pd.DataFrame(data, columns=["Chromosome", "Started", "MultiAllelic", "IndelBelowVQSR", "IndelNonPass", "SNVBelowVQSR", "SNVNonPass", "IncorrectInbreedingCoeff", "BelowInbreedingCoeff", "NoGTCol", "FailedPrefilterVarStats", "FailedCR", "FailedMAF", "FailedHWE", "PASSQC", "Parsed", "Written", "PctKept", "Finished", "Elapsed"])
-        df.iloc[df.shape[0] - 1, :2] = ["total", df["Started"].all()]
-        df.iloc[df.shape[0] - 1, 2:17] = df.iloc[:, 2:17].sum(axis=0)
-        df.iloc[df.shape[0] - 1, 17:] = [np.round((df.iloc[df.shape[0] - 1, 16] / df.iloc[df.shape[0] - 1, 15]) * 100, 1), df["Finished"].all(), ""]
         df.iloc[:, 2:17] = df.iloc[:, 2:17].astype(int)
 
         self.save_file(
             df=df,
-            outpath=os.path.join(self.workdir, "VCFFilterSummaryStats.txt.gz")
+            outpath=os.path.join(self.workdir, "VCFFilterSummaryStats.txt")
         )
 
         for column in df.columns:
@@ -307,6 +307,7 @@ class main():
         print("Arguments:")
         print("  > Working directory: {}".format(self.workdir))
         print("  > vcf_file_format: {}".format(self.vcf_file_format))
+        print("  > Chromosome: {}".format(self.chromosome))
         print("  > Exclude: {}".format(self.exclude))
         print("")
 

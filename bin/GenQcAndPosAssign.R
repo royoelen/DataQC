@@ -15,6 +15,8 @@ library(igraph)
 option_list <- list(
     make_option(c("-t", "--target_bed"), type = "character",
     help = "Name of the target genotype file (bed/bim/fam format). Required file extension: .bed."),
+    make_option(c("-f", "--fam"), type = "character", default = "",
+    help = "Path to a separate fam file. Has priority over fam associated with --target_bed"),
     make_option(c("-g", "--gen_exp"), type = "character",
     help = "Tab-delimited genotype-to-expression sample ID linking file."),
     make_option(c("-s", "--sample_list"), type = "character",
@@ -48,6 +50,7 @@ options(bigstatsr.check.parallel.blas = FALSE)
 
 # Report settings
 print(args$target_bed)
+print(args$fam)
 print(args$genome_build)
 print(args$gen_exp)
 print(args$sample_list)
@@ -140,7 +143,7 @@ if ("hg19" != ucsc_code) {
 message("Read in target data.")
 target_bed <- bed(args$target_bed)
 ## Calculate AFs for target data
-system(paste0("plink/plink2 --bfile ", str_replace(args$target_bed, "\\..*", ""), " --threads 4 --freq 'cols=+pos' --out target"))
+system(paste0("plink/plink2 --bfile ", str_replace(args$target_bed, "\\..*", ""), ifelse(args$fam!="", paste0(" --fam ", args$fam), ""), " --threads 4 --freq 'cols=+pos' --out target"))
 system("gzip target.afreq")
 
 # eQTL samples
