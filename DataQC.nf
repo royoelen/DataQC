@@ -326,7 +326,7 @@ process CleanSplitVcf {
 
     script:
     """
-    clean_work_files.sh "${files_list[0]}"
+    # clean_work_files.sh "${files_list[0]}"
     """
 }
 
@@ -340,7 +340,7 @@ process CleanWgsNorm {
 
     script:
     """
-    clean_work_files.sh "${files_list[0]}"
+    # clean_work_files.sh "${files_list[0]}"
     """
 }
 
@@ -354,7 +354,7 @@ process CleanWgsQc {
 
     script:
     """
-    clean_work_files.sh "${files_list[0]}"
+    # clean_work_files.sh "${files_list[0]}"
     """
 }
 
@@ -381,7 +381,7 @@ process GenotypeQC {
       file 'target.afreq.gz' into target_allele_frequencies
 
     script:
-    if (fam_annot == 'EMPTY')
+    if (params.fam == '')
       """
       Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
       --target_bed ${bfile} \

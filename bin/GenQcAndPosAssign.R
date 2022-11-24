@@ -471,7 +471,7 @@ proj_PCA <- bed_projectPCA(
   k = 10,
   strand_flip = TRUE,
   join_by_pos = TRUE,
-  match.min.prop = 0.5,
+  match.min.prop = 0.05,
   build.new = ucsc_code,
   build.ref = "hg19",
   liftOver = R.utils::getRelativePath(args$liftover_path),
@@ -884,10 +884,10 @@ message("Write out final sample summary table.")
 colnames(summary_table) <- c("Stage", "Nr. of SNPs", "Nr. of genotype samples", "Nr. of eQTL samples")
 fwrite(summary_table, paste0(args$output, "/gen_data_summary/summary_table.txt"), sep = "\t", quote = FALSE)
 
-system("rm *.bed")
-system("rm *.bim")
-system("rm *.fam")
-system("rm *.id")
-system("rm *.log")
-system("rm *.hh")
+system("rm *.bed", wait = TRUE, intern = FALSE)
+system("rm *.bim", wait = TRUE, intern = FALSE)
+system("rm *.fam", wait = TRUE, intern = FALSE)
+system("rm *.id", wait = TRUE, intern = FALSE)
+system("rm *.log", wait = TRUE, intern = FALSE)
+system("rm *.hh", wait = TRUE, intern = FALSE)
 message("Temporary genotype files cleaned up.")
