@@ -23,10 +23,16 @@ module load squashfs/4.4
 export SINGULARITY_CACHEDIR=../../singularitycache
 export NXF_HOME=../../nextflowcache
 
+# Disable pathname expansion. Nextflow handles pathname expansion by itself.
+set -f
+
 # Define paths
 nextflow_path=../../tools # folder where Nextflow executable is
 
-geno_path=[full path to your input genotype files without .bed/.bim/.fam extension]
+# Genotype data
+bfile_path=[full path to your input genotype files without .bed/.bim/.fam extension]
+
+# Other data
 exp_path=[full path to your gene expression matrix]
 gte_path=[full path to your genotype-to-expression file]
 exp_platform=[expression platform name: HT12v3/HT12v4/HuRef8/RNAseq/AffyU219/AffyHumanExon]
@@ -43,10 +49,14 @@ output_path=../output # Output path
 # --AdditionalCovariates [file with additional covariates]
 # --InclusionList [file with the list of samples to restrict the analysis]
 # --ExclusionList [file with the list of samples to remove from the analysis]
+# --preselected_sex_check_vars "data/Affy6_pruned_chrX_variant_positions.txt"
+# --AdditionalCovariates [file with additional covariates. First column should be `SampleID`]
+# --gen_qc_steps 'WGS'
+# --fam [PLINK .fam file. Takes precedence over .fam file supplied with `--bfile`]
 
 # Command:
 NXF_VER=21.10.6 ${nextflow_path}/nextflow run DataQC.nf \
---bfile ${geno_path} \
+--bfile ${bfile_path} \
 --expfile ${exp_path} \
 --gte ${gte_path} \
 --exp_platform ${exp_platform} \
