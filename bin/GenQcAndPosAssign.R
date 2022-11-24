@@ -471,7 +471,7 @@ proj_PCA <- bed_projectPCA(
   k = 10,
   strand_flip = TRUE,
   join_by_pos = TRUE,
-  match.min.prop = 0.05,
+  match.min.prop = 0.5,
   build.new = ucsc_code,
   build.ref = "hg19",
   liftOver = R.utils::getRelativePath(args$liftover_path),
