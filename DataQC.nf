@@ -267,7 +267,8 @@ process WgsQC {
       """
       else
       """
-      python3 $baseDir/bin/custom_vcf_filter.py --input ${input_vcf} --output norm
+      python3 $baseDir/bin/custom_vcf_filter.py --input ${input_vcf} --output norm \
+      | tee custom_vcf_filter.log
       
       python3 $baseDir/bin/print_WGS_VCF_filter_overview.py \
         --workdir .  --chr ${chr} \
