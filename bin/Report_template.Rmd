@@ -69,25 +69,32 @@ ggplot(cov_specific, aes(x = value)) + geom_histogram(colour = "white") + facet_
 
 ### Overview of the QC steps
 
-```{r, message = FALSE, warning = FALSE, echo = FALSE}
+```{r, message = FALSE, warning = FALSE, echo = FALSE, results = 'asis'}
 
-wgs_table <- fread("wgs_qc_table_combined.txt", header=T)
+wgs_table <- fread("wgs_qc_table_combined.txt", header=T, data.table=F)
+#wgs_settings <- fread("wgs_qc_settings_combined.txt", header=T, data.table=F)
+overview_table <- fread("outputfolder_gen/gen_data_summary/summary_table.txt", data.table=F)
 
 # Check what the number of SNPs is that went into WGS specific QC
+if (nrow(wgs_table != 0)) {
 
+  #wgs_table$Autosome <- ifelse(wgs_table$Chromosome %in% paste0("chr", c(1:22)), "Autosomes", "X chromosome")
+  #aggregated <- aggregate(wgs_table[columns_to_aggregate], by=list(wgs_table$Autosome), FUN=sum)
+
+  #rownames(aggregated) <- aggregated$Group.1
+
+  #wgs_overview_table <- t(aggregated[columns_to_aggregate])
+  #rownames(wgs_overview_table) <- column_labels[rownames(wgs_overview_table)]
+  #knitr::kable(wgs_overview_table)
+
+  #new_raw_row <- overview_table[overview_table["Stage"] == "Raw file"]
+  #new_raw_row["Nr. of SNPs"] <- sum(wgs_table[,"PASSQC"])
+  overview_table[overview_table["Stage"] == "Raw file", "Stage"] <- "Passed WGS specific SNP QC"
+  #overview_table <- rbind(data.frame(new_raw_row, overview_table))
+}
 # List the set of variants
 
-overview_table <- fread("outputfolder_gen/gen_data_summary/summary_table.txt")
 knitr::kable(overview_table)
-```
-
-```{r, message = FALSE, warning = FALSE, echo = FALSE}
-print(wgs_table)
-```
-
-### WGS specific variant-level QC
-```{r, message = FALSE, warning = FALSE, echo = FALSE}
-knitr::kable(wgs_table)
 ```
 
 ### Allele frequency concordance with reference panel

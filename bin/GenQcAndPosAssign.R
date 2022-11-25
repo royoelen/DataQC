@@ -142,8 +142,9 @@ if ("hg19" != ucsc_code) {
 ## Original file
 message("Read in target data.")
 target_bed <- bed(args$target_bed)
+
 ## Calculate AFs for target data
-system(paste0("plink/plink2 --bfile ", str_replace(args$target_bed, "\\..*", ""), ifelse(args$fam!="", paste0(" --fam ", args$fam), ""), " --threads 4 --freq 'cols=+pos' --out target"))
+system(paste0("plink/plink2 --bfile ", str_replace(args$target_bed, "\\..*", ""), " --threads 4 --freq 'cols=+pos' --out target"))
 system("gzip target.afreq")
 
 # eQTL samples
@@ -203,15 +204,22 @@ samples_to_include <- samples_to_include[!samples_to_include$IID %in% exc_list$V
 message("Sample exclusion filter active!")
 }
 
-fwrite(samples_to_include, "SamplesToInclude.txt", sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
+fwrite(samples_to_include[2], "SamplesToInclude.txt", sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
 
 temp_QC <- data.frame(stage = "Samples after removing exclusion list", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include),
 Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
 summary_table <- rbind(summary_table, temp_QC)
 
+if (args$fam != "") {
+  new_fam <- fread(args$fam, data.table = F)
+  if (!all(new_fam$V2 == target_bed$fam$sample.ID)) {
+    stop(sprintf("Error! samples in '%s' do not match samples from PLINK dataset. Exiting", args$fam))
+  }
+}
+
 # Remove samples not in GTE + 5k samples
-system(paste0("plink/plink2 --bfile ", 
-bed_simplepath, " --output-chr 26 --keep SamplesToInclude.txt --geno 0.05 --make-bed --threads 4 --out ", bed_simplepath, "_filtered"))
+system(paste0("plink/plink2 --bfile ", bed_simplepath, ifelse(args$fam!="", paste0(" --fam ", args$fam), ""),
+" --output-chr 26 --keep SamplesToInclude.txt --geno 0.05 --make-bed --threads 4 --out ", bed_simplepath, "_filtered"))
 
 # Do a first pass over variants to remove the bulk of highly missed variants
 # List the missingness per variant

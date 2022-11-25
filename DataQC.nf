@@ -543,6 +543,8 @@ process RenderReport {
       path ('outputfolder_exp/*') into output_ch3
       path ('Report_DataQc*') into report_ch2
       path ('CovariatePCs.txt') into combined_covariates
+      path ('wgs_qc_table_combined.txt') into wgs_qc_stats_output_ch
+      path ('wgs_qc_settings_combined.txt') into wgs_qc_settings_output_ch
 
     script:
     """
