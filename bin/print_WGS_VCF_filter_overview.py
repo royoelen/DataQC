@@ -117,7 +117,7 @@ class main():
 
         row = [self.chromosome, False, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, np.nan, False, ""]
 
-        job_logfile_path = os.path.join(self.workdir, "jobs", "output", "CUSTOMVCFFILTER_CHR{}.out".format(chr))
+        job_logfile_path = os.path.join("custom_vcf_filter.log")
         if os.path.exists(job_logfile_path):
             row[1] = True
             row[15:] = self.read_job_logfile(filepath=job_logfile_path)

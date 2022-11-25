@@ -257,7 +257,8 @@ process WgsQC {
     script:
       if (chr in ["X", "Y", "chrX", "chrY"]) 
       """
-      python3 $baseDir/bin/custom_vcf_filter.py --input ${input_vcf} --hardy_weinberg_equilibrium 0 --output norm
+      python3 $baseDir/bin/custom_vcf_filter.py --input ${input_vcf} --hardy_weinberg_equilibrium 0 --output norm \
+      | tee custom_vcf_filter.log
       
       python3 $baseDir/bin/print_WGS_VCF_filter_overview.py \
         --workdir . --chr ${chr} \
