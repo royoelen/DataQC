@@ -151,8 +151,9 @@ class main():
                 thresh_hwe=failed_var_thresh["tresh_HWE"]
             )
 
-            prev_filter_thresh = filter_thresh
-            prev_failed_var_thresh = failed_var_thresh
+            filter_thresh["Chromosome"] = self.chromosome
+            filter_thresh_df = pd.DataFrame.from_dict({key: [value] for key, value in filter_thresh.items()})
+            self.save_file(df=filter_thresh_df, outpath=os.path.join(self.workdir, "VCFFilterSettings.txt"))
 
         data.append(row)
 

@@ -250,6 +250,7 @@ process WgsQC {
       tuple val(chr), file("norm-filtered.vcf.gz") into vcf_wgs_qced_to_clean
 
       file("VCFFilterSummaryStats.txt") into wgs_qc_stats
+      file("VCFFilterSettings.txt") into wgs_qc_settings
 
     when:
       params.gen_qc_steps == 'WGS'
@@ -512,6 +513,7 @@ process GeneExpressionQC {
 }
 
 wgs_qc_stats.ifEmpty("EMPTY").collectFile(name: 'wgs_qc_table_combined.txt', skip: 1, newLine: false, keepHeader: true).set { wgs_qc_stats_file_ch }
+wgs_qc_settings.ifEmpty("EMPTY").collectFile(name: 'wgs_qc_settings_combined.txt', skip: 1, newLine: false, keepHeader: true).set { wgs_qc_settings_file_ch }
 
 process RenderReport {
 
@@ -533,6 +535,7 @@ process RenderReport {
       path additional_covariates from params.AdditionalCovariates
       path sexcheck from sexcheck_to_report
       file wgs_qc_stats_collected from wgs_qc_stats_file_ch
+      file wgs_qc_settings_collected from wgs_qc_settings_file_ch
 
     output:
       path ('outputfolder_gen/*') into output_ch2
