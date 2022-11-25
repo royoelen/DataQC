@@ -510,6 +510,8 @@ process GeneExpressionQC {
       """
 }
 
+wgs_qc_stats.ifEmpty("EMPTY").collectFile(name: 'wgs_qc_table_combined.txt', skip: 1, newLine: false, keepHeader: true).set { wgs_qc_stats_file_ch }
+
 process RenderReport {
 
     tag {RenderReport}
@@ -529,7 +531,7 @@ process RenderReport {
       val contaminationarea from params.ContaminationArea
       path additional_covariates from params.AdditionalCovariates
       path sexcheck from sexcheck_to_report
-      file wgs_qc_stats_collected from wgs_qc_stats.collectFile(name: 'wgs_qc_table_combined.txt', skip: 1, newLine: true, keepHeader: true)
+      file wgs_qc_stats_collected from wgs_qc_stats_file_ch
 
     output:
       path ('outputfolder_gen/*') into output_ch2
