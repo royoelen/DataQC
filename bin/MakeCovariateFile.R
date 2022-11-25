@@ -32,6 +32,15 @@ if (!args[2] == "1000G_pops.txt"){
     add_cov <- fread(args[2])
     add_cov <- add_cov[complete.cases(add_cov), ]
 
+    print(add_cov)
+
+    print(sapply(add_cov, function(x) is.character(x) & length(unique(x))==2))
+    changeCols <- colnames(add_cov)[sapply(add_cov, function(x) is.character(x) & length(unique(x))==2)]
+
+    add_cov[,(changeCols):= lapply(.SD, function(x) as.numeric(as.factor(x))-1), .SDcols = changeCols]
+
+    print(str(add_cov))
+ 
     add_cov_sup <- add_cov[, sapply(add_cov, is.character), with = FALSE]
 
     if (ncol(add_cov_sup) > 1){
