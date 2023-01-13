@@ -100,7 +100,7 @@ make_executable <- function(exe) {
 dir.create("plink")
 
 # Download plink 2 executable
-utils::download.file("https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_20221024.zip",
+utils::download.file("https://s3.amazonaws.com/plink2-assets/alpha3/plink2_linux_x86_64_20221024.zip",
 destfile = "plink/plink2.zip", verbose = TRUE)
 PLINK <- utils::unzip("plink/plink2.zip",
                         files = "plink2",
@@ -198,13 +198,13 @@ Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
 summary_table <- rbind(summary_table, temp_QC)
 
 # Remove samples which are in the exclusion list
-if (args$exclusion_list != "" & args$exclusion_list != "EmpiricalProbeMatching_AffyHumanExon.txt"){
+if (args$exclusion_list != "" & args$exclusion_list != "EmpiricalProbeMatching_AffyU219.txt"){
 exc_list <- fread(args$exclusion_list, header = FALSE)
 samples_to_include <- samples_to_include[!samples_to_include$IID %in% exc_list$V1, ]
 message("Sample exclusion filter active!")
 }
 
-fwrite(samples_to_include[2], "SamplesToInclude.txt", sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
+fwrite(data.table(`#FID` = samples_to_include$IID, `IID` = samples_to_include$IID), "SamplesToInclude.txt", sep = "\t", quote = FALSE, col.names = TRUE, row.names = FALSE)
 
 temp_QC <- data.frame(stage = "Samples after removing exclusion list", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include),
 Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))

@@ -20,7 +20,7 @@ def helpMessage() {
       --cohort_name                 Name of the cohort.
       --genome_build                Genome build of the cohort. Either hg19, GRCh37, hg38 or GRCh38.
       --bfile                       Path to unimputed genotype files in plink bed/bim/fam format (without extensions bed/bim/fam).
-      --vcf                         Path to a vcf file
+      --vcf                         Path to a vcf file.
       --fam                         Path to a plink fam file. This is especially helpful for sex annotation of samples in VCF files.
       --expfile                     Path to the un-preprocessed gene expression matrix (genes/probes in the rows, samples in the columns). Can be from RNA-seq experiment or from array. NB! For Affymetrix arrays (AffyU219, AffyExon) we assume that standard preprocessing and normalisation is already done.
       --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. Can be used to filter samples from the analysis.
@@ -125,7 +125,7 @@ params.genome_build = 'hg19'
 
 // By default define random non-colliding file names in data folder. If default, these are ignored by corresponding script.
 params.InclusionList = "$baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt"
-params.ExclusionList = "$baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt"
+params.ExclusionList = "$baseDir/data/EmpiricalProbeMatching_AffyU219.txt"
 params.AdditionalCovariates = "$baseDir/data/1000G_pops.txt"
 
 params.preselected_sex_check_vars = ''
