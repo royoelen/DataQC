@@ -629,7 +629,8 @@ fwrite(related, "related.txt", sep = "\t", quote = FALSE, row.names = FALSE)
 print(related)
 
 # Remove samples that are related to each other
-
+related$IID1 <- as.character(related$IID1)
+related$IID2 <- as.character(related$IID2)
 # First, get the total list of all samples with some relatedness above a predefined threshold (see above in plink call)
 related_individuals <- unique(c(related$IID1, related$IID2))
 
