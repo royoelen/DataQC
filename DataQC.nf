@@ -220,12 +220,32 @@ process SplitVcf {
       """
 }
 
+process ExpandVcfChannel {
+    tag {ExpandVcfChannel}
+
+    input:
+      file(input_vcf) from ( vcf_contig_count.value > 1 ? vcffile_ch : Channel.empty())
+
+    output:
+      tuple env(chr), file(input_vcf) into ext_vcf_ch
+
+    when:
+      vcf_contig_count.value > 1
+
+    script:
+      """
+      bcftools index ${input_vcf}
+      tabix -l ${input_vcf} > chr.txt
+      chr=`cat chr.txt | tr -d '\n'`
+      """      
+}
+
 process WgsNorm {
 
     tag {WgsNorm}
 
     input:
-      tuple val(chr), file(input_vcf) from split_vcf
+      tuple val(chr), file(input_vcf) from ( vcf_contig_count.value == 1 ? split_vcf : ext_vcf_ch )
 
     output:
       tuple val(chr), file("norm.vcf.gz") into vcf_normalised
@@ -234,6 +254,7 @@ process WgsNorm {
 
     script:
       """
+      echo "chromosome ${chr}"
       bcftools norm -m -any ${input_vcf} -Oz -o "norm.vcf.gz"
       """
 }
