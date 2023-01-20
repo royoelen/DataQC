@@ -296,7 +296,7 @@ process VcfToPlink {
     script:
       """
       # Make plink file
-      plink2 --vcf ${vcf} --split-x 'hg38' --make-bed --out "${chr}_converted_vcf"
+      plink2 --vcf ${vcf} --const-fid --split-x 'hg38' --make-bed --out "${chr}_converted_vcf"
       """
 }
 
