@@ -727,7 +727,6 @@ if (length(related_individuals) > 0) {
   print(indices_of_passed_samples)
 
 } else {
-
   # No relatedness observed, proceeding with all samples that passed the previous check.
   indices_of_passed_samples <- indices_of_het_passed_samples
 }
