@@ -44,7 +44,7 @@ library(stringr)
 cov <- fread("CovariatePCs.txt")
 ```
 
-`DataQC` pipeline has prepared `r ncol(cov) - 1` covariates: 10 first genetic PCs`r if (ncol(cov) > 111){ab <- ','}else{ab <- ' and'}; ab` 100 first expression PCs`r if (ncol(cov)> 111){outp <- paste0(' and ', ncol(cov)- 111, ' additional covariates.')} else {outp <- '.'}; outp`
+`DataQC` pipeline has prepared `r ncol(cov) - 1` covariates: 10 first genetic PCs`r if (ncol(cov) > 111){ab <- ','}else{ab <- ' and'}; ab` 100 first expression PCs`r if (ncol(cov)> 111){outp <- paste0(' and ', ncol(cov)- 111, ' additional covariate(s).')} else {outp <- '.'}; outp`
 
 `r if (ncol(cov) - 1 > 110){outp <- paste0('The names of additional covariates are: ', paste(colnames(cov)[-c(1:111)], collapse = ", "), '.'); outp}`
 
@@ -57,13 +57,13 @@ cov_specific$covariate <- as.character(cov_specific$covariate)
 
 ggplot(cov_specific, aes(x = value)) + geom_histogram(colour = "white") + facet_wrap(~ covariate, scales = "free") + theme_bw() + xlab("Covariate value")
 ```
-`r if (ncol(cov) > 110) {"\\begin{comment}"}`
+`r if (ncol(cov) - 1 == 110) {"\\begin{comment}"}`
 **Fig 1. Histograms for additional covariates.**
-`r if (ncol(cov) > 110) {"\\end{comment}"}`
+`r if (ncol(cov) - 1 == 110) {"\\end{comment}"}`
 
-`r if (ncol(cov) == 110) {"\\begin{comment}"}`
+`r if (ncol(cov) - 1 > 110) {"\\begin{comment}"}`
 **Fig 1. Histograms for additional covariates.** Not available, there are no additional covariates prepared on top of genotype PCs and expression PCs.
-`r if (ncol(cov) == 110) {"\\end{comment}"}`
+`r if (ncol(cov) - 1 > 110) {"\\end{comment}"}`
 
 ## Genotype QC report
 
@@ -99,14 +99,14 @@ knitr::kable(overview_table)
 
 ### Allele frequency concordance with reference panel
 
-In the following plot you will see the comparison of allele frequencies between input genotypes and 1000G phase 3 reference panel. This lookup is done on SNP IDs, therefore many SNPs will be excluded. However, even with the subset of SNPs we can check if the allele frequencies generally correlate between cohort and reference. We should see that large majority of the variants are on the 0-1 diagonal and strong correlation between the allele frequencies of two datasets.
+In the following plot you will see the comparison of allele frequencies between input genotypes and 1000G phase 3 reference panel. This lookup is done on SNP IDs, therefore many SNPs will be excluded. However, even with the subset of SNPs, we can check if the allele frequencies generally correlate between your cohort and reference dataset. We should see that a large majority of the variants are on the 0-1 diagonal and there is a strong correlation between the allele frequencies of two datasets.
 
 However:
 
 - If you see the majority of the dots on 1-0 diagonal (you see strong **negative** correlation), this suggest that your input genotypes have incorrect encoding of the alleles for all SNPs.
 - If you see inverted "V" shape, this suggests that there are some subset of SNPs which have alleles incorrectly encoded.
 
-In both of the cases you should check if the input `.bed/.bim/.fam` files are correct and there are no errors made in generating and/or processing those. If you do not pinpoint any issues with the input, please contact the lead analyst(s) for advice.
+In both of the cases you should check if the input `.bed/.bim/.fam` files are correct and that there are no errors made in generating and/or processing those. If you do not pinpoint any issues with the input, please contact the lead analyst(s) for advice.
 
 ```{r, message = FALSE, warning = FALSE, echo = FALSE, fig.width = 6, fig.height = 6, fig.align = "center"}
 target <- fread("target.afreq.gz", colClasses=c("character", "integer", "character", "character", "character", "numeric", "integer"))
@@ -149,7 +149,7 @@ The Pearson R of allele frequencies is **`r res_cor`**, which suggests `r if(res
 `r if (!file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\begin{comment}"}`
 Next plot summarises the genetically determined sex of the input samples. Samples which have unclear genetic sex (X chr heterozygosity >0.2 and <0.8) and hence might be contaminated, are removed. If reported sex is indicated in the input `.fam` file, this is also compared with genetic sex and problematic samples (potential mixups) are automatically excluded.
 
-`r nrow(fread("outputfolder_gen/gen_data_QCd/SexCheckFailed.txt"))` samples failed genotype check and were removed.
+`r nrow(fread("outputfolder_gen/gen_data_QCd/SexCheckFailed.txt"))` samples failed the sex check and were removed.
 
 You can investigate the file `[your output folder]/outputfolder_gen/gen_data_QCd/SexCheckFailed.txt` to see which samples failed the sex check.
 
@@ -175,24 +175,24 @@ Next plot summarises the heterozygosity of the input samples. Samples showing ex
 
 #### Genotype data projected into 1000G superpopulations
 
-Here we project your genotype samples into 1000G p3v5 superpopulations to check if all samples come from one ancestry. 
+Here we project your genotype samples into 1000G p3v5 superpopulations to check if all the samples come from one ancestry group. 
 
-1. If you observe a few samples which are different ancestry compared to the majority of samples (e.g. majority of the samples are of EUR ancestry and there are few samples from AFR or SAS), then remove ancestry outliers and re-run the `DataQC` pipeline without those samples.
-2. If you observe many (>100) samples which are different ancestry compared to the majority of samples (your dataset consists of individuals from several ancestries) then please split your genotype data based on ancestry and rerun this and following pipelines on those datasets separately.
+1. If you observe a few samples which are different ancestry compared to the majority of samples (e.g. majority of the samples are of EUR ancestry and there are few samples from AFR or SAS), then please remove ancestry outliers and re-run the `DataQC` pipeline without those samples.
+2. If you observe many (>100) samples which are different ancestry compared to the majority of samples (your dataset consists of individuals from several ancestries) then please split your genotype data based on ancestry group and rerun this and following pipelines on those datasets separately.
 
-The files `AssignedPopulations.txt` and `1000G_PC_projections.txt` have been written to the your output folder under folder `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. Please use optional `--ExclusionList` and specify the file with the list of samples you want to withhold from this dataset.
+The files `AssignedPopulations.txt` and `1000G_PC_projections.txt` have been written to the your output folder under subfolder `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. Please use optional `--ExclusionList` and specify the file with the list of samples you want to withhold from this dataset.
 
-![**Fig 5. Genotype samples projected to 1000G superpopulations.** First two plots show only target dataset in the 1000G PC space. Rest of the plots visualise target dataset, as well as samples from 1000G superpopulations by plotting first 10 genotype PCs.](outputfolder_gen/gen_plots/SamplesPCsProjectedTo1000G.png)  
+![(#fig:fig5)**Fig 5. Genotype samples projected to 1000G superpopulations.** First two plots show only target dataset in the 1000G PC space. Rest of the plots visualise target dataset, as well as samples from 1000G superpopulations by plotting first 10 genotype PCs.](outputfolder_gen/gen_plots/SamplesPCsProjectedTo1000G.png)  
 
 #### Assign superpopulation for each sample
 
 Based on first 3 genotype PCs, here we assign the most likely population to each sample and outline those samples which are clearly different. Again, all the samples in the dataset should be the most similar to only one ancestry and samples resembling other ancestries should be removed or treated as a separate dataset (in case of N>100).
 
-```{r, fig.height = 7, fig.width = 7, fig.align = "center", echo = FALSE, message = FALSE, warning = FALSE}
+```{r, fig.height = 7, fig.width = 7, fig.align = "center", echo = FALSE, message = FALSE, warning = FALSE, fig.cap = "fig6"}
 library(dplyr)
 pops <- fread("outputfolder_gen/gen_data_summary/PopAssignResults.txt")
 
-pops <- melt(pops)
+pops <- melt(pops, id.vars = "abi")
 colnames(pops) <- c("Sample", "Superpopulation", "dist") 
 
 pops <- pops %>% 
@@ -246,9 +246,9 @@ Here we conduct PCA on the genotypes of eQTL samples only and investigate if the
 
 #### Outlier samples
 
-On the next plot you can see the distribution of Probabilistic Local Outlier Factor "outlierness" statistic ([Kriegel et al., 2009](https://dl.acm.org/doi/10.1145/1645953.1646195), [Privé et al., 2020](https://academic.oup.com/bioinformatics/article/36/16/4449/5838185)), based on which the samples are declared genetic outliers and removed from the analysis. Use the histogram to check if the default value is appropriate. If there si long tail to the right, please adjust the default value in the pipeline argument `--GenOutThresh` and re-run the pipeline. Threshold should be selected so that there are no clear outliers on the panes of *Fig. 6*.
+On the next plot you can see the distribution of Probabilistic Local Outlier Factor "outlierness" statistic ([Kriegel et al., 2009](https://dl.acm.org/doi/10.1145/1645953.1646195), [Privé et al., 2020](https://academic.oup.com/bioinformatics/article/36/16/4449/5838185)), based on which the samples are declared genetic outliers and removed from the analysis. Use the histogram to check if the default value is appropriate. If there si long tail to the right, please adjust the default value in the pipeline argument `--GenOutThresh` and re-run the pipeline. Threshold should be selected so that there are no dramatic outliers on the first panes of *Fig 9*.
 
-If you observe bimodal distribution on the histogram then it might indicate substratification in the genotype data. Check the following section, Figure 5 and 6. 
+If you observe bimodal distribution on the histogram then it might indicate substratification in the genotype data. Check the following section, *Fig 5* and *Fig 6*. 
 
 ![**Fig 7. Statistic of outlierness with threshold used to remove ethnic outliers.**](outputfolder_gen/gen_plots/PC_dist_outliers_S.png)  
 
@@ -268,13 +268,15 @@ In case of doubt please contact the lead analysts for advice and we will investi
 
 ![**Fig 8. PCA with all samples, outliers outlined with red.** Different shades of red indicate different classes of outliers: difference in SD from mean of PC1 and PC2 (pink), statistic of outlierness S (red), or both (dark red). Dashed lines indicate the SD thresholds to consider samples to outliers.](outputfolder_gen/gen_plots/PCA_outliers.png)  
 
-![**Fig 9. PCA with all samples, outliers removed.** You should not see any dramatic outliers on first PCs any more. These are the PCs which will be used as covariates in the eQTL meta-analysis.](outputfolder_gen/gen_plots/Target_PCs_postQC.png)
+![(#fig:fig9)**Fig 9. PCA with all samples, outliers removed.** You should not see any dramatic outliers or clusters on the first few PCs any more. These are the PCs which will be used as covariates in the eQTL meta-analysis.](outputfolder_gen/gen_plots/Target_PCs_postQC.png)
 
 If you still observe clusters in the data, that could indicate that you still have different genotype batches in the data. If you know the genotype batches and splitting the data is unoptimal, you should specify the batch as additional covariate, using `--AdditionalCovariates` argument.
 
+Next we visualise on the scree plot which genotype PCs are the most informative. This helps to make an informed decision, how many genotype PCs should be added to the association model as covariates.
+
 ![**Fig 10. Scree plot for PCA with all samples, outliers removed.** Visualised are the first 10 singular values.](outputfolder_gen/gen_plots/Target_PCs_scree_postQC.png)
 
-Scree plot shows which genotype PCs are the most informative.
+
 
 #### Loadings of PCs
 
@@ -293,9 +295,9 @@ knitr::kable(overview_table)
 
 ### PCA on preprocessed expression data
 
-On the following plots, 8 first PCs are calculated on normalised and log~2~-transformed expression matrix. Samples were declared as outliers based on first two PCs, when they deviate from the mean value by `r params$SD_exp` standard deviations (SDs). Analysis was run iteratively, data was pre-processed and PCA was calculated until there were no further expression otliers to remove. Because there might be expected difference based on the sex, we also indicate the genetic sex of each sample on the plot.
+On the following plots, 8 first PCs are calculated on normalised and log~2~-transformed expression matrix. Samples were declared as outliers based on first two PCs, when they deviate from the mean value by `r params$SD_exp` standard deviations (SDs). Analysis was run iteratively, data was pre-processed and PCA was calculated until there were no further expression otliers to remove. Because there might be expected clustering based on the sex, if possible, we also indicate the genetic sex of each sample on the plot.
 
-![**Fig 12. PCA on all samples** Genetic sex of the individual is shown as shape of the dot, outliers from all iterations are outlined as red.](outputfolder_exp/exp_plots/PCA_before.png)
+![**Fig 12. PCA on all samples** Outliers from all iterations are outlined as red. If available, genetic sex of the individual is shown as shape of the dot.](outputfolder_exp/exp_plots/PCA_before.png)
 
 In order to visualise non-linear patterns in the data, we calculated 2 first multidimensional scaling (MDS) components and visualise those as well. This analysis were done on the data where outliers from previous step were already removed. Similarly to PCs, samples were declared as outliers when they deviate from the mean value of MDS 1 and MDS 2 by `r params$SD_exp` SDs. If you still observe outlier groups on this plot, you should try to reduce the SDs allowed to deviate (parameter `--ExpSdThreshold` of the pipeline) and re-run the pipeline.
 
@@ -431,3 +433,6 @@ URL: https://bioconductor.org/packages/release/bioc/html/edgeR.html
 
 URL: https://bioconductor.org/packages/release/bioc/html/preprocessCore.html
 
+**Citations:**
+
+<div class="csl-entry">Bolstad, B. (2022). <i>preprocessCore: A collection of pre-processing functions</i>. https://github.com/bmbolstad/preprocessCore</div>

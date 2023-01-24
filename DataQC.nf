@@ -20,7 +20,7 @@ def helpMessage() {
       --cohort_name                 Name of the cohort.
       --genome_build                Genome build of the cohort. Either hg19, GRCh37, hg38 or GRCh38.
       --bfile                       Path to unimputed genotype files in plink bed/bim/fam format (without extensions bed/bim/fam).
-      --vcf                         Path to a vcf file
+      --vcf                         Path to a vcf file.
       --fam                         Path to a plink fam file. This is especially helpful for sex annotation of samples in VCF files.
       --expfile                     Path to the un-preprocessed gene expression matrix (genes/probes in the rows, samples in the columns). Can be from RNA-seq experiment or from array. NB! For Affymetrix arrays (AffyU219, AffyExon) we assume that standard preprocessing and normalisation is already done.
       --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. Can be used to filter samples from the analysis.
@@ -125,7 +125,7 @@ params.genome_build = 'hg19'
 
 // By default define random non-colliding file names in data folder. If default, these are ignored by corresponding script.
 params.InclusionList = "$baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt"
-params.ExclusionList = "$baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt"
+params.ExclusionList = "$baseDir/data/EmpiricalProbeMatching_AffyU219.txt"
 params.AdditionalCovariates = "$baseDir/data/1000G_pops.txt"
 
 params.preselected_sex_check_vars = ''
@@ -220,12 +220,32 @@ process SplitVcf {
       """
 }
 
+process ExpandVcfChannel {
+    tag {ExpandVcfChannel}
+
+    input:
+      file(input_vcf) from ( vcf_contig_count.value > 1 ? vcffile_ch : Channel.empty())
+
+    output:
+      tuple env(chr), file(input_vcf) into ext_vcf_ch
+
+    when:
+      vcf_contig_count.value > 1
+
+    script:
+      """
+      bcftools index ${input_vcf}
+      tabix -l ${input_vcf} > chr.txt
+      chr=`cat chr.txt | tr -d '\n'`
+      """      
+}
+
 process WgsNorm {
 
     tag {WgsNorm}
 
     input:
-      tuple val(chr), file(input_vcf) from split_vcf
+      tuple val(chr), file(input_vcf) from ( vcf_contig_count.value == 1 ? split_vcf : ext_vcf_ch )
 
     output:
       tuple val(chr), file("norm.vcf.gz") into vcf_normalised
@@ -234,6 +254,7 @@ process WgsNorm {
 
     script:
       """
+      echo "chromosome ${chr}"
       bcftools norm -m -any ${input_vcf} -Oz -o "norm.vcf.gz"
       """
 }
@@ -296,7 +317,7 @@ process VcfToPlink {
     script:
       """
       # Make plink file
-      plink2 --vcf ${vcf} --split-x 'hg38' --make-bed --out "${chr}_converted_vcf"
+      plink2 --vcf ${vcf} --const-fid --split-x 'hg38' --make-bed --out "${chr}_converted_vcf"
       """
 }
 

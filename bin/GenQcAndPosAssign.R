@@ -100,7 +100,7 @@ make_executable <- function(exe) {
 dir.create("plink")
 
 # Download plink 2 executable
-utils::download.file("https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_20221024.zip",
+utils::download.file("https://s3.amazonaws.com/plink2-assets/alpha3/plink2_linux_x86_64_20221024.zip",
 destfile = "plink/plink2.zip", verbose = TRUE)
 PLINK <- utils::unzip("plink/plink2.zip",
                         files = "plink2",
@@ -135,7 +135,7 @@ if ("hg19" != ucsc_code) {
 
   system("rm 1000Gref.afreq")
 } else {
-  system("gzip 1000Gref.afreq")
+  system("gzip 1000Gref.afreq --force")
 }
 
 # Target data
@@ -145,7 +145,7 @@ target_bed <- bed(args$target_bed)
 
 ## Calculate AFs for target data
 system(paste0("plink/plink2 --bfile ", str_replace(args$target_bed, "\\..*", ""), " --threads 4 --freq 'cols=+pos' --out target"))
-system("gzip target.afreq")
+system("gzip target.afreq --force")
 
 # eQTL samples
 gte <- fread(args$gen_exp, sep = "\t", header = FALSE)
@@ -155,12 +155,42 @@ Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]))
 
 if(nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]) < 100){stop("Less than 100 samples are in genotype-to-expression file!")}
 
-fam <- data.frame(FID = target_bed$.fam$family.ID, IID = target_bed$.fam$sample.ID)
+# Prepare and normalise fam file
+#
+fam <- target_bed$fam
+fam$family.ID <- '0'
+
+if (any(duplicated(fam$sample.ID))) {
+  stop(sprintf("Error! samples in PLINK fam file are not unique. Exiting"))
+}
+
+if (args$fam != "") {
+  new_fam <- fread(args$fam, data.table = F, header=F, col.names=colnames(fam))
+  new_fam$family.ID <- '0'
+
+  # Check if all sample ids in new fam are unique
+  if (any(duplicated(new_fam$IID))) {
+    stop(sprintf("Error! samples in fam file '%s' are not unique. Exiting", args$fam))
+  }
+  # Check if all sample ids from plink fam are in new fam
+  if (!all(fam$sample.ID %in% new_fam$sample.ID)) {
+    stop(sprintf("Error! samples in PLINK fam file are not all in '%s'. Exiting", args$fam))
+  }
+  # Check if all sample ids from new fam are in plink fam
+  if (!all(new_fam$sample.ID %in% fam$sample.ID)) {
+    stop(sprintf("Error! samples in fam file '%s' are not all in PLINK fam file. Exiting", args$fam))
+  }
+
+  fam <- new_fam[order(match(new_fam$sample.ID, fam$sample.ID)),]
+}
+
+# Write normalized fam
+fwrite(fam, "fam_normalized.fam", col.names=F, row.names=F, quote=F, sep="\t")
 
 ## If specified, keep in only samples which are in the sample whitelist
 if (args$inclusion_list != "" & args$inclusion_list != "EmpiricalProbeMatching_AffyHumanExon.txt"){
   inc_list <- fread(args$inclusion_list, header = FALSE)
-  samples_to_include <- fam[fam$IID %in% inc_list$V1, ]
+  samples_to_include <- fam[fam$sample.ID %in% inc_list$V1, ]
   message("Sample inclusion filter active!")
   temp_QC <- data.frame(stage = "Samples in inclusion list",
                         Nr_of_SNPs = target_bed$ncol,
@@ -170,55 +200,49 @@ if (args$inclusion_list != "" & args$inclusion_list != "EmpiricalProbeMatching_A
 }
 
 ## Keep in only samples which are present in genotype-to-expression file AND additional up to 5000 samples (better phasing)
-samples_to_include_gte <- fam[fam$IID %in% gte$V1, ]
+samples_to_include_gte <- fam[fam$sample.ID %in% gte$V1, ]
 
 if (exists("samples_to_include")){
-  print(table(samples_to_include_gte$IID %in% samples_to_include$IID))
-  samples_to_include_gte <- samples_to_include_gte[samples_to_include_gte$IID %in% samples_to_include$IID, ]
-  fam <- fam[fam$IID %in% samples_to_include$IID, ]
+  print(table(samples_to_include_gte$sample.ID %in% samples_to_include$sample.ID))
+  samples_to_include_gte <- samples_to_include_gte[samples_to_include_gte$sample.ID %in% samples_to_include$sample.ID, ]
+  fam <- fam[fam$sample.ID %in% samples_to_include$sample.ID, ]
 }
 
 # Here add up to 5000 samples which are not already included
-if (nrow(fam[!fam$IID %in% samples_to_include_gte$IID, ]) > 0){
-set.seed(123)
-add_samples <- sample(fam[!fam$IID %in% samples_to_include_gte$IID, ]$IID, min(5000, nrow(fam[!fam$IID %in% samples_to_include_gte$IID, ])))
-set.seed(NULL)
-fam2 <- fam[fam$IID %in% add_samples, ]
-samples_to_include_temp <- rbind(samples_to_include_gte, fam2)
+if (nrow(fam[!fam$sample.ID %in% samples_to_include_gte$sample.ID, ]) > 0){
+  set.seed(123)
+  add_samples <- sample(fam[!fam$sample.ID %in% samples_to_include_gte$sample.ID, ]$sample.ID,
+                        min(5000, nrow(fam[!fam$sample.ID %in% samples_to_include_gte$sample.ID, ])))
+  set.seed(NULL)
+  fam2 <- fam[fam$sample.ID %in% add_samples, ]
+  samples_to_include_temp <- rbind(samples_to_include_gte, fam2)
 } else {samples_to_include_temp <- samples_to_include_gte}
 
 if (exists("samples_to_include") && nrow(samples_to_include) > 0){
-  samples_to_include <- samples_to_include[samples_to_include$IID %in% samples_to_include_temp$IID, ]
+  samples_to_include <- samples_to_include[samples_to_include$sample.ID %in% samples_to_include_temp$sample.ID, ]
   print(nrow(samples_to_include))
 } else {samples_to_include <- samples_to_include_temp}
 
 temp_QC <- data.frame(stage = "Samples in genotype-to-expression file + 5000", Nr_of_SNPs = target_bed$ncol,
 Nr_of_samples = nrow(samples_to_include),
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
+Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$sample.ID, ]))
 summary_table <- rbind(summary_table, temp_QC)
 
 # Remove samples which are in the exclusion list
-if (args$exclusion_list != "" & args$exclusion_list != "EmpiricalProbeMatching_AffyHumanExon.txt"){
+if (args$exclusion_list != "" & args$exclusion_list != "EmpiricalProbeMatching_AffyU219.txt"){
 exc_list <- fread(args$exclusion_list, header = FALSE)
-samples_to_include <- samples_to_include[!samples_to_include$IID %in% exc_list$V1, ]
+samples_to_include <- samples_to_include[!samples_to_include$sample.ID %in% exc_list$V1, ]
 message("Sample exclusion filter active!")
 }
 
-fwrite(samples_to_include[2], "SamplesToInclude.txt", sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
+fwrite(data.table(`#FID` = '0', `IID` = samples_to_include$sample.ID), "SamplesToInclude.txt", sep = "\t", quote = FALSE, col.names = TRUE, row.names = FALSE)
 
 temp_QC <- data.frame(stage = "Samples after removing exclusion list", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include),
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
+Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$sample.ID, ]))
 summary_table <- rbind(summary_table, temp_QC)
 
-if (args$fam != "") {
-  new_fam <- fread(args$fam, data.table = F)
-  if (!all(new_fam$V2 == target_bed$fam$sample.ID)) {
-    stop(sprintf("Error! samples in '%s' do not match samples from PLINK dataset. Exiting", args$fam))
-  }
-}
-
 # Remove samples not in GTE + 5k samples
-system(paste0("plink/plink2 --bfile ", bed_simplepath, ifelse(args$fam!="", paste0(" --fam ", args$fam), ""),
+system(paste0("plink/plink2 --bfile ", bed_simplepath, " --fam fam_normalized.fam",
 " --output-chr 26 --keep SamplesToInclude.txt --geno 0.05 --make-bed --threads 4 --out ", bed_simplepath, "_filtered"))
 
 # Do a first pass over variants to remove the bulk of highly missed variants
@@ -479,7 +503,7 @@ proj_PCA <- bed_projectPCA(
   k = 10,
   strand_flip = TRUE,
   join_by_pos = TRUE,
-  match.min.prop = 0.5,
+  match.min.prop = 0.01,
   build.new = ucsc_code,
   build.ref = "hg19",
   liftOver = R.utils::getRelativePath(args$liftover_path),
@@ -629,7 +653,8 @@ fwrite(related, "related.txt", sep = "\t", quote = FALSE, row.names = FALSE)
 print(related)
 
 # Remove samples that are related to each other
-
+related$IID1 <- as.character(related$IID1)
+related$IID2 <- as.character(related$IID2)
 # First, get the total list of all samples with some relatedness above a predefined threshold (see above in plink call)
 related_individuals <- unique(c(related$IID1, related$IID2))
 
@@ -702,7 +727,6 @@ if (length(related_individuals) > 0) {
   print(indices_of_passed_samples)
 
 } else {
-
   # No relatedness observed, proceeding with all samples that passed the previous check.
   indices_of_passed_samples <- indices_of_het_passed_samples
 }

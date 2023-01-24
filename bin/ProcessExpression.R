@@ -368,16 +368,24 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
 # Analysis #
 ############
 # Read in raw expression matrix
-and <- fread(args$expression_matrix)
+and <- fread(args$expression_matrix, header = TRUE)
+colnames(and) <- as.character(colnames(and))
 colnames(and)[1] <- "Feature"
+and$Feature <- as.character(and$Feature)
 message(paste("Initially:", nrow(and), "genes/probes and ", ncol(and), "samples"))
 
 summary_table <- data.table(Stage = "Unprocessed matrix", Nr_of_features = nrow(and), Nr_of_samples = ncol(and))
 
 # Remove samples which are not in the gte or in genotype data
 gte <- fread(args$genotype_to_expression_linking, header = FALSE)
+gte$V1 <- as.character(gte$V1)
+gte$V2 <- as.character(gte$V2)
+
 geno_fam <- fread(args$sex_info, header = TRUE)
+geno_fam$IID <- as.character(geno_fam$IID)
+
 gen_filter <- fread(args$geno_filter, header = FALSE)
+gen_filter$V2 <- as.character(gen_filter$V2)
 gte <- gte[gte$V1 %in% geno_fam$IID, ]
 gte <- gte[gte$V1 %in% gen_filter$V2, ]
 
@@ -442,6 +450,7 @@ mds$`MDS coordinate 2` < mean_mds2 - args$sd * sd_mds2, ]$outlier <- "yes"
 sex <- fread(args$sex_info, header = FALSE)
 sex <- sex[, c(2, 4), with = FALSE]
 colnames(sex) <- c("Sample", "Sex")
+sex$Sample <- as.character(sex$Sample)
 mds <- merge(mds, sex, by = "Sample")
 
 p <- ggplot(mds, aes(x = `MDS coordinate 1`, `MDS coordinate 2`, colour = outlier, shape = Sex)) +
