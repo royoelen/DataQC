@@ -149,7 +149,7 @@ The Pearson R of allele frequencies is **`r res_cor`**, which suggests `r if(res
 `r if (!file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\begin{comment}"}`
 Next plot summarises the genetically determined sex of the input samples. Samples which have unclear genetic sex (X chr heterozygosity >0.2 and <0.8) and hence might be contaminated, are removed. If reported sex is indicated in the input `.fam` file, this is also compared with genetic sex and problematic samples (potential mixups) are automatically excluded.
 
-`r nrow(fread("outputfolder_gen/gen_data_QCd/SexCheckFailed.txt"))` samples failed genotype check and were removed.
+`r nrow(fread("outputfolder_gen/gen_data_QCd/SexCheckFailed.txt"))` samples failed the sex check and were removed.
 
 You can investigate the file `[your output folder]/outputfolder_gen/gen_data_QCd/SexCheckFailed.txt` to see which samples failed the sex check.
 
@@ -192,7 +192,7 @@ Based on first 3 genotype PCs, here we assign the most likely population to each
 library(dplyr)
 pops <- fread("outputfolder_gen/gen_data_summary/PopAssignResults.txt")
 
-pops <- melt(pops)
+pops <- melt(pops, id.vars = "abi")
 colnames(pops) <- c("Sample", "Superpopulation", "dist") 
 
 pops <- pops %>% 
