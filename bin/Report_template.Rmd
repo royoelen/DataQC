@@ -48,7 +48,7 @@ cov <- fread("CovariatePCs.txt")
 
 `r if (ncol(cov) > 111){outp <- paste0('The names of additional covariates are: ', paste(colnames(cov)[-c(1:111)], collapse = ", "), '.'); outp}`
 
-```{r, message = FALSE, eval = ncol(cov) - 1 > 110, warning = FALSE, echo = FALSE}
+```{r, message = FALSE, eval = ncol(cov) > 111, warning = FALSE, echo = FALSE}
 cov_specific <- melt(cov, id.vars = "SampleID")
 colnames(cov_specific) <- c("SampleID", "covariate", "value")
 cov_specific <- cov_specific[!(str_detect(cov_specific$covariate, "GenPC") | str_detect(cov_specific$covariate, "ExpPC")), ]
