@@ -41,7 +41,7 @@ library(knitr)
 library(ggplot2)
 library(stringr)
 
-cov <- fread("CovariatePCs.txt")
+cov <- fread("CovariatePCs.txt", keepLeadingZeros = TRUE)
 ```
 
 `DataQC` pipeline has prepared `r ncol(cov) - 1` covariates: 10 first genetic PCs`r if (ncol(cov) > 111){ab <- ','}else{ab <- ' and'}; ab` 100 first expression PCs`r if (ncol(cov)> 111){outp <- paste0(' and ', ncol(cov) - 111, ' additional covariate(s).')} else {outp <- '.'}; outp`
@@ -71,9 +71,9 @@ ggplot(cov_specific, aes(x = value)) + geom_histogram(colour = "white") + facet_
 
 ```{r, message = FALSE, warning = FALSE, echo = FALSE, results = 'asis'}
 
-wgs_table <- fread("wgs_qc_table_combined.txt", header=T, data.table=F)
-#wgs_settings <- fread("wgs_qc_settings_combined.txt", header=T, data.table=F)
-overview_table <- fread("outputfolder_gen/gen_data_summary/summary_table.txt", data.table=F)
+wgs_table <- fread("wgs_qc_table_combined.txt", header = TRUE, data.table = FALSE)
+#wgs_settings <- fread("wgs_qc_settings_combined.txt", header = TRUE, data.table = FALSE)
+overview_table <- fread("outputfolder_gen/gen_data_summary/summary_table.txt", data.table = FALSE)
 
 # Check what the number of SNPs is that went into WGS specific QC
 if (nrow(wgs_table != 0)) {
@@ -149,7 +149,7 @@ The Pearson R of allele frequencies is **`r res_cor`**, which suggests `r if(res
 `r if (!file.exists("outputfolder_gen/gen_plots/SexCheck.png")) {"\\begin{comment}"}`
 Next plot summarises the genetically determined sex of the input samples. Samples which have unclear genetic sex (X chr heterozygosity >0.2 and <0.8) and hence might be contaminated, are removed. If reported sex is indicated in the input `.fam` file, this is also compared with genetic sex and problematic samples (potential mixups) are automatically excluded.
 
-`r nrow(fread("outputfolder_gen/gen_data_QCd/SexCheckFailed.txt"))` samples failed the sex check and were removed.
+`r nrow(fread("outputfolder_gen/gen_data_QCd/SexCheckFailed.txt", keepLeadingZeros = TRUE))` samples failed the sex check and were removed.
 
 You can investigate the file `[your output folder]/outputfolder_gen/gen_data_QCd/SexCheckFailed.txt` to see which samples failed the sex check.
 
@@ -180,9 +180,9 @@ Here we project your genotype samples into 1000G p3v5 superpopulations to check 
 1. If you observe a few samples which are different ancestry compared to the majority of samples (e.g. majority of the samples are of EUR ancestry and there are few samples from AFR or SAS), then please remove ancestry outliers and re-run the `DataQC` pipeline without those samples.
 2. If you observe many (>100) samples which are different ancestry compared to the majority of samples (your dataset consists of individuals from several ancestries) then please split your genotype data based on ancestry group and rerun this and following pipelines on those datasets separately.
 
-The files `AssignedPopulations.txt` and `1000G_PC_projections.txt` have been written to the your output folder under subfolder `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. Please use optional `--ExclusionList` and specify the file with the list of samples you want to withhold from this dataset.
+The files `AssignedPopulations.txt` and `1000G_PC_projections.txt` have been written to the output folder under subfolder `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. Please use optional `--ExclusionList` and specify the file with the list of samples you want to withhold from this dataset.
 
-![(#fig:fig5)**Fig 5. Genotype samples projected to 1000G superpopulations.** First two plots show only target dataset in the 1000G PC space. Rest of the plots visualise target dataset, as well as samples from 1000G superpopulations by plotting first 10 genotype PCs.](outputfolder_gen/gen_plots/SamplesPCsProjectedTo1000G.png)  
+![(#fig:fig5)**Fig 5. Genotype samples projected into 1000G superpopulations.** First two plots show only target dataset in the 1000G PC space. Rest of the plots visualise target dataset, as well as samples from 1000G superpopulations by plotting first 10 genotype PCs.](outputfolder_gen/gen_plots/SamplesPCsProjectedTo1000G.png)  
 
 #### Assign superpopulation for each sample
 
@@ -190,7 +190,7 @@ Based on first 3 genotype PCs, here we assign the most likely population to each
 
 ```{r, fig.height = 7, fig.width = 7, fig.align = "center", echo = FALSE, message = FALSE, warning = FALSE, fig.cap = "fig6"}
 library(dplyr)
-pops <- fread("outputfolder_gen/gen_data_summary/PopAssignResults.txt")
+pops <- fread("outputfolder_gen/gen_data_summary/PopAssignResults.txt", keepLeadingZeros = TRUE)
 
 pops <- melt(pops, id.vars = "abi")
 colnames(pops) <- c("Sample", "Superpopulation", "dist") 
@@ -238,7 +238,7 @@ Again, please follow the following instructions:
 1. If you observe a few samples which are different ancestry compared to the majority of samples (e.g. majority of the samples are of EUR ancestry and there are few samples from AFR or SAS), then remove ancestry outliers and re-run the `DataQC` pipeline without those samples.
 2. If you observe many (>100) samples which are different ancestry compared to the majority of samples (your dataset consists of individuals from several ancestries) then please split your genotype data, based on ancestry and rerun this and following pipelines on those datasets separately. This assumes that you know the ancestry information for your genotype data.
 
-The files `AssignedPopulations.txt` and `1000G_PC_projections.txt` have been written to the your output folder under folder `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. Please use optional `--ExclusionList` and specify the file with the list of samples you want to withhold from this dataset. If the large majority of your cohort is from specific superpopulation (e.g. EUR) but you observe a small number of samples which are not confidently assigned to this superpopulation (<2 fold difference with second most similar superpopulation), you can remove those too.
+The files `AssignedPopulations.txt` and `1000G_PC_projections.txt` have been written to the output folder under folder `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. Please use optional `--ExclusionList` and specify the file with the list of samples you want to withhold from this dataset. If the large majority of your cohort is from specific superpopulation (e.g. EUR) but you observe a small number of samples which are not confidently assigned to this superpopulation (<2 fold difference with second most similar superpopulation), you can remove those too.
 
 ### Individual genetic outliers in the target population
 
@@ -246,7 +246,7 @@ Here we conduct PCA on the genotypes of eQTL samples only and investigate if the
 
 #### Outlier samples
 
-On the next plot you can see the distribution of Probabilistic Local Outlier Factor "outlierness" statistic ([Kriegel et al., 2009](https://dl.acm.org/doi/10.1145/1645953.1646195), [Privé et al., 2020](https://academic.oup.com/bioinformatics/article/36/16/4449/5838185)), based on which the samples are declared genetic outliers and removed from the analysis. Use the histogram to check if the default value is appropriate. If there si long tail to the right, please adjust the default value in the pipeline argument `--GenOutThresh` and re-run the pipeline. Threshold should be selected so that there are no dramatic outliers on the first panes of *Fig 9*.
+On the next plot you can see the distribution of Probabilistic Local Outlier Factor "outlierness" statistic ([Kriegel et al., 2009](https://dl.acm.org/doi/10.1145/1645953.1646195), [Privé et al., 2020](https://academic.oup.com/bioinformatics/article/36/16/4449/5838185)), based on which the samples are declared genetic outliers and removed from the analysis. Use the histogram to check if the default value is appropriate. If there is a long tail to the right, please adjust the default value in the pipeline argument `--GenOutThresh` and re-run the pipeline. Threshold should be selected so that there are no dramatic outliers on the first panes of *Fig 9*.
 
 If you observe bimodal distribution on the histogram then it might indicate substratification in the genotype data. Check the following section, *Fig 5* and *Fig 6*. 
 
@@ -264,7 +264,7 @@ If the pipline removes unreasonably large fraction of the samples, there are mul
 
 If the pipelines does not remove all clear outlier samples, adjust `--GenSdThresh` threshold accordingly, to remove small fraction of clearly deviating samples.
 
-In case of doubt please contact the lead analysts for advice and we will investigate further.
+In case of doubt please contact the lead analyst(s) for advice and we will investigate further.
 
 ![**Fig 8. PCA with all samples, outliers outlined with red.** Different shades of red indicate different classes of outliers: difference in SD from mean of PC1 and PC2 (pink), statistic of outlierness S (red), or both (dark red). Dashed lines indicate the SD thresholds to consider samples to outliers.](outputfolder_gen/gen_plots/PCA_outliers.png)  
 
@@ -275,8 +275,6 @@ If you still observe clusters in the data, that could indicate that you still ha
 Next we visualise on the scree plot which genotype PCs are the most informative. This helps to make an informed decision, how many genotype PCs should be added to the association model as covariates.
 
 ![**Fig 10. Scree plot for PCA with all samples, outliers removed.** Visualised are the first 10 singular values.](outputfolder_gen/gen_plots/Target_PCs_scree_postQC.png)
-
-
 
 #### Loadings of PCs
 
@@ -295,17 +293,17 @@ knitr::kable(overview_table)
 
 ### PCA on preprocessed expression data
 
-On the following plots, 8 first PCs are calculated on normalised and log~2~-transformed expression matrix. Samples were declared as outliers based on first two PCs, when they deviate from the mean value by `r params$SD_exp` standard deviations (SDs). Analysis was run iteratively, data was pre-processed and PCA was calculated until there were no further expression otliers to remove. Because there might be expected clustering based on the sex, if possible, we also indicate the genetic sex of each sample on the plot.
+On the following plots, 8 first PCs are calculated on normalised and log~2~-transformed expression matrix. Samples were declared as outliers based on first two PCs, if they deviate from the mean value by `r params$SD_exp` standard deviations (SDs). Analysis was run iteratively, data was pre-processed and PCA was calculated until there were no further expression otliers to remove. Because there might be expected clustering based on the sex, if possible, we also indicate the genetic/reported sex of each sample on the plot.
 
-![**Fig 12. PCA on all samples** Outliers from all iterations are outlined as red. If available, genetic sex of the individual is shown as shape of the dot.](outputfolder_exp/exp_plots/PCA_before.png)
+![**Fig 12. PCA on all samples** Outliers from all iterations are outlined as red. If available, genetic/reported sex of the individual is shown as the shape of the dot.](outputfolder_exp/exp_plots/PCA_before.png)
 
 In order to visualise non-linear patterns in the data, we calculated 2 first multidimensional scaling (MDS) components and visualise those as well. This analysis were done on the data where outliers from previous step were already removed. Similarly to PCs, samples were declared as outliers when they deviate from the mean value of MDS 1 and MDS 2 by `r params$SD_exp` SDs. If you still observe outlier groups on this plot, you should try to reduce the SDs allowed to deviate (parameter `--ExpSdThreshold` of the pipeline) and re-run the pipeline.
 
-![**Fig 13. MDS on all samples** Genetic sex of the individual is shown as shape of the dot, outliers are outlined as red.](outputfolder_exp/exp_plots/MDS_before.png)
+![**Fig 13. MDS on all samples** Genetic/reported sex of the individual is shown as the shape of the dot, outliers are outlined as red.](outputfolder_exp/exp_plots/MDS_before.png)
 
-These are 8 first expression PCs, calculated on fully processed expression data (normalised and INT-transformed) after removal of outlier samples. Genetic sex of the individual is shown as shape of the dot. You should not see any dramatic outliers any more on first two PCs.
+These are 8 first expression PCs, calculated on fully processed expression data (normalised and INT-transformed) after removal of outlier samples. Genetic sex of the individual is shown as shape of the dot. You should not see any dramatic outliers any more on the first two PCs.
 
-![**Fig 14. PCA on all samples, outliers removed.** Genetic sex of the individual is shown as shape of the dot.](outputfolder_exp/exp_plots/PCA_after.png) 
+![**Fig 14. PCA on all samples, outliers removed.** Genetic/reported sex of the individual is shown as the shape of the dot.](outputfolder_exp/exp_plots/PCA_after.png) 
 
 #### Explained variance of expression PCs
 
@@ -351,7 +349,7 @@ knitr::kable(overview_pcs)
 
 `r if (!file.exists("outputfolder_exp/exp_plots/SexSpecificGenesXIST.png")) {"\\begin{comment}"}`
 
-Next plot shows the expression of the sex chromosomes genes. We assume that males have higher expression of genes encoded from Y-chromosome and females have higher expression of X chromosome gene *XIST*. Therefore, you should see that subsets of samples align parallel to x-axis (females) and y-axis (males). There should be no samples on the x-y diagonal since these are likely samples that are contaminated.
+The next plot shows the expression of the sex chromosomes genes. We assume that males have higher expression of genes encoded from Y chromosome and females have higher expression of X chromosome gene *XIST*. Therefore, you should see that subsets of samples align parallel to x-axis (females) and y-axis (males). There should be no samples on the x-y diagonal since these are likely samples that are contaminated.
 Samples in the shaded area are automatically removed. The area is defined by an angle of `r params$Cont` degrees centered over the x-y diagonal. This is reasonable default, however you can adjust this with `--ContaminationArea` flag, if needed.
 
 Samples for which the sex-specific expression does not align with genetic sex are potential sample mix-ups.
@@ -363,7 +361,7 @@ These are outlined with red and automatically removed from further analyses. If 
 
 `r if (!file.exists("outputfolder_exp/exp_plots/SexSpecificGenes.png")) {"\\begin{comment}"}`
 
-Next plot shows the expression of the sex chromosomes genes. We assume that males have higher expression of genes encoded from Y-chromosome and females have higher expression of X chromosome genes. Therefore, you should see that subsets of samples align parallel to x-axis (females) and y-axis (males). There should be no samples on the x-y diagonal since these are likely samples that are contaminated.
+The next plot shows the expression of the sex chromosomes genes. We assume that males have higher expression of genes encoded from Y chromosome and females have higher expression of X chromosome genes. Therefore, you should see that subsets of samples align parallel to x-axis (females) and y-axis (males). There should be no samples on the x-y diagonal since these are likely samples that are contaminated.
 Samples in the shaded area are automatically removed. The area is defined by an angle of `r params$Cont` degrees centered over the x-y diagonal. This is reasonable default, however you can adjust this with `--ContaminationArea` flag, if needed.
 
 Samples for which the sex-specific expression does not align with genetic sex are potential sample mix-ups.
