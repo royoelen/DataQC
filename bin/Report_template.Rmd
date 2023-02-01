@@ -61,12 +61,16 @@ nr_add_cov <- length(unique(cov_specific$covariate))
 ggplot(cov_specific, aes(x = value)) + geom_histogram(colour = "white") + facet_wrap(~ covariate, scales = "free", ncol = 3) + theme_bw() + xlab("Covariate value")
 ```
 
-```{r, fig.height = 3.5, fig.width = 7, fig.align = "center", message = FALSE, eval = (nr_add_cov == 2 | nr_add_cov == 4 | nr_add_cov == 5 | nr_add_cov == 6), warning = FALSE, echo = FALSE}
+```{r, fig.height = 3.5, fig.width = 7, fig.align = "center", message = FALSE, eval = (nr_add_cov == 2 | nr_add_cov == 3 | nr_add_cov == 4 | nr_add_cov == 5 | nr_add_cov == 6), warning = FALSE, echo = FALSE}
 ggplot(cov_specific, aes(x = value)) + geom_histogram(colour = "white") + facet_wrap(~ covariate, scales = "free", ncol = 3) + theme_bw() + xlab("Covariate value")
 ```
 
-```{r, fig.height = 15, fig.width = 7, fig.align = "center", message = FALSE, eval = (nr_add_cov > 9), warning = FALSE, echo = FALSE}
+```{r, fig.height = 15, fig.width = 7, fig.align = "center", message = FALSE, eval = (nr_add_cov > 9 & nr_add_cov < 21), warning = FALSE, echo = FALSE}
 ggplot(cov_specific, aes(x = value)) + geom_histogram(colour = "white") + facet_wrap(~ covariate, scales = "free", ncol = 3) + theme_bw() + xlab("Covariate value")
+```
+
+```{r, fig.height = 15, fig.width = 7, fig.align = "center", message = FALSE, eval = (nr_add_cov > 20), warning = FALSE, echo = FALSE}
+ggplot(cov_specific, aes(x = value)) + geom_histogram(colour = "white") + facet_wrap(~ covariate, scales = "free", ncol = 4) + theme_bw() + xlab("Covariate value")
 ```
 
 `r if (nr_add_cov == 0) {"\\begin{comment}"}`
