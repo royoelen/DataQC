@@ -35,7 +35,7 @@ Angle of contamination area in sex chromosome gene expression plot: `r params$Co
 
 ## Covariates
 
-```{r, fig.height = 9, fig.width = 9, fig.align = "center", message = FALSE, warning = FALSE, echo = FALSE}
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
 library(data.table)
 library(knitr)
 library(ggplot2)
@@ -54,16 +54,28 @@ colnames(cov_specific) <- c("SampleID", "covariate", "value")
 cov_specific <- cov_specific[!(str_detect(cov_specific$covariate, "GenPC") | str_detect(cov_specific$covariate, "ExpPC")), ]
 
 cov_specific$covariate <- as.character(cov_specific$covariate)
-
-ggplot(cov_specific, aes(x = value)) + geom_histogram(colour = "white") + facet_wrap(~ covariate, scales = "free") + theme_bw() + xlab("Covariate value")
+nr_add_cov <- length(unique(cov_specific$covariate))
 ```
-`r if (ncol(cov) == 111) {"\\begin{comment}"}`
-**Fig 1. Histograms for additional covariates.**
-`r if (ncol(cov) == 111) {"\\end{comment}"}`
 
-`r if (ncol(cov) > 111) {"\\begin{comment}"}`
+```{r, fig.height = 7, fig.width = 7, fig.align = "center", message = FALSE, eval = (nr_add_cov == 1 | nr_add_cov == 7 | nr_add_cov == 8 | nr_add_cov == 9), warning = FALSE, echo = FALSE}
+ggplot(cov_specific, aes(x = value)) + geom_histogram(colour = "white") + facet_wrap(~ covariate, scales = "free", ncol = 3) + theme_bw() + xlab("Covariate value")
+```
+
+```{r, fig.height = 3.5, fig.width = 7, fig.align = "center", message = FALSE, eval = (nr_add_cov == 2 | nr_add_cov == 4 | nr_add_cov == 5 | nr_add_cov == 6), warning = FALSE, echo = FALSE}
+ggplot(cov_specific, aes(x = value)) + geom_histogram(colour = "white") + facet_wrap(~ covariate, scales = "free", ncol = 3) + theme_bw() + xlab("Covariate value")
+```
+
+```{r, fig.height = 15, fig.width = 7, fig.align = "center", message = FALSE, eval = (nr_add_cov > 9), warning = FALSE, echo = FALSE}
+ggplot(cov_specific, aes(x = value)) + geom_histogram(colour = "white") + facet_wrap(~ covariate, scales = "free", ncol = 3) + theme_bw() + xlab("Covariate value")
+```
+
+`r if (nr_add_cov == 0) {"\\begin{comment}"}`
+**Fig 1. Histograms for additional covariates.**
+`r if (nr_add_cov == 0) {"\\end{comment}"}`
+
+`r if (nr_add_cov > 0) {"\\begin{comment}"}`
 **Fig 1. Histograms for additional covariates.** Not available, there are no additional covariates prepared on top of genotype PCs and expression PCs.
-`r if (ncol(cov) > 111) {"\\end{comment}"}`
+`r if (nr_add_cov > 0) {"\\end{comment}"}`
 
 ## Genotype QC report
 
