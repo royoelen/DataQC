@@ -12,6 +12,9 @@ library(rmarkdown)
 library(Cairo)
 library(igraph)
 
+system_verbose <- function(..., verbose) {
+  system(..., ignore.stdout = !verbose, ignore.stderr = !verbose)
+}
 
 #' Relationship-based pruning
 #'
@@ -121,7 +124,7 @@ snp_plinkKINGQC <- function(plink2.path,
   }
 }
 
-
+print(system_verbose)
 
 # Function
 read_fam <- function(path) {
