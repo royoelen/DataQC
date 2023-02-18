@@ -124,11 +124,17 @@ snp_plinkKINGQC <- function(plink2.path,
 
 
 # Function
-read_fam <- function(prefix) {
+read_fam <- function(path) {
   NAMES.FAM <- c("family.ID", "sample.ID", "paternal.ID",
                  "maternal.ID", "sex", "affection")
 
-  famfile <- paste0(prefix, ".fam")
+  pattern <- "\\.bed$"
+  
+  if (!grepl(pattern, path)) {
+    famfile <- paste0(path, ".fam")
+  } else {
+    famfile <- sub(pattern, ".fam", path)
+  }
 
   fam <- bigreadr::fread2(famfile, col.names = NAMES.FAM, keepLeadingZeros = TRUE,
                           colClasses = list(character = c(1,2)), nThread = 1)
@@ -268,7 +274,6 @@ if ("hg19" != ucsc_code) {
 message("Read in target data.")
 target_bed <- bed(args$target_bed)
 target_bed$.fam <- read_fam(args$target_bed)
-print(str(target_bed$fam))
 
 ## Calculate AFs for target data
 system(paste0("plink/plink2 --bfile ", str_replace(args$target_bed, "\\..*", ""), " --threads 4 --freq 'cols=+pos' --out target"))
@@ -278,9 +283,6 @@ system("gzip target.afreq --force")
 gte <- fread(args$gen_exp, sep = "\t", header = FALSE,
              keepLeadingZeros = TRUE,
              colClasses = "character")
-
-print("GTE:")
-print(str(gte))
 
 summary_table <- data.frame(stage = "Raw file", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow,
 Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]))
@@ -316,9 +318,6 @@ if (args$fam != "") {
 
   fam <- new_fam[order(match(new_fam$sample.ID, fam$sample.ID)),]
 }
-
-print("fam_normalized.fam")
-print(str(fam))
 
 # Write normalized fam
 fwrite(fam, "fam_normalized.fam", col.names=F, row.names=F, quote=F, sep="\t")
@@ -789,6 +788,8 @@ related <- snp_plinkKINGQC(
   ncores = 4,
   extra.options = paste0("--remove ", het_failed_samples_out_path)
 )
+
+print(str(related))
 
 # Filter in only related individuals from genotype-to-expression file
 
