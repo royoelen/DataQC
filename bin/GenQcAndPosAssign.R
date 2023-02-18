@@ -12,6 +12,117 @@ library(rmarkdown)
 library(Cairo)
 library(igraph)
 
+
+#' Relationship-based pruning
+#'
+#' Quality Control based on KING-robust kinship estimator. More information can
+#' be found at \url{https://www.cog-genomics.org/plink/2.0/distance#king_cutoff}.
+#'
+#' @param plink2.path Path to the executable of PLINK 2.
+#' @inheritParams snp_plinkIBDQC
+#' @param thr.king  Note that KING kinship coefficients are scaled such that
+#'   duplicate samples have kinship 0.5, not 1. First-degree relations
+#'   (parent-child, full siblings) correspond to ~0.25, second-degree relations
+#'   correspond to ~0.125, etc. It is conventional to use a cutoff of ~0.354
+#'   (2^-1.5, the geometric mean of 0.5 and 0.25) to screen for monozygotic
+#'   twins and duplicate samples, ~0.177 (2^-2.5) to remove first-degree
+#'   relations as well, and ~0.0884 (2^-3.5, **default**) to remove
+#'   second-degree relations as well, etc.
+#' @param extra.options Other options to be passed to PLINK2 as a string.
+#' @param make.bed Whether to create new bed/bim/fam files (default).
+#'   Otherwise, returns a table with coefficients of related pairs.
+#'
+#' @return See parameter `make-bed`.
+#' @export
+#'
+#' @inherit snp_plinkQC references
+#' @references
+#' Manichaikul, Ani, Josyf C. Mychaleckyj, Stephen S. Rich, Kathy Daly,
+#' Michele Sale, and Wei-Min Chen. "Robust relationship inference in genome-wide
+#' association studies." Bioinformatics 26, no. 22 (2010): 2867-2873.
+#'
+#' @seealso [download_plink2] [snp_plinkQC]
+#'
+#' @examples
+#' \dontrun{
+#'
+#' bedfile <- system.file("extdata", "example.bed", package = "bigsnpr")
+#' plink2 <- download_plink2(AVX2 = FALSE)
+#'
+#' bedfile2 <- snp_plinkKINGQC(plink2, bedfile,
+#'                             bedfile.out = tempfile(fileext = ".bed"),
+#'                             ncores = 2)
+#'
+#' df_rel <- snp_plinkKINGQC(plink2, bedfile, make.bed = FALSE, ncores = 2)
+#' str(df_rel)
+#' }
+#'
+snp_plinkKINGQC <- function(plink2.path,
+                            bedfile.in,
+                            bedfile.out = NULL,
+                            thr.king = 2^-3.5,
+                            make.bed = TRUE,
+                            ncores = 1,
+                            extra.options = "",
+                            verbose = TRUE) {
+
+  # check PLINK version
+  v <- system(paste(plink2.path, "--version"), intern = TRUE)
+  if (substr(v, 1, 8) != "PLINK v2")
+    stop2("This requires PLINK v2; got '%s' instead.", v)
+
+  # get file without extension
+  prefix.in <- sub_bed(bedfile.in)
+
+  # get possibly new file
+  if (make.bed) {
+
+    if (is.null(bedfile.out)) bedfile.out <- paste0(prefix.in, "_norel.bed")
+    assert_noexist(bedfile.out)
+
+    # compute KING-robust kinship coefficients and filter
+    system_verbose(
+      paste(
+        plink2.path,
+        "--bfile", prefix.in,
+        "--make-bed --king-cutoff", thr.king,
+        "--out", sub_bed(bedfile.out),
+        "--threads", ncores,
+        extra.options
+      ),
+      verbose = verbose
+    )
+
+    bedfile.out
+
+  } else {
+
+    prefix.out <- tempfile()
+
+    # compute table of KING-robust kinship coefficients
+    system_verbose(
+      paste(
+        plink2.path,
+        "--bfile", prefix.in,
+        "--make-king-table --king-table-filter", thr.king,
+        "--out", prefix.out,
+        "--threads", ncores,
+        extra.options
+      ),
+      verbose = verbose
+    )
+
+    rel_df <- bigreadr::fread2(paste0(prefix.out, ".kin0"), header = TRUE, keepLeadingZeros = TRUE,
+                               colClasses = list(character = c(1,2,3,4)),
+                               nThread = ncores)
+    names(rel_df) <- sub("^#(.*)$", "\\1", names(rel_df))
+    rel_df
+
+  }
+}
+
+
+
 # Function
 read_fam <- function(prefix) {
   NAMES.FAM <- c("family.ID", "sample.ID", "paternal.ID",
