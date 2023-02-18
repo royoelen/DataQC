@@ -148,7 +148,9 @@ system(paste0("plink/plink2 --bfile ", str_replace(args$target_bed, "\\..*", "")
 system("gzip target.afreq --force")
 
 # eQTL samples
-gte <- fread(args$gen_exp, sep = "\t", header = FALSE, keepLeadingZeros = TRUE)
+gte <- fread(args$gen_exp, sep = "\t", header = FALSE,
+             keepLeadingZeros = TRUE,
+             colClasses = "character")
 
 summary_table <- data.frame(stage = "Raw file", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow,
 Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]))
@@ -165,7 +167,8 @@ if (any(duplicated(fam$sample.ID))) {
 }
 
 if (args$fam != "") {
-  new_fam <- fread(args$fam, data.table = FALSE, header = FALSE, col.names = colnames(fam), keepLeadingZeros = TRUE)
+  new_fam <- fread(args$fam, data.table = FALSE, header = FALSE, col.names = colnames(fam),
+                   keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
   new_fam$family.ID <- '0'
 
   # Check if all sample ids in new fam are unique
@@ -189,7 +192,8 @@ fwrite(fam, "fam_normalized.fam", col.names=F, row.names=F, quote=F, sep="\t")
 
 ## If specified, keep in only samples which are in the sample whitelist
 if (args$inclusion_list != "" & args$inclusion_list != "EmpiricalProbeMatching_AffyHumanExon.txt"){
-  inc_list <- fread(args$inclusion_list, header = FALSE, keepLeadingZeros = TRUE)
+  inc_list <- fread(args$inclusion_list, header = FALSE,
+                    keepLeadingZeros = TRUE, colClasses = "character")
   samples_to_include <- fam[fam$sample.ID %in% inc_list$V1, ]
   message("Sample inclusion filter active!")
   temp_QC <- data.frame(stage = "Samples in inclusion list",
@@ -230,7 +234,8 @@ summary_table <- rbind(summary_table, temp_QC)
 
 # Remove samples which are in the exclusion list
 if (args$exclusion_list != "" & args$exclusion_list != "EmpiricalProbeMatching_AffyU219.txt"){
-exc_list <- fread(args$exclusion_list, header = FALSE, keepLeadingZeros = TRUE)
+exc_list <- fread(args$exclusion_list, header = FALSE,
+                  keepLeadingZeros = TRUE, colClasses = "character")
 samples_to_include <- samples_to_include[!samples_to_include$sample.ID %in% exc_list$V1, ]
 message("Sample exclusion filter active!")
 }
@@ -273,7 +278,8 @@ snp_plinkQC(
   verbose = TRUE
 )
 
-qc_bim <- fread(paste0(bed_simplepath, "_QC.bim"), data.table = FALSE, keepLeadingZeros = TRUE)
+qc_bim <- fread(paste0(bed_simplepath, "_QC.bim"),
+                data.table = FALSE, keepLeadingZeros = TRUE)
 consecutive_runs <- unlist(lapply(rle(qc_bim[,2])$lengths, seq_len))
 consequtive_runs_values <- qc_bim[consecutive_runs != 1, 2]
 qc_bim[consecutive_runs != 1, 2] <- paste(qc_bim[consecutive_runs != 1, 2], consecutive_runs[consecutive_runs != 1], sep = "_")
@@ -320,7 +326,9 @@ if (23 %in% sex_check_data_set_chromosomes) {
     message(pruned_variants_sex_check)
 
     if (ucsc_code != "hg19") {
-      variants_sex_check <- fread(pruned_variants_sex_check, sep = " ", data.table = FALSE, header = FALSE, col.names = c("chr", "pos", "pos.end", "id"))
+      variants_sex_check <- fread(
+        pruned_variants_sex_check, sep = " ", data.table = FALSE, header = FALSE,
+        col.names = c("chr", "pos", "pos.end", "id"))
 
       variants_sex_check$chr <- "X"
 
@@ -361,7 +369,8 @@ if (23 %in% sex_check_data_set_chromosomes) {
   system(paste0("plink/plink --bfile ", bed_simplepath, "_split --extract check_sex_x.prune.in --check-sex --threads 4"))
 
   ## If there is sex info in the fam file for all samples then remove samples which fail the sex check or genotype-based F is >0.2 & < 0.8
-  sexcheck <- fread("plink.sexcheck", keepLeadingZeros = TRUE)
+  sexcheck <- fread("plink.sexcheck", keepLeadingZeros = TRUE,
+                    colClasses = list(character = c(1,2)))
   ## Annotate samples who have clear sex
 
   sexcheck$F_PASS <- !(sexcheck$F > 0.2 & sexcheck$F < 0.8)
@@ -452,7 +461,7 @@ het_failed_samples_out_path <- paste0(args$output, "/gen_data_QCd/Heterozygosity
 system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --rm-dup 'exclude-mismatch' --indep-pairwise 50 1 0.2 --threads 4"))
 
 system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --extract plink2.prune.in --het --threads 4"))
-het <- fread("plink2.het", header = TRUE, keepLeadingZeros = TRUE)
+het <- fread("plink2.het", header = TRUE, keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
 het$het_rate <- (het$OBS_CT - het$`O(HOM)`) / het$OBS_CT
 
 het_fail_samples <- het[het$het_rate < mean(het$het_rate) - 3 * sd(het$het_rate) | het$het_rate > mean(het$het_rate) + 3 * sd(het$het_rate), ]
@@ -492,7 +501,7 @@ ggsave(paste0(args$output, "/gen_plots/HetCheck.pdf"), height = 7 / 2, width = 9
 
 # Project the data on QCd 1000G reference
 message("Projecting samples to 1000G reference.")
-unrelated_ref_samples <- fread(args$sample_list, keepLeadingZeros = TRUE)
+unrelated_ref_samples <- fread(args$sample_list, keepLeadingZeros = TRUE, colClasses = 'character')
 unrelated_ref_samples <- as.numeric(unrelated_ref_samples$ind.row)
 
 proj_PCA <- bed_projectPCA(
@@ -522,7 +531,7 @@ colnames(abi2) <- paste0("PC", 1:10)
 abi2$sample <- ref_bed$fam$sample.ID[unrelated_ref_samples]
 abi2 <- abi2[, c(11, 1:10)]
 
-pops <- fread(args$pops, keepLeadingZeros = TRUE)
+pops <- fread(args$pops, keepLeadingZeros = TRUE, colClasses = list(character = c(2, 6, 7)))
 pops <- pops[, c(2, 6, 7)]
 abi2 <- merge(abi2, pops, by.x = "sample", by.y = "SampleID")
 abi2 <- abi2[, c(1, 12, 13, 2:11)]
@@ -903,7 +912,8 @@ ggsave(paste0(args$output, "/gen_plots/Target_PCs_scree_postQC.pdf"), height = 5
 
 
 # Count samples in overlapping with GTE
-final_samples <- fread(paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.fam"), header = FALSE, keepLeadingZeros = TRUE)
+final_samples <- fread(paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.fam"), header = FALSE,
+                       keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
 
 temp_QC <- data.frame(stage = "QCd samples overlapping with genotype-to-expression file and SNP QC filters on full dataset",
 Nr_of_SNPs = bed_qc$ncol,
