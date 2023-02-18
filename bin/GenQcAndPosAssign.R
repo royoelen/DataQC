@@ -1,5 +1,6 @@
 #!/usr/bin/env Rscript
 
+library(bigreadr)
 library(bigsnpr)
 library(dplyr)
 library(ggplot2)
@@ -10,6 +11,19 @@ library(stringr)
 library(rmarkdown)
 library(Cairo)
 library(igraph)
+
+# Function
+read_fam <- function(prefix) {
+  NAMES.FAM <- c("family.ID", "sample.ID", "paternal.ID",
+                 "maternal.ID", "sex", "affection")
+
+  famfile <- paste0(prefix, ".fam")
+
+  fam <- bigreadr::fread2(famfile, col.names = NAMES.FAM, keepLeadingZeros = TRUE,
+                          colClasses = list(character = c(1,2)), nThread = 1)
+
+  return(fam)
+}
 
 # Argument parser
 option_list <- list(
@@ -142,6 +156,7 @@ if ("hg19" != ucsc_code) {
 ## Original file
 message("Read in target data.")
 target_bed <- bed(args$target_bed)
+target_bed$.fam <- read_fam(args$target_bed)
 
 ## Calculate AFs for target data
 system(paste0("plink/plink2 --bfile ", str_replace(args$target_bed, "\\..*", ""), " --threads 4 --freq 'cols=+pos' --out target"))
@@ -290,6 +305,8 @@ fwrite(qc_bim, paste0(bed_simplepath, "_QC.bim"), sep="\t", row.names=F, col.nam
 ref_bed <- bed("data/1000G_phase3_common_norel.bed")
 # Read in QCd target genotype data
 target_bed <- bed(paste0(bed_simplepath, "_QC.bed"))
+target_bed$.fam <- read_fam(paste0(bed_simplepath, "_QC"))
+
 temp_QC <- data.frame(stage = "SNP CR>0.95; HWE P>1e-6; MAF>0.01; GENO<0.05; MIND<0.05", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow,
 Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]))
 
@@ -447,6 +464,8 @@ system(paste0("mv ", bed_simplepath, "_QC_QC.fam ", bed_simplepath, "_QC.fam"))
 
 # Read in again QCd target genotype data
 target_bed <- bed(paste0(bed_simplepath, "_QC.bed"))
+target_bed$.fam <- read_fam(paste0(bed_simplepath, "_QC"))
+
 temp_QC <- data.frame(stage = "Removed X/Y", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(target_bed$fam),
 Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]))
 summary_table <- rbind(summary_table, temp_QC)
@@ -864,6 +883,8 @@ system(paste0("rm ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputati
 # Final rerun PCA on QCd data
 message("Final PCA on QCd data.")
 bed_qc <- bed(paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation.bed"))
+bed_qc$.fam <- read_fam(paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation"))
+
 target_pca_qcd <- bed_autoSVD(bed_qc, k = 10, ncores = 4)
 
 # Visualise loadings
