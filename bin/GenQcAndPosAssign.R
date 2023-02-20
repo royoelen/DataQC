@@ -149,7 +149,7 @@ read_fam <- function(path) {
 option_list <- list(
     make_option(c("-t", "--target_bed"), type = "character",
     help = "Name of the target genotype file (bed/bim/fam format). Required file extension: .bed."),
-    make_option(c("-f", "--fam"), type = "character", default = "",
+    make_option(c("-f", "--fam"), type = "character", default = NULL,
     help = "Path to a separate fam file. Has priority over fam associated with --target_bed"),
     make_option(c("-g", "--gen_exp"), type = "character",
     help = "Tab-delimited genotype-to-expression sample ID linking file."),
@@ -173,7 +173,13 @@ option_list <- list(
     make_option(c("-b", "--genome_build"), type = "character",
     help = "Genome build of the target genotype file"),
     make_option(c("--liftover_path"), type = "character",
-    help = "Liftover executable")
+    help = "Liftover executable"),
+    make_option(c("--plink_executable"), type = "character", default = NULL,
+                help = "Plink executable"),
+    make_option(c("--plink2_executable"), type = "character", default = NULL,
+                help = "Plink2 executable")
+    make_option(c("--ref_1000g"), type = "character", default = NULL,
+                help = "reference 1000g prefix")
     )
 
 parser <- OptionParser(usage = "%prog [options] file", option_list = option_list)
@@ -195,6 +201,8 @@ print(args$S_threshold)
 print(args$SD_threshold)
 print(args$exclusion_list)
 print(args$liftover_path)
+print(args$plink_executable)
+print(args$plink2_executable)
 
 if (!is.numeric(args$S_threshold) | !is.numeric(args$SD_threshold) | !is.numeric(args$SD_threshold)){
   message("Some of the QC thresholds is not numeric!")
@@ -233,27 +241,59 @@ make_executable <- function(exe) {
 
 dir.create("plink")
 
-# Download plink 2 executable
-utils::download.file("https://s3.amazonaws.com/plink2-assets/alpha3/plink2_linux_x86_64_20221024.zip",
-destfile = "plink/plink2.zip", verbose = TRUE)
-PLINK <- utils::unzip("plink/plink2.zip",
+PLINK <- args$plink_executable
+PLINK2 <- args$plink2_executable
+
+if (PLINK2 == NULL | PLINK2 == "" | !file.exists(PLINK2)) {
+  message(sprintf("PLINK 2 executable empty, or not found at %s.", PLINK2))
+  message("Attempting to download PLINK 2 executable")
+
+  # Download plink 2 executable
+  utils::download.file("https://s3.amazonaws.com/plink2-assets/alpha3/plink2_linux_x86_64_20221024.zip",
+                       destfile = "plink/plink2.zip", verbose = TRUE)
+  PLINK2 <- utils::unzip("plink/plink2.zip",
                         files = "plink2",
                         exdir = "plink")
+} else {
+  message(sprintf("PLINK 2 executable not found at %s.", PLINK2))
+}
+
+make_executable(PLINK2)
+
+if (PLINK == NULL | PLINK == "" | !file.exists(PLINK)) {
+  message(sprintf("PLINK 1.9 executable empty, or not found at %s.", PLINK))
+  message("Attempting to download PLINK 1.9 executable")
+
+  # Download plink 1.9 executable
+  utils::download.file("https://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20220402.zip",
+  destfile = "plink/plink.zip", verbose = TRUE)
+  PLINK <- utils::unzip("plink/plink.zip",
+                          files = "plink",
+                          exdir = "plink")
+} else {
+  message(sprintf("PLINK 1.9 executable found at %s.", PLINK))
+}
 make_executable(PLINK)
 
-# Download plink 1.9 executable
-utils::download.file("https://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20220402.zip",
-destfile = "plink/plink.zip", verbose = TRUE)
-PLINK <- utils::unzip("plink/plink.zip",
-                        files = "plink",
-                        exdir = "plink")
-make_executable(PLINK)
+ref_1000g_prefix <- "data"
+if (args$ref_1000g != NULL & args$ref_1000g != "") {
+  if (endsWith(args$ref_1000g, "1000G_phase3_common_norel"))
+  ref_1000g_prefix <- args$ref_1000g
+}
 
-# Download subsetted 1000G reference
-bedfile <- download_1000G("data")
+if (file.exists(paste0(ref_1000g_prefix, ".bed"))
+  & file.exists(paste0(ref_1000g_prefix, ".bim"))
+  & file.exists(paste0(ref_1000g_prefix, ".fam"))) {
+  message(paste0("found 1000G reference at ", ref_1000g_prefix, "'.<bim/bed/fam>'."))
+} else {
+  # Download subsetted 1000G reference
+  message(paste0("1000G reference does not exist at ", ref_1000g_prefix, "'.<bim/bed/fam>'."))
+  message("Attempting to download the 1000G reference data")
+  bedfile <- download_1000G(dirname(ref_1000g_prefix))
+}
 
 ## Calculate AFs for reference data
-system("plink/plink2 --bfile data/1000G_phase3_common_norel --threads 4 --freq 'cols=+pos' --out 1000Gref")
+system(paste0("plink/plink2 --bfile ", ref_1000g_prefix, " --threads 4 --freq 'cols=+pos' --out 1000Gref"))
 
 if ("hg19" != ucsc_code) {
   target_frequencies <- fread("1000Gref.afreq", sep="\t", data.table=F, header=T,
@@ -301,7 +341,7 @@ if (any(duplicated(fam$sample.ID))) {
   stop(sprintf("Error! samples in PLINK fam file are not unique. Exiting"))
 }
 
-if (args$fam != "") {
+if (args$fam != NULL & args$fam != "") {
   new_fam <- fread(args$fam, data.table = FALSE, header = FALSE, col.names = colnames(fam),
                    keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
   new_fam$family.ID <- '0'
@@ -422,7 +462,7 @@ qc_bim[consecutive_runs != 1, 2] <- paste(qc_bim[consecutive_runs != 1, 2], cons
 fwrite(qc_bim, paste0(bed_simplepath, "_QC.bim"), sep="\t", row.names=F, col.names=F)
 
 # Read in reference and target genotype data
-ref_bed <- bed("data/1000G_phase3_common_norel.bed")
+ref_bed <- bed(paste0(ref_1000g_prefix, ".bed"))
 # Read in QCd target genotype data
 target_bed <- bed(paste0(bed_simplepath, "_QC.bed"))
 target_bed$.fam <- read_fam(paste0(bed_simplepath, "_QC"))
@@ -792,15 +832,11 @@ related <- snp_plinkKINGQC(
   extra.options = paste0("--remove ", het_failed_samples_out_path)
 )
 
-print(str(related))
-
 # Filter in only related individuals from genotype-to-expression file
 
 related <- related[related$IID1 %in% gte$V1 & related$IID2 %in% gte$V1, ]
 
 fwrite(related, "related.txt", sep = "\t", quote = FALSE, row.names = FALSE)
-
-print(related)
 
 # Remove samples that are related to each other
 related$IID1 <- as.character(related$IID1)

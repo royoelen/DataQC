@@ -59,6 +59,10 @@ params.vcf = ''
 params.bfile = ''
 params.fam = ''
 
+params.plink_executable = ''
+params.plink2_executable = ''
+params.ref_1000g_folder = ''
+
 if (params.vcf != '') {
 
   Channel
@@ -113,6 +117,21 @@ Channel
     .fromPath(params.report_template)
     .ifEmpty { exit 1, "Input report not found!" }
     .set { report_ch }
+
+Channel
+    .fromPath(params.plink_executable)
+    .ifEmpty('EMPTY')
+    .set { plink_executable_ch }
+
+Channel
+    .fromPath(params.plink2_executable)
+    .ifEmpty('EMPTY')
+    .set { plink2_executable_ch }
+
+Channel
+    .fromPath(params.ref_1000g_folder)
+    .ifEmpty('EMPTY')
+    .set { reference_1000g_ch }
 
 params.GenOutThresh = 0.4
 params.GenSdThresh = 3
@@ -396,6 +415,9 @@ process GenotypeQC {
       path ExclusionList from params.ExclusionList
       path InclusionList from params.InclusionList
       val genome_build from params.genome_build
+      path plink_executable from plink_executable_ch.collect()
+      path plink2_executable from plink2_executable_ch.collect()
+      path reference_1000g_folder from reference_1000g_ch.collect()
 
     output:
       path ('outputfolder_gen') into output_ch_genotypes
@@ -405,39 +427,34 @@ process GenotypeQC {
       file 'target.afreq.gz' into target_allele_frequencies
 
     script:
-    if (params.fam == '')
-      """
-      Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
-      --target_bed ${bfile} \
-      --genome_build ${genome_build} \
-      --gen_exp ${gte} \
-      --sample_list $baseDir/data/unrelated_reference_samples_ids.txt \
-      --pops $baseDir/data/1000G_pops.txt \
-      --S_threshold ${s_stat} \
-      --SD_threshold ${sd_thresh} \
-      --inclusion_list "${InclusionList}" \
-      --exclusion_list "${ExclusionList}" \
-      --output outputfolder_gen \
-      --pruned_variants_sex_check "${optional_pruned_variants_sex_check}" \
-      --liftover_path $baseDir/bin/liftOver
-      """
+    if (params.reference_1000g_folder == '')
+      reference_1000g_prefix_arg = "--ref_1000g data/1000G_phase3_common_norel"
     else
-      """
-      Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
-      --target_bed ${bfile} \
-      --fam ${fam_annot} \
-      --genome_build ${genome_build} \
-      --gen_exp ${gte} \
-      --sample_list $baseDir/data/unrelated_reference_samples_ids.txt \
-      --pops $baseDir/data/1000G_pops.txt \
-      --S_threshold ${s_stat} \
-      --SD_threshold ${sd_thresh} \
-      --inclusion_list "${InclusionList}" \
-      --exclusion_list "${ExclusionList}" \
-      --output outputfolder_gen \
-      --pruned_variants_sex_check "${optional_pruned_variants_sex_check}" \
-      --liftover_path $baseDir/bin/liftOver
-      """
+      reference_1000g_prefix_arg = "--ref_1000g $reference_1000g_folder/1000G_phase3_common_norel"
+
+    fam_arg = (params.fam == '') ? "$fam_annot" : ""
+    plink_arg = (params.plink_executable == '') ? "$plink_executable" : ""
+    plink2_arg = (params.plink2_executable == '') ? "$plink2_executable" : ""
+
+    """
+    Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
+    --target_bed ${bfile} \
+    --fam $fam_arg \
+    --genome_build ${genome_build} \
+    --gen_exp ${gte} \
+    --sample_list $baseDir/data/unrelated_reference_samples_ids.txt \
+    --pops $baseDir/data/1000G_pops.txt \
+    --S_threshold ${s_stat} \
+    --SD_threshold ${sd_thresh} \
+    --inclusion_list "${InclusionList}" \
+    --exclusion_list "${ExclusionList}" \
+    --output outputfolder_gen \
+    --pruned_variants_sex_check "${optional_pruned_variants_sex_check}" \
+    --liftover_path $baseDir/bin/liftOver \
+    --plink_executable $plink_arg \
+    --plink2_executable $plink2_arg \
+    $reference_1000g_prefix_arg
+    """
     
 }
 
