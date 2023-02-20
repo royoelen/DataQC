@@ -293,7 +293,7 @@ if (file.exists(paste0(ref_1000g_prefix, ".bed"))
 }
 
 ## Calculate AFs for reference data
-system(paste0("plink/plink2 --bfile ", ref_1000g_prefix, " --threads 4 --freq 'cols=+pos' --out 1000Gref"))
+system(paste0(PLINK2, " --bfile ", ref_1000g_prefix, " --threads 4 --freq 'cols=+pos' --out 1000Gref"))
 
 if ("hg19" != ucsc_code) {
   target_frequencies <- fread("1000Gref.afreq", sep="\t", data.table=F, header=T,
@@ -319,7 +319,7 @@ target_bed <- bed(args$target_bed)
 target_bed$.fam <- read_fam(args$target_bed)
 
 ## Calculate AFs for target data
-system(paste0("plink/plink2 --bfile ", str_replace(args$target_bed, "\\..*", ""), " --threads 4 --freq 'cols=+pos' --out target"))
+system(paste0(PLINK2, " --bfile ", str_replace(args$target_bed, "\\..*", ""), " --threads 4 --freq 'cols=+pos' --out target"))
 system("gzip target.afreq --force")
 
 # eQTL samples
@@ -422,12 +422,12 @@ Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$sample.ID, ]))
 summary_table <- rbind(summary_table, temp_QC)
 
 # Remove samples not in GTE + 5k samples
-system(paste0("plink/plink2 --bfile ", bed_simplepath, " --fam fam_normalized.fam",
+system(paste0(PLINK2, " --bfile ", bed_simplepath, " --fam fam_normalized.fam",
 " --output-chr 26 --keep SamplesToInclude.txt --geno 0.05 --make-bed --threads 4 --out ", bed_simplepath, "_filtered"))
 
 # Do a first pass over variants to remove the bulk of highly missed variants
 # List the missingness per variant
-#system(paste0("plink/plink --bfile ",
+#system(paste0(PLINK, " --bfile ",
 #              paste0(bed_simplepath, "_filtered"),
 #              " --threads 4 --missing --out initial_pass_missingness"))
 
@@ -540,10 +540,10 @@ if (23 %in% sex_check_data_set_chromosomes) {
   }
 
   ## Pruning
-  system(paste0("plink/plink2 --bfile ", bed_simplepath, "_split",
+  system(paste0(PLINK2, " --bfile ", bed_simplepath, "_split",
                 " --rm-dup 'exclude-mismatch' --indep-pairwise 20000 200 0.2 --out check_sex_x --threads 4"))
   ## Sex check
-  system(paste0("plink/plink --bfile ", bed_simplepath, "_split --extract check_sex_x.prune.in --check-sex --threads 4"))
+  system(paste0(PLINK, " --bfile ", bed_simplepath, "_split --extract check_sex_x.prune.in --check-sex --threads 4"))
 
   ## If there is sex info in the fam file for all samples then remove samples which fail the sex check or genotype-based F is >0.2 & < 0.8
   sexcheck <- fread("plink.sexcheck", keepLeadingZeros = TRUE,
@@ -637,9 +637,9 @@ message("Do heterozygosity check.")
 het_failed_samples_out_path <- paste0(args$output, "/gen_data_QCd/HeterozygosityFailed.txt")
 
 # Prune variants
-system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --rm-dup 'exclude-mismatch' --indep-pairwise 50 1 0.2 --threads 4"))
+system(paste0(PLINK2, " --bfile ", bed_simplepath, "_QC --rm-dup 'exclude-mismatch' --indep-pairwise 50 1 0.2 --threads 4"))
 
-system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --extract plink2.prune.in --het --threads 4"))
+system(paste0(PLINK2, " --bfile ", bed_simplepath, "_QC --extract plink2.prune.in --het --threads 4"))
 het <- fread("plink2.het", header = TRUE, keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
 het$het_rate <- (het$OBS_CT - het$`O(HOM)`) / het$OBS_CT
 
@@ -1003,7 +1003,7 @@ summary_table <- rbind(summary_table, temp_QC)
 
 fwrite(data.table::data.table(samples_to_include), "SamplesToInclude.txt", sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
 # Remove samples
-system(paste0("plink/plink2 --bfile ", bed_simplepath, "_QC --output-chr 26 --keep SamplesToInclude.txt --make-bed --threads 4 --out ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation"))
+system(paste0(PLINK2, " --bfile ", bed_simplepath, "_QC --output-chr 26 --keep SamplesToInclude.txt --make-bed --threads 4 --out ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation"))
 
 # Reorder the samples and write out the sample file
 message("Shuffle sample order.")
@@ -1011,7 +1011,7 @@ rows <- sample(nrow(samples_to_include))
 samples_to_include2 <- samples_to_include[rows, ]
 fwrite(samples_to_include2, "ShuffledSampleOrder.txt", sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
-system(paste0("plink/plink2 -bfile ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation ",
+system(paste0(PLINK2, " -bfile ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation ",
 "--indiv-sort f ShuffledSampleOrder.txt ",
 "--make-bed ",
 "--out ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp --threads 4"))
