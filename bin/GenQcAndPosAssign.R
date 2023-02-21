@@ -177,7 +177,7 @@ option_list <- list(
     make_option(c("--plink_executable"), type = "character", default = NULL,
                 help = "Plink executable"),
     make_option(c("--plink2_executable"), type = "character", default = NULL,
-                help = "Plink2 executable")
+                help = "Plink2 executable"),
     make_option(c("--ref_1000g"), type = "character", default = NULL,
                 help = "reference 1000g prefix")
     )
@@ -239,14 +239,14 @@ make_executable <- function(exe) {
   Sys.chmod(exe, mode = (file.info(exe)$mode | "111"))
 }
 
-dir.create("plink")
-
 PLINK <- args$plink_executable
 PLINK2 <- args$plink2_executable
 
-if (PLINK2 == NULL | PLINK2 == "" | !file.exists(PLINK2)) {
+if (is.null(PLINK2) || PLINK2 == "" || !file.exists(PLINK2)) {
   message(sprintf("PLINK 2 executable empty, or not found at %s.", PLINK2))
   message("Attempting to download PLINK 2 executable")
+
+  dir.create("plink")
 
   # Download plink 2 executable
   utils::download.file("https://s3.amazonaws.com/plink2-assets/alpha3/plink2_linux_x86_64_20221024.zip",
@@ -255,15 +255,18 @@ if (PLINK2 == NULL | PLINK2 == "" | !file.exists(PLINK2)) {
                         files = "plink2",
                         exdir = "plink")
 } else {
-  message(sprintf("PLINK 2 executable not found at %s.", PLINK2))
+  PLINK2 <- normalizePath(PLINK2) 
+  message(sprintf("PLINK 2 executable found at %s.", PLINK2))
 }
 
 make_executable(PLINK2)
 
-if (PLINK == NULL | PLINK == "" | !file.exists(PLINK)) {
+if (is.null(PLINK) || PLINK == "" || !file.exists(PLINK)) {
   message(sprintf("PLINK 1.9 executable empty, or not found at %s.", PLINK))
   message("Attempting to download PLINK 1.9 executable")
 
+  dir.create("plink")
+  
   # Download plink 1.9 executable
   utils::download.file("https://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20220402.zip",
   destfile = "plink/plink.zip", verbose = TRUE)
@@ -271,12 +274,14 @@ if (PLINK == NULL | PLINK == "" | !file.exists(PLINK)) {
                           files = "plink",
                           exdir = "plink")
 } else {
+  PLINK <- normalizePath(PLINK)
   message(sprintf("PLINK 1.9 executable found at %s.", PLINK))
 }
+
 make_executable(PLINK)
 
 ref_1000g_prefix <- "data"
-if (args$ref_1000g != NULL & args$ref_1000g != "") {
+if (!is.null(args$ref_1000g) && args$ref_1000g != "") {
   if (endsWith(args$ref_1000g, "1000G_phase3_common_norel"))
   ref_1000g_prefix <- args$ref_1000g
 }
@@ -341,7 +346,7 @@ if (any(duplicated(fam$sample.ID))) {
   stop(sprintf("Error! samples in PLINK fam file are not unique. Exiting"))
 }
 
-if (args$fam != NULL & args$fam != "") {
+if (!is.null(args$fam) && args$fam != "") {
   new_fam <- fread(args$fam, data.table = FALSE, header = FALSE, col.names = colnames(fam),
                    keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
   new_fam$family.ID <- '0'
@@ -440,7 +445,7 @@ system(paste0(PLINK2, " --bfile ", bed_simplepath, " --fam fam_normalized.fam",
 # Do SNP and sample missingness QC on raw genotype bed
 message("Do SNP and genotype QC.")
 snp_plinkQC(
-  plink.path = "plink/plink2",
+  plink.path = PLINK2,
   prefix.in = paste0(bed_simplepath, "_filtered"),
   prefix.out = paste0(bed_simplepath, "_QC"),
   file.type = "--bfile",
@@ -519,13 +524,13 @@ if (23 %in% sex_check_data_set_chromosomes) {
       fwrite(variants_sex_check_new[!is.na(variants_sex_check_new$pos),], "mapped_sex_check_variants.txt", col.names=F, row.names=F, quote=F, sep=" ")
 
       system(paste0(
-        "plink/plink --bfile ", bed_simplepath, "_QC", " --extract range mapped_sex_check_variants.txt",
+        PLINK, " --bfile ", bed_simplepath, "_QC", " --extract range mapped_sex_check_variants.txt",
         " --maf 0.05 --make-bed --out ", bed_simplepath, "_split"))
 
     } else {
  
       system(paste0(
-        "plink/plink --bfile ", bed_simplepath, "_QC", " --extract range ", pruned_variants_sex_check,
+        PLINK, " --bfile ", bed_simplepath, "_QC", " --extract range ", pruned_variants_sex_check,
         " --maf 0.05 --make-bed --out ", bed_simplepath, "_split"))
  
    }
@@ -534,7 +539,7 @@ if (23 %in% sex_check_data_set_chromosomes) {
     message("Not using predefined pruned variants for sex-check")
 
     system(paste0(
-      "plink/plink --bfile ", bed_simplepath, "_QC",
+      PLINK, " --bfile ", bed_simplepath, "_QC",
       " --chr X --maf 0.05 --split-x ", build_code, " no-fail --make-bed --out ", bed_simplepath, "_split"))
 
   }
@@ -603,7 +608,7 @@ if (23 %in% sex_check_data_set_chromosomes) {
 
 # Remove sex chromosomes
 snp_plinkQC(
-  plink.path = "plink/plink2",
+  plink.path = PLINK2,
   prefix.in = paste0(bed_simplepath, "_QC"),
   prefix.out = paste0(bed_simplepath, "_QC", "_QC"),
   file.type = "--bfile",
@@ -824,7 +829,7 @@ fwrite(population_assign_res[, -1], paste0(args$output, "/gen_data_summary/PopAs
 # Find related samples
 message("Find related samples.")
 related <- snp_plinkKINGQC(
-  plink2.path = "plink/plink2",
+  plink2.path = PLINK2,
   bedfile.in = paste0(bed_simplepath, "_QC.bed"),
   thr.king = 2^-4.5,
   make.bed = FALSE,
@@ -1023,7 +1028,7 @@ system(paste0("rm ", args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputati
 message("Final SNP QC.")
 
 snp_plinkQC(
-  plink.path = "plink/plink2",
+  plink.path = PLINK2,
   prefix.in = paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation_temp"),
   prefix.out = paste0(args$output, "/gen_data_QCd/", bed_simplepath, "_ToImputation"),
   file.type = "--bfile",
