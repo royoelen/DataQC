@@ -39,7 +39,7 @@ def helpMessage() {
       --preselected_sex_check_vars  Path to a plink ranges file that defines which variants to use for the check-sex command. Use this when the automatic selection does not yield satisfactory results.
       --plink_executable            Path to plink executable
       --plink2_executable           Path to plink2 executable
-
+      --reference_1000g_folder      Path to 1000g reference folder
 
     """.stripIndent()
 }
