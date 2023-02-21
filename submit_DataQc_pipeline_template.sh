@@ -53,6 +53,9 @@ output_path=../output # Output path
 # --AdditionalCovariates [file with additional covariates. First column should be `SampleID`]
 # --gen_qc_steps 'WGS'
 # --fam [PLINK .fam file. Takes precedence over .fam file supplied with `--bfile`]
+# --plink_executable [path to plink executable (PLINK v1.90b6.26 64-bit)]
+# --plink2_executable [path to plink2 executable (PLINK v2.00a3.7LM 64-bit Intel)]
+# --reference_1000g_folder [path to folder with 1000G reference data]
 
 # Command:
 NXF_VER=21.10.6 ${nextflow_path}/nextflow run DataQC.nf \

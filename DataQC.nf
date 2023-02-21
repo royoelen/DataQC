@@ -39,7 +39,7 @@ def helpMessage() {
       --preselected_sex_check_vars  Path to a plink ranges file that defines which variants to use for the check-sex command. Use this when the automatic selection does not yield satisfactory results.
       --plink_executable            Path to plink executable
       --plink2_executable           Path to plink2 executable
-
+      --reference_1000g_folder      Path to 1000g reference folder
 
     """.stripIndent()
 }
@@ -64,7 +64,7 @@ params.fam = ''
 
 params.plink_executable = ''
 params.plink2_executable = ''
-params.ref_1000g_folder = ''
+params.reference_1000g_folder = ''
 
 if (params.vcf != '') {
 
@@ -121,20 +121,31 @@ Channel
     .ifEmpty { exit 1, "Input report not found!" }
     .set { report_ch }
 
-Channel
+if (params.plink_executable != '') {
+  Channel
     .fromPath(params.plink_executable)
     .ifEmpty('EMPTY')
     .set { plink_executable_ch }
+} else {
+  Channel.empty().set {plink_executable_ch}
+}
 
-Channel
+if (params.plink2_executable != '') {
+  Channel
     .fromPath(params.plink2_executable)
     .ifEmpty('EMPTY')
     .set { plink2_executable_ch }
-
-Channel
-    .fromPath(params.ref_1000g_folder)
+} else {
+  Channel.empty().set {plink2_executable_ch}
+}
+if (params.reference_1000g_folder != '') {
+  Channel
+    .fromPath(params.reference_1000g_folder)
     .ifEmpty('EMPTY')
     .set { reference_1000g_ch }
+} else {
+  Channel.empty().set {reference_1000g_ch}
+}
 
 params.GenOutThresh = 0.4
 params.GenSdThresh = 3
@@ -418,9 +429,9 @@ process GenotypeQC {
       path ExclusionList from params.ExclusionList
       path InclusionList from params.InclusionList
       val genome_build from params.genome_build
-      path plink_executable from plink_executable_ch.collect()
-      path plink2_executable from plink2_executable_ch.collect()
-      path reference_1000g_folder from reference_1000g_ch.collect()
+      file(plink_executable) from plink_executable_ch.ifEmpty { 'EMPTY' }
+      file(plink2_executable) from plink2_executable_ch.ifEmpty { 'EMPTY' }
+      file(reference_1000g_folder) from reference_1000g_ch.ifEmpty { 'EMPTY' }
 
     output:
       path ('outputfolder_gen') into output_ch_genotypes
@@ -435,14 +446,14 @@ process GenotypeQC {
     else
       reference_1000g_prefix_arg = "--ref_1000g $reference_1000g_folder/1000G_phase3_common_norel"
 
-    fam_arg = (params.fam == '') ? "$fam_annot" : ""
-    plink_arg = (params.plink_executable == '') ? "$plink_executable" : ""
-    plink2_arg = (params.plink2_executable == '') ? "$plink2_executable" : ""
+    fam_arg = (params.fam != '') ? "--fam $fam_annot" : ""
+    plink_arg = (params.plink_executable != '') ? "--plink_executable $plink_executable" : ""
+    plink2_arg = (params.plink2_executable != '') ? "--plink2_executable $plink2_executable" : ""
 
     """
     Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
     --target_bed ${bfile} \
-    --fam $fam_arg \
+    $fam_arg \
     --genome_build ${genome_build} \
     --gen_exp ${gte} \
     --sample_list $baseDir/data/unrelated_reference_samples_ids.txt \
@@ -454,8 +465,8 @@ process GenotypeQC {
     --output outputfolder_gen \
     --pruned_variants_sex_check "${optional_pruned_variants_sex_check}" \
     --liftover_path $baseDir/bin/liftOver \
-    --plink_executable $plink_arg \
-    --plink2_executable $plink2_arg \
+    $plink_arg \
+    $plink2_arg \
     $reference_1000g_prefix_arg
     """
     
