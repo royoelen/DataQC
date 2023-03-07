@@ -127,15 +127,10 @@ illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
 }
 
 RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE){
-    # Leave in only probes for which there is empirical probe mapping info and convert data into matrix
-    emp <- fread(args$emp_probe_mapping, keepLeadingZeros = TRUE)
-    emp <- emp[, c(1, 2), with = FALSE]
     colnames(exp)[1] <- "Probe"
 
     exp$Probe <- as.character(exp$Probe)
-    emp$Probe <- as.character(emp$Probe)
 
-    exp <- merge(exp, emp, by = "Probe")
     exp <- as.data.frame(exp)
     rownames(exp) <- exp[, ncol(exp)]
     exp <- exp[, -ncol(exp)]
@@ -164,6 +159,14 @@ RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE){
     # Remove genes with no variance
     gene_variance <- data.frame(gene = rownames(exp), gene_variance = apply(exp, 1, var))
     exp <- exp[!rownames(exp) %in% gene_variance[gene_variance$gene_variance == 0, ]$gene, ]
+
+    # Remove genes with CPM<0.5 in less than 1% of samples
+    exp_keep <- DGEList(counts = exp)
+    keep <- rowSums(cpm(exp_keep, log = FALSE) > 0.5) >= round(ncol(exp) / 100, 0)
+
+    exp <- exp[rownames(exp) %in% names(keep[keep == TRUE]), ]
+
+    message(paste(nrow(exp), "genes has CPM>1 in more than 1% of samples."))
 
     if (normalize == TRUE){
     # TMM-normalized counts
