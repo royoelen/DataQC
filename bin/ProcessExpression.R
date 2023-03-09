@@ -132,8 +132,7 @@ RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE){
     exp$Probe <- as.character(exp$Probe)
 
     exp <- as.data.frame(exp)
-    rownames(exp) <- exp[, ncol(exp)]
-    exp <- exp[, -ncol(exp)]
+    rownames(exp) <- exp[, 1]
     exp <- exp[, -1]
     exp <- abs(as.matrix(exp))
 
