@@ -95,11 +95,11 @@ illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
     exp <- as.matrix(exp)
 
     # Remove samples which are not in the gte or in genotype data
-    gte <- fread(args$genotype_to_expression_linking, header = FALSE, keepLeadingZeros = TRUE)
+    gte <- fread(args$genotype_to_expression_linking, header = FALSE, keepLeadingZeros = TRUE, colClasses = "character")
     gte$V1 <- as.character(gte$V1)
     gte$V2 <- as.character(gte$V2)
 
-    geno_fam <- fread(args$sex_info, header = TRUE, keepLeadingZeros = TRUE)
+    geno_fam <- fread(args$sex_info, header = TRUE, keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
     gte <- gte[gte$V1 %in% geno_fam$IID,]
     gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
 
@@ -137,11 +137,11 @@ RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE){
     exp <- abs(as.matrix(exp))
 
     # Remove samples which are not in the gte or in genotype data
-    gte <- fread(args$genotype_to_expression_linking, header = FALSE)
+    gte <- fread(args$genotype_to_expression_linking, header = FALSE, colClasses = "character")
     gte$V1 <- as.character(gte$V1)
     gte$V2 <- as.character(gte$V2)
 
-    geno_fam <- fread(args$sex_info, header = TRUE, keepLeadingZeros = TRUE)
+    geno_fam <- fread(args$sex_info, header = TRUE, keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
     gte <- gte[gte$V1 %in% geno_fam$IID,]
     gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
 
@@ -199,11 +199,11 @@ Affy_preprocess <- function(exp, gte, gen){
     exp <- as.matrix(exp)
 
     # Remove samples which are not in the gte or in genotype data
-    gte <- fread(args$genotype_to_expression_linking, header = FALSE, keepLeadingZeros = TRUE)
+    gte <- fread(args$genotype_to_expression_linking, header = FALSE, keepLeadingZeros = TRUE, colClasses = "character")
     gte$V1 <- as.character(gte$V1)
     gte$V2 <- as.character(gte$V2)
 
-    geno_fam <- fread(args$sex_info, header = TRUE, keepLeadingZeros = TRUE)
+    geno_fam <- fread(args$sex_info, header = TRUE, keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
     gte <- gte[gte$V1 %in% geno_fam$IID,]
     gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
 
@@ -370,7 +370,8 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
 # Analysis #
 ############
 # Read in raw expression matrix
-and <- fread(args$expression_matrix, header = TRUE, keepLeadingZeros = TRUE)
+and <- fread(args$expression_matrix, header = TRUE,
+             keepLeadingZeros = TRUE)
 colnames(and) <- as.character(colnames(and))
 colnames(and)[1] <- "Feature"
 and$Feature <- as.character(and$Feature)
@@ -379,14 +380,17 @@ message(paste("Initially:", nrow(and), "genes/probes and ", ncol(and), "samples"
 summary_table <- data.table(Stage = "Unprocessed matrix", Nr_of_features = nrow(and), Nr_of_samples = ncol(and))
 
 # Remove samples which are not in the gte or in genotype data
-gte <- fread(args$genotype_to_expression_linking, header = FALSE, keepLeadingZeros = TRUE)
+gte <- fread(args$genotype_to_expression_linking, header = FALSE,
+             keepLeadingZeros = TRUE, colClasses = "character")
 gte$V1 <- as.character(gte$V1)
 gte$V2 <- as.character(gte$V2)
 
-geno_fam <- fread(args$sex_info, header = TRUE, keepLeadingZeros = TRUE)
+geno_fam <- fread(args$sex_info, header = TRUE,
+                  keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
 geno_fam$IID <- as.character(geno_fam$IID)
 
-gen_filter <- fread(args$geno_filter, header = FALSE, keepLeadingZeros = TRUE)
+gen_filter <- fread(args$geno_filter, header = FALSE,
+                    keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
 gen_filter$V2 <- as.character(gen_filter$V2)
 gte <- gte[gte$V1 %in% geno_fam$IID, ]
 gte <- gte[gte$V1 %in% gen_filter$V2, ]
@@ -449,7 +453,7 @@ mds$`MDS coordinate 2` < mean_mds2 - args$sd * sd_mds2, ]$outlier <- "yes"
 }
 
 # Add sex info
-sex <- fread(args$sex_info, header = FALSE, keepLeadingZeros = TRUE)
+sex <- fread(args$sex_info, header = FALSE, keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
 sex <- sex[, c(2, 4), with = FALSE]
 colnames(sex) <- c("Sample", "Sex")
 sex$Sample <- as.character(sex$Sample)
