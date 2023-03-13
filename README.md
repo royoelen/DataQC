@@ -5,28 +5,30 @@ Automatic data quality check and processing for unimputed genotype data and unpr
 Performs the following main steps:
 
 - Genotypes
-    - Standard SNP QC filtering (call-rate>0.95, Hardy-Weinberg P>1e-6, MAF>0.01).
-    - Individual-level missingness filter <0.05.
-    - Comparison of reported and genetic check, removal of mismatched samples.
-    - Removal of samples with unclear genetic sex.
-    - Removal of samples with excess heterozygosity (+/-3SD from the mean).
-    - Removal of related samples (3d degree relatives). From each pair of related samples, one is kept in the data.
-    - Visualisation of samples in the genetic reference space, instructions how to remove or split the data in case of multi-ancestry samples.
-    - Removal of in-sample genetic outliers.
-    - Calculates 10 first genetic principal components (PCs), used in analyses as covariates to correct for population stratification.
+  - WGS-specific variant QC filtering (if input is WGS).
+    - WGS-specific variant-level QC (VQSR thresholds, PASS labels, inbreeding coefficients, etc.).
+  - Standard variant QC filtering (call-rate>0.95, Hardy-Weinberg P>1e-6, MAF>0.01).
+  - Individual-level missingness filter <0.05.
+  - Comparison of reported and genetic check, removal of mismatched samples.
+  - Removal of samples with unclear genetic sex.
+  - Removal of samples with excess heterozygosity (+/-3SD from the mean).
+  - Removal of related samples (3d degree relatives). From each pair of related samples, one is kept in the data.
+  - Visualisation of samples in the genetic reference space, instructions how to remove or split the data in case of multi-ancestry samples.
+  - Removal of in-sample genetic outliers.
+  - Calculates 10 first genetic principal components (PCs), used in analyses as covariates to correct for population stratification.
 - Gene expression:
-    - Aligns sample IDs between genotype samples and gene expression samples.
-    - Filters in blood-expressed genes.
-    - Replaces array probe IDs with gene IDs.
-    - Iteratively checks for expression outliers and removes samples which fail this check.
-    - Appropriately normalises the data according to the expression platform used and applies additional inverse normal transformation.
-    - Calculates 100 first expression PCs, used in analyses as covariates to correct for unknown variation.
-    - Calculates the expression summary statistics for each gene, used to do *post-hoc* QC and gene filtering in the meta-analysis.
+  - Aligns sample IDs between genotype samples and gene expression samples.
+  - Filters in blood-expressed genes.
+  - Replaces array probe IDs with gene IDs.
+  - Iteratively checks for expression outliers and removes samples which fail this check.
+  - Appropriately normalises the data according to the expression platform used and applies additional inverse normal transformation.
+  - Calculates 100 first expression PCs, used in analyses as covariates to correct for unknown variation.
+  - Calculates the expression summary statistics for each gene, used to do *post-hoc* QC and gene filtering in the meta-analysis.
 - Additional steps:
-    - Removes samples whose genetic sex does not match with the expression of sex-specific genes.
-    - Reorders the genotype samples into random order.
-    - Organises all the QCd data into the standard folder format.
-    - Provides commented `html` QC report which should be used to get an overview of the quality of the data.
+  - Removes samples whose genetic sex does not match with the expression of sex-specific genes.
+  - Reorders the genotype samples into random order.
+  - Organises all the QCd data into the standard folder format.
+  - Provides commented `html` QC report which should be used to get an overview of the quality of the data.
 
 ## Usage information
 
@@ -34,8 +36,7 @@ Performs the following main steps:
 
 - Have access to HPC with multiple cores.
 - Have Bash >=3.2 installed.
-- Have Java >=8 installed.
-- Have Slurm scheduler managing the jobs in the HPC.
+- Have Java >=11 installed.
 - HPC has Singularity installed and running.
 
 ### Setup of the pipeline
@@ -48,7 +49,8 @@ Or just download this from the gitlab/github download link and unzip.
 
 ### Input files
 
-- Unimputed genotype file in plink .bed format (https://www.cog-genomics.org/plink/1.9/input#bed). Genome build has to be in **hg19/GRCh37 (default)** or **hg38/GRCh38**. It is advisable that .fam file also includes observed sex for all samples (format: males=1, females=2), so that pipeline does extra check on that. However, if this information is not available for all samples, pipeline just skips this check. Input path has to be without `.bed/.bim/.fam` extension.
+- Unimputed genotype file in plink `.bed` format (https://www.cog-genomics.org/plink/1.9/input#bed). Genome build has to be in **hg19/GRCh37 (default)** or **hg38/GRCh38**. It is advisable that .fam file also includes observed sex for all samples (format: males=1, females=2), so that pipeline does extra check on that. However, if this information is not available for all samples, pipeline just skips this check. Input path has to be without `.bed/.bim/.fam` extension. 
+- We also allow unimputed `.vcf` datasets as input, specifically for WGS datasets for which we can do WGS-specific variant level QC. If your dataset concerns a VCF dataset, replace the `--bfile` argument with the `--vcf` argument. The `--vcf` argument expects a full path to a `.vcf` dataset. Pathname extension using globbing is allowed (using `*` or `?`), but the path should be provided without pathway extension.
 - Raw, unprocessed gene expression matrix. Tab-delimited file, genes/probes in the rows, samples in the columns.
     - First column has header "-".
     - For Illumina arrays, probe ID has to be Illumina ArrayAddress.
@@ -86,11 +88,21 @@ There are five arguments which can be used to adjust certain outlier detection t
 
 Optional arguments:
 
+`--gen_qc_steps` Either generic, array-based, QC or including also WGS specific QC (only valid with VCF datasets). 'Array' (default) or 'WGS' (Generic + WGS qc).
+
 `--AdditionalCovariates` Tab-separated file with additional external covariates deemed to be relevant for eQTL mapping in given dataset. First column must have header "SampleID" and following columns must include corresponding covariates with informative headers (E.g. "GenotypeBatch", etc.). Categorical covariates must be specified in the text format (E.g. "Batch1", "Batch2", "Batch3"), not encoded as numbers. Pipeline does one-hot encoding for you. Numerical covariates are allowed as well. If specified, this file should include covariate information for each eQTL sample which passes QC and NAs are not allowed. 
 
 `--InclusionList` File with the genotype IDs to keep in the analysis (one per row). Useful for e.g. keeping in only the samples which have part of the biobank, etc. By default, pipeline keeps all samples in. No header needed.
 
 `--ExclusionList` File with the genotype IDs to remove from the analysis (one per row). Useful for removing part of the samples from the analysis if these are from different ancestry. In case of the overlap between inclusion list and exclusion list, intersect is kept in the analysis. No header needed.
+
+`--preselected_sex_check_vars`  Path to a plink ranges file that defines which variants to use for the check-sex command. Use this when the automatic selection does not yield satisfactory results.
+
+`--plink_executable`    Path to plink executable. By default this is automatically downloaded from internet. Use this setting when you have to work offline.
+
+`--plink2_executable`   Path to plink2 executable. By default this is automatically downloaded from internet. Use this setting when you have to work offline.
+
+`--reference_1000g_folder`  Path to 1000g reference folder. By default this is automatically downloaded from internet. Use this setting when you have to work offline.
 
 ### Running the data QC command
 
@@ -117,14 +129,26 @@ module load squashfs/4.4
 # some of the following paths are pre-filled.
 # https://github.com/eQTLGen/eQTLGen-phase-2-cookbook/wiki/eQTLGen-phase-II-cookbook
 
-# Define paths 
+# We set the following variables for nextflow to prevent writing to your home directory (and potentially filling it completely)
+# Feel free to change these as you wish.
+export SINGULARITY_CACHEDIR=../../singularitycache
+export NXF_HOME=../../nextflowcache
+
+# Disable pathname expansion. Nextflow handles pathname expansion by itself.
+set -f
+
+# Define paths
 nextflow_path=../../tools # folder where Nextflow executable is
 
-geno_path=[full path to your input genotype files without .bed/.bim/.fam extension]
+# Genotype data
+bfile_path=[full path to your input genotype files without .bed/.bim/.fam extension]
+
+# Other data
 exp_path=[full path to your gene expression matrix]
 gte_path=[full path to your genotype-to-expression file]
 exp_platform=[expression platform name: HT12v3/HT12v4/HuRef8/RNAseq/AffyU219/AffyHumanExon]
 cohort_name=[name of the cohort]
+genome_build="GRCh37"
 output_path=../output # Output path
 
 # Additional settings and optional arguments for the command
@@ -136,6 +160,10 @@ output_path=../output # Output path
 # --AdditionalCovariates [file with additional covariates]
 # --InclusionList [file with the list of samples to restrict the analysis]
 # --ExclusionList [file with the list of samples to remove from the analysis]
+# --preselected_sex_check_vars "data/Affy6_pruned_chrX_variant_positions.txt"
+# --AdditionalCovariates [file with additional covariates. First column should be `SampleID`]
+# --gen_qc_steps 'WGS'
+# --fam [PLINK .fam file. Takes precedence over .fam file supplied with `--bfile`]
 
 # Command:
 NXF_VER=21.10.6 ${nextflow_path}/nextflow run DataQC.nf \
@@ -151,8 +179,13 @@ NXF_VER=21.10.6 ${nextflow_path}/nextflow run DataQC.nf \
 
 You can save the modified script version to informative name, e.g. `submit_DataQc_[**CohortName_PlatformName**].sh`.
 
-Then submit the job `sbatch submit_DataQc_[**CohortName_PlatformName**].sh`. This initiates pipeline, makes analysis environment (using singularity or conda) and automatically submits the steps in correct order and parallel way. Separate `work` directory is made to the folder and contains all interim files.
+You can select HPC scheduler type by adjusting the profile as following:
 
+- Slurm: -profile slurm,singularity
+- PBS/TORQUE: -profile pbs,singularity
+- SGE: -profile sge,singularity
+
+Then submit the job `sbatch submit_DataQc_[**CohortName_PlatformName**].sh`. This initiates pipeline, makes analysis environment (using singularity) and automatically submits the steps in correct order and parallel way. Separate `work` directory is made to the folder and contains all interim files.
 
 ### Monitoring and debugging
 
@@ -220,7 +253,7 @@ When all issues are solved:
 - `output/outputfolder_exp/exp_data_summary/raw_gene_summary.txt`: gene expression summary statistics (mean, median, sd, min, max, nr of unique values, Shapiro test P) before normalisation, used in central site to filter out lowly expressed genes, genes having outliers, etc.
 - `output/outputfolder_exp/exp_data_summary/processed_gene_summary.txt`: gene expression summary statistics (mean, median, sd, min, max, nr of unique values, Shapiro test P) after normalisation, used in central site to filter out lowly expressed genes, genes having outliers, etc.
 - `output/outputfolder_gen/plots/*`, `output/outputfolder_exp/plots/*`: Separate diagnostic plots which can be later used in the manuscript materials.
-- `output/pipeline_info/DataQc_report.html`: Technical pipeline runtime report. It is not automatically added to shared folder, however it can be used in the central site for debugging, if need arises.
+- `output/pipeline_info/DataQc_report.html`: Technical pipeline runtime report, used for checking if pipeline finished successfully.. It is not automatically added to shared folder, however it can be used in the central site for debugging, if the need arises. 
 
 ## Acknowledgements
 
