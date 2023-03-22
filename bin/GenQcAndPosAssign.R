@@ -333,38 +333,38 @@ gte <- fread(args$gen_exp, sep = "\t", header = FALSE,
              colClasses = "character")
 
 summary_table <- data.frame(stage = "Raw file", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow,
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]))
+Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$`sample.ID`, ]))
 
-if(nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]) < 100){stop("Less than 100 samples are in genotype-to-expression file!")}
+if(nrow(gte[gte$V1 %in% target_bed$.fam$`sample.ID`, ]) < 100){stop("Less than 100 samples are in genotype-to-expression file!")}
 
 # Prepare and normalise fam file
 #
 fam <- target_bed$fam
-fam$family.ID <- '0'
+fam$`family.ID` <- '0'
 
-if (any(duplicated(fam$sample.ID))) {
+if (any(duplicated(fam$`sample.ID`))) {
   stop(sprintf("Error! samples in PLINK fam file are not unique. Exiting"))
 }
 
 if (!is.null(args$fam) && args$fam != "") {
   new_fam <- fread(args$fam, data.table = FALSE, header = FALSE, col.names = colnames(fam),
                    keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
-  new_fam$family.ID <- '0'
+  new_fam$`family.ID` <- '0'
 
   # Check if all sample ids in new fam are unique
   if (any(duplicated(new_fam$IID))) {
     stop(sprintf("Error! samples in fam file '%s' are not unique. Exiting", args$fam))
   }
   # Check if all sample ids from plink fam are in new fam
-  if (!all(fam$sample.ID %in% new_fam$sample.ID)) {
+  if (!all(fam$`sample.ID` %in% new_fam$`sample.ID`)) {
     stop(sprintf("Error! samples in PLINK fam file are not all in '%s'. Exiting", args$fam))
   }
   # Check if all sample ids from new fam are in plink fam
-  if (!all(new_fam$sample.ID %in% fam$sample.ID)) {
+  if (!all(new_fam$`sample.ID` %in% fam$`sample.ID`)) {
     stop(sprintf("Error! samples in fam file '%s' are not all in PLINK fam file. Exiting", args$fam))
   }
 
-  fam <- new_fam[order(match(new_fam$sample.ID, fam$sample.ID)),]
+  fam <- new_fam[order(match(new_fam$`sample.ID`, fam$`sample.ID`)),]
 }
 
 # Write normalized fam
@@ -374,56 +374,57 @@ fwrite(fam, "fam_normalized.fam", col.names=F, row.names=F, quote=F, sep="\t")
 if (args$inclusion_list != "" & args$inclusion_list != "EmpiricalProbeMatching_AffyHumanExon.txt"){
   inc_list <- fread(args$inclusion_list, header = FALSE,
                     keepLeadingZeros = TRUE, colClasses = "character")
-  samples_to_include <- fam[fam$sample.ID %in% inc_list$V1, ]
+  samples_to_include <- fam[fam$`sample.ID` %in% inc_list$V1, ]
   message("Sample inclusion filter active!")
+
   temp_QC <- data.frame(stage = "Samples in inclusion list",
                         Nr_of_SNPs = target_bed$ncol,
                         Nr_of_samples = nrow(samples_to_include),
-                        Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$IID, ]))
+                        Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$`sample.ID`, ]))
   summary_table <- rbind(summary_table, temp_QC)
 }
 
 ## Keep in only samples which are present in genotype-to-expression file AND additional up to 5000 samples (better phasing)
-samples_to_include_gte <- fam[fam$sample.ID %in% gte$V1, ]
+samples_to_include_gte <- fam[fam$`sample.ID` %in% gte$V1, ]
 
 if (exists("samples_to_include")){
-  print(table(samples_to_include_gte$sample.ID %in% samples_to_include$sample.ID))
-  samples_to_include_gte <- samples_to_include_gte[samples_to_include_gte$sample.ID %in% samples_to_include$sample.ID, ]
-  fam <- fam[fam$sample.ID %in% samples_to_include$sample.ID, ]
+  print(table(samples_to_include_gte$`sample.ID` %in% samples_to_include$`sample.ID`))
+  samples_to_include_gte <- samples_to_include_gte[samples_to_include_gte$`sample.ID` %in% samples_to_include$`sample.ID`, ]
+  fam <- fam[fam$`sample.ID` %in% samples_to_include$`sample.ID`, ]
 }
 
 # Here add up to 5000 samples which are not already included
-if (nrow(fam[!fam$sample.ID %in% samples_to_include_gte$sample.ID, ]) > 0){
+if (nrow(fam[!fam$`sample.ID` %in% samples_to_include_gte$`sample.ID`, ]) > 0){
   set.seed(123)
-  add_samples <- sample(fam[!fam$sample.ID %in% samples_to_include_gte$sample.ID, ]$sample.ID,
-                        min(5000, nrow(fam[!fam$sample.ID %in% samples_to_include_gte$sample.ID, ])))
+  add_samples <- sample(fam[!fam$`sample.ID` %in% samples_to_include_gte$`sample.ID`, ]$`sample.ID`,
+                        min(5000, nrow(fam[!fam$`sample.ID` %in% samples_to_include_gte$`sample.ID`, ])))
   set.seed(NULL)
-  fam2 <- fam[fam$sample.ID %in% add_samples, ]
+  fam2 <- fam[fam$`sample.ID` %in% add_samples, ]
   samples_to_include_temp <- rbind(samples_to_include_gte, fam2)
 } else {samples_to_include_temp <- samples_to_include_gte}
 
 if (exists("samples_to_include") && nrow(samples_to_include) > 0){
-  samples_to_include <- samples_to_include[samples_to_include$sample.ID %in% samples_to_include_temp$sample.ID, ]
+  samples_to_include <- samples_to_include[samples_to_include$`sample.ID` %in% samples_to_include_temp$`sample.ID`, ]
   print(nrow(samples_to_include))
 } else {samples_to_include <- samples_to_include_temp}
 
 temp_QC <- data.frame(stage = "Samples in genotype-to-expression file + 5000", Nr_of_SNPs = target_bed$ncol,
 Nr_of_samples = nrow(samples_to_include),
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$sample.ID, ]))
+Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$`sample.ID`, ]))
 summary_table <- rbind(summary_table, temp_QC)
 
 # Remove samples which are in the exclusion list
 if (args$exclusion_list != "" & args$exclusion_list != "EmpiricalProbeMatching_AffyU219.txt"){
 exc_list <- fread(args$exclusion_list, header = FALSE,
                   keepLeadingZeros = TRUE, colClasses = "character")
-samples_to_include <- samples_to_include[!samples_to_include$sample.ID %in% exc_list$V1, ]
+samples_to_include <- samples_to_include[!samples_to_include$`sample.ID` %in% exc_list$V1, ]
 message("Sample exclusion filter active!")
 }
 
-fwrite(data.table(`#FID` = '0', `IID` = samples_to_include$sample.ID), "SamplesToInclude.txt", sep = "\t", quote = FALSE, col.names = TRUE, row.names = FALSE)
+fwrite(data.table(`#FID` = '0', `IID` = samples_to_include$`sample.ID`), "SamplesToInclude.txt", sep = "\t", quote = FALSE, col.names = TRUE, row.names = FALSE)
 
 temp_QC <- data.frame(stage = "Samples after removing exclusion list", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(samples_to_include),
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$sample.ID, ]))
+Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% samples_to_include$`sample.ID`, ]))
 summary_table <- rbind(summary_table, temp_QC)
 
 # Remove samples not in GTE + 5k samples
@@ -473,12 +474,12 @@ target_bed <- bed(paste0(bed_simplepath, "_QC.bed"))
 target_bed$.fam <- read_fam(paste0(bed_simplepath, "_QC"))
 
 temp_QC <- data.frame(stage = "SNP CR>0.95; HWE P>1e-6; MAF>0.01; GENO<0.05; MIND<0.05", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = target_bed$nrow,
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]))
+Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$`sample.ID`, ]))
 
 summary_table <- rbind(summary_table, temp_QC)
 
 ## Assert that all IIDs are unique
-if (any(duplicated(target_bed$fam$sample.ID))) {
+if (any(duplicated(target_bed$fam$`sample.ID`))) {
   stop("Individual sample IDs should be unique. Exiting...")
 }
 
@@ -632,7 +633,7 @@ target_bed <- bed(paste0(bed_simplepath, "_QC.bed"))
 target_bed$.fam <- read_fam(paste0(bed_simplepath, "_QC"))
 
 temp_QC <- data.frame(stage = "Removed X/Y", Nr_of_SNPs = target_bed$ncol, Nr_of_samples = nrow(target_bed$fam),
-Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$sample.ID, ]))
+Nr_of_eQTL_samples = nrow(gte[gte$V1 %in% target_bed$.fam$`sample.ID`, ]))
 summary_table <- rbind(summary_table, temp_QC)
 
 # Do heterozygosity check
@@ -653,7 +654,7 @@ het_fail_samples <- het[het$het_rate < mean(het$het_rate) - 3 * sd(het$het_rate)
 print(str(het_fail_samples))
 
 # Get the indices of those samples that passed heterozygozity check
-indices_of_het_failed_samples <- match(het_fail_samples$IID, target_bed$fam$sample.ID)
+indices_of_het_failed_samples <- match(het_fail_samples$IID, target_bed$fam$`sample.ID`)
 indices_of_het_passed_samples <- rows_along(target_bed)
 if (length(indices_of_het_failed_samples) > 0) {
   indices_of_het_passed_samples <- rows_along(target_bed)[-indices_of_het_failed_samples]
@@ -666,7 +667,7 @@ print(indices_of_het_passed_samples)
 
 fwrite(het_fail_samples, het_failed_samples_out_path, sep = "\t", quote = FALSE, row.names = FALSE)
 
-het_s <- data.frame(ID = target_bed$.fam$sample.ID, FAMID = target_bed$.fam$family.ID)
+het_s <- data.frame(ID = target_bed$.fam$`sample.ID`, FAMID = target_bed$.fam$`family.ID`)
 het_s <- het_s[!het_s$ID %in% het_fail_samples$IID, ]
 
 temp_QC <- data.frame(stage = "Excess heterozygosity (mean+/-3SD)", Nr_of_SNPs = target_bed$ncol,
@@ -712,7 +713,7 @@ PCs_ref <- predict(proj_PCA$obj.svd.ref)
 abi2 <- as.data.frame(PCs_ref)
 colnames(abi2) <- paste0("PC", 1:10)
 
-abi2$sample <- ref_bed$fam$sample.ID[unrelated_ref_samples]
+abi2$sample <- ref_bed$fam$`sample.ID`[unrelated_ref_samples]
 abi2 <- abi2[, c(11, 1:10)]
 
 pops <- fread(args$pops, keepLeadingZeros = TRUE, colClasses = list(character = c(2, 6, 7)))
@@ -720,7 +721,7 @@ pops <- pops[, c(2, 6, 7)]
 abi2 <- merge(abi2, pops, by.x = "sample", by.y = "SampleID")
 abi2 <- abi2[, c(1, 12, 13, 2:11)]
 
-abi <- data.frame(sample = target_bed$fam$sample.ID[indices_of_het_passed_samples],
+abi <- data.frame(sample = target_bed$fam$`sample.ID`[indices_of_het_passed_samples],
                   Population = "Target", Superpopulation = "Target", abi)
 
 abi$type <- "Target"
@@ -906,7 +907,7 @@ if (length(related_individuals) > 0) {
   # Get the indices of those samples that should be removed.
   indices_of_relatedness_failed <- match(
     samples_to_remove_due_to_relatedness,
-    target_bed$fam$sample.ID)
+    target_bed$fam$`sample.ID`)
 
   # Remove these indices from the indices that remained after the previous check.
   indices_of_passed_samples <- indices_of_het_passed_samples[
@@ -999,7 +1000,7 @@ ggsave(paste0(args$output, "/gen_plots/PCA_outliers.pdf"), height = 10 * 1.5, wi
 # Filter out related samples and outlier samples, write out QCd data
 message("Filter out related samples and outlier samples, write out QCd data.")
 indices_of_passed_samples <- indices_of_passed_samples[PCs$outlier == "no"]
-samples_to_include <- data.frame(family.ID = target_bed$.fam$family.ID[indices_of_passed_samples], sample.IDD2 = target_bed$.fam$sample.ID[indices_of_passed_samples])
+samples_to_include <- data.frame(family.ID = target_bed$.fam$`family.ID`[indices_of_passed_samples], sample.IDD2 = target_bed$.fam$sample.ID[indices_of_passed_samples])
 
 temp_QC <- data.frame(stage = paste0("Outlier samples: thr. S>", Sthresh, " PC1/PC2 SD deviation thresh ", args$SD_threshold), Nr_of_SNPs = target_bed$ncol,
 Nr_of_samples = nrow(samples_to_include),
