@@ -80,7 +80,7 @@ shap_test <- function(x){
 
 illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
     # Leave in only probes for which there is empirical probe mapping info and convert data into matrix
-    emp <- fread(args$emp_probe_mapping)
+    emp <- fread(args$emp_probe_mapping, keepLeadingZeros = TRUE)
     emp <- emp[, c(1, 2), with = FALSE]
     colnames(exp)[1] <- "Probe"
 
@@ -95,11 +95,11 @@ illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
     exp <- as.matrix(exp)
 
     # Remove samples which are not in the gte or in genotype data
-    gte <- fread(args$genotype_to_expression_linking, header = FALSE)
+    gte <- fread(args$genotype_to_expression_linking, header = FALSE, keepLeadingZeros = TRUE, colClasses = "character")
     gte$V1 <- as.character(gte$V1)
     gte$V2 <- as.character(gte$V2)
 
-    geno_fam <- fread(args$sex_info, header = TRUE)
+    geno_fam <- fread(args$sex_info, header = TRUE, keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
     gte <- gte[gte$V1 %in% geno_fam$IID,]
     gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
 
@@ -127,27 +127,21 @@ illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
 }
 
 RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE){
-    # Leave in only probes for which there is empirical probe mapping info and convert data into matrix
-    emp <- fread(args$emp_probe_mapping)
-    emp <- emp[, c(1, 2), with = FALSE]
     colnames(exp)[1] <- "Probe"
 
     exp$Probe <- as.character(exp$Probe)
-    emp$Probe <- as.character(emp$Probe)
 
-    exp <- merge(exp, emp, by = "Probe")
     exp <- as.data.frame(exp)
-    rownames(exp) <- exp[, ncol(exp)]
-    exp <- exp[, -ncol(exp)]
+    rownames(exp) <- exp[, 1]
     exp <- exp[, -1]
     exp <- abs(as.matrix(exp))
 
     # Remove samples which are not in the gte or in genotype data
-    gte <- fread(args$genotype_to_expression_linking, header = FALSE)
+    gte <- fread(args$genotype_to_expression_linking, header = FALSE, colClasses = "character")
     gte$V1 <- as.character(gte$V1)
     gte$V2 <- as.character(gte$V2)
 
-    geno_fam <- fread(args$sex_info, header = TRUE)
+    geno_fam <- fread(args$sex_info, header = TRUE, keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
     gte <- gte[gte$V1 %in% geno_fam$IID,]
     gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
 
@@ -164,6 +158,14 @@ RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE){
     # Remove genes with no variance
     gene_variance <- data.frame(gene = rownames(exp), gene_variance = apply(exp, 1, var))
     exp <- exp[!rownames(exp) %in% gene_variance[gene_variance$gene_variance == 0, ]$gene, ]
+
+    # Remove genes with CPM<0.5 in less than 1% of samples
+    exp_keep <- DGEList(counts = exp)
+    keep <- rowSums(cpm(exp_keep, log = FALSE) > 0.5) >= round(ncol(exp) / 100, 0)
+
+    exp <- exp[rownames(exp) %in% names(keep[keep == TRUE]), ]
+
+    message(paste(nrow(exp), "genes has CPM>1 in more than 1% of samples."))
 
     if (normalize == TRUE){
     # TMM-normalized counts
@@ -182,7 +184,7 @@ RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE){
 Affy_preprocess <- function(exp, gte, gen){
     # Leave in only probes for which there is empirical probe mapping info and convert data into matrix
     message("For Affymetrix arrays we assume that input expression matrix is already appropriately normalised and transformed.")
-    emp <- fread(args$emp_probe_mapping)
+    emp <- fread(args$emp_probe_mapping, keepLeadingZeros = TRUE)
     emp <- emp[, c(1, 2), with = FALSE]
     colnames(exp)[1] <- "Probe"
 
@@ -197,11 +199,11 @@ Affy_preprocess <- function(exp, gte, gen){
     exp <- as.matrix(exp)
 
     # Remove samples which are not in the gte or in genotype data
-    gte <- fread(args$genotype_to_expression_linking, header = FALSE)
+    gte <- fread(args$genotype_to_expression_linking, header = FALSE, keepLeadingZeros = TRUE, colClasses = "character")
     gte$V1 <- as.character(gte$V1)
     gte$V2 <- as.character(gte$V2)
 
-    geno_fam <- fread(args$sex_info, header = TRUE)
+    geno_fam <- fread(args$sex_info, header = TRUE, keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
     gte <- gte[gte$V1 %in% geno_fam$IID,]
     gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
 
@@ -368,16 +370,28 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
 # Analysis #
 ############
 # Read in raw expression matrix
-and <- fread(args$expression_matrix)
+and <- fread(args$expression_matrix, header = TRUE,
+             keepLeadingZeros = TRUE)
+colnames(and) <- as.character(colnames(and))
 colnames(and)[1] <- "Feature"
+and$Feature <- as.character(and$Feature)
 message(paste("Initially:", nrow(and), "genes/probes and ", ncol(and), "samples"))
 
 summary_table <- data.table(Stage = "Unprocessed matrix", Nr_of_features = nrow(and), Nr_of_samples = ncol(and))
 
 # Remove samples which are not in the gte or in genotype data
-gte <- fread(args$genotype_to_expression_linking, header = FALSE)
-geno_fam <- fread(args$sex_info, header = TRUE)
-gen_filter <- fread(args$geno_filter, header = FALSE)
+gte <- fread(args$genotype_to_expression_linking, header = FALSE,
+             keepLeadingZeros = TRUE, colClasses = "character")
+gte$V1 <- as.character(gte$V1)
+gte$V2 <- as.character(gte$V2)
+
+geno_fam <- fread(args$sex_info, header = TRUE,
+                  keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
+geno_fam$IID <- as.character(geno_fam$IID)
+
+gen_filter <- fread(args$geno_filter, header = FALSE,
+                    keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
+gen_filter$V2 <- as.character(gen_filter$V2)
 gte <- gte[gte$V1 %in% geno_fam$IID, ]
 gte <- gte[gte$V1 %in% gen_filter$V2, ]
 
@@ -439,9 +453,10 @@ mds$`MDS coordinate 2` < mean_mds2 - args$sd * sd_mds2, ]$outlier <- "yes"
 }
 
 # Add sex info
-sex <- fread(args$sex_info, header = FALSE)
+sex <- fread(args$sex_info, header = FALSE, keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
 sex <- sex[, c(2, 4), with = FALSE]
 colnames(sex) <- c("Sample", "Sex")
+sex$Sample <- as.character(sex$Sample)
 mds <- merge(mds, sex, by = "Sample")
 
 p <- ggplot(mds, aes(x = `MDS coordinate 1`, `MDS coordinate 2`, colour = outlier, shape = Sex)) +
@@ -469,7 +484,7 @@ and_pp <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotyp
 
 # Visualise the expression of X-specific and Y-specific genes
 # Read in emp probe mapping file with chr information
-emp_probe_mapping <- fread(args$emp_probe_mapping)
+emp_probe_mapping <- fread(args$emp_probe_mapping, keepLeadingZeros = TRUE)
 
 xist <- and_pp[rownames(and_pp) == "ENSG00000229807", ]
 y_genes <- emp_probe_mapping[emp_probe_mapping$chromosome_name == "Y", ]$Ensembl

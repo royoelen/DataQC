@@ -20,7 +20,7 @@ def helpMessage() {
       --cohort_name                 Name of the cohort.
       --genome_build                Genome build of the cohort. Either hg19, GRCh37, hg38 or GRCh38.
       --bfile                       Path to unimputed genotype files in plink bed/bim/fam format (without extensions bed/bim/fam).
-      --vcf                         Path to a vcf file
+      --vcf                         Path to a vcf file.
       --fam                         Path to a plink fam file. This is especially helpful for sex annotation of samples in VCF files.
       --expfile                     Path to the un-preprocessed gene expression matrix (genes/probes in the rows, samples in the columns). Can be from RNA-seq experiment or from array. NB! For Affymetrix arrays (AffyU219, AffyExon) we assume that standard preprocessing and normalisation is already done.
       --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. Can be used to filter samples from the analysis.
@@ -30,13 +30,16 @@ def helpMessage() {
       --GenSdThresh                 Threshold for declaring samples outliers based on genetic PC1 and PC2. Defaults to 3 SD from the mean of PC1 and PC2 but should be adjusted according to visual inspection.
       --ExpSdThresh                 Standard deviation threshold for excluding gene expression outliers. By default, samples away by 3 SDs from the mean of PC1 are removed.
       --ContaminationArea           Area that marks likely contaminated samples based on sex chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function.
-      --gen_qc_steps                Either generic, array-based, QC or including also WGS specific QC (only valid with VCF datasets). 'Array' (default) or 'WGS' (Generic + WGS qc).)
+      --gen_qc_steps                Either generic, array-based, QC or including also WGS specific QC (only valid with VCF datasets). 'Array' (default) or 'WGS' (Generic + WGS qc).
 
     Optional arguments
       --InclusionList               File with sample IDs to restrict to the analysis. Useful for keeping in the inclusion list of the samples. By default, all samples are kept.
       --ExclusionList               File with sample IDs to remove from the analysis. Useful for removing the ancestry outliers or restricting the genotype data to one superpopulation. Samples are also removed from the inclusion list. By default, all samples are kept.
       --AdditionalCovariates        File with additional cohort-specific covariates. First column name SampleID is the sample ID. Following columns are named by covariates.  Categorical covariates need to be text-based (e.g. batch1, batch2, etc). 
       --preselected_sex_check_vars  Path to a plink ranges file that defines which variants to use for the check-sex command. Use this when the automatic selection does not yield satisfactory results.
+      --plink_executable            Path to plink executable. By default this is automatically downloaded from internet. Use this setting when you have to work offline.
+      --plink2_executable           Path to plink2 executable. By default this is automatically downloaded from internet. Use this setting when you have to work offline.
+      --reference_1000g_folder      Path to 1000g reference folder. By default this is automatically downloaded from internet. Use this setting when you have to work offline.
 
     """.stripIndent()
 }
@@ -58,6 +61,10 @@ def genotyping_platforms_accepted = ['Array', 'WGS']
 params.vcf = ''
 params.bfile = ''
 params.fam = ''
+
+params.plink_executable = ''
+params.plink2_executable = ''
+params.reference_1000g_folder = ''
 
 if (params.vcf != '') {
 
@@ -114,6 +121,32 @@ Channel
     .ifEmpty { exit 1, "Input report not found!" }
     .set { report_ch }
 
+if (params.plink_executable != '') {
+  Channel
+    .fromPath(params.plink_executable)
+    .ifEmpty('EMPTY')
+    .set { plink_executable_ch }
+} else {
+  Channel.empty().set {plink_executable_ch}
+}
+
+if (params.plink2_executable != '') {
+  Channel
+    .fromPath(params.plink2_executable)
+    .ifEmpty('EMPTY')
+    .set { plink2_executable_ch }
+} else {
+  Channel.empty().set {plink2_executable_ch}
+}
+if (params.reference_1000g_folder != '') {
+  Channel
+    .fromPath(params.reference_1000g_folder)
+    .ifEmpty('EMPTY')
+    .set { reference_1000g_ch }
+} else {
+  Channel.empty().set {reference_1000g_ch}
+}
+
 params.GenOutThresh = 0.4
 params.GenSdThresh = 3
 params.ExpSdThresh = 4
@@ -125,7 +158,7 @@ params.genome_build = 'hg19'
 
 // By default define random non-colliding file names in data folder. If default, these are ignored by corresponding script.
 params.InclusionList = "$baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt"
-params.ExclusionList = "$baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt"
+params.ExclusionList = "$baseDir/data/EmpiricalProbeMatching_AffyU219.txt"
 params.AdditionalCovariates = "$baseDir/data/1000G_pops.txt"
 
 params.preselected_sex_check_vars = ''
@@ -220,12 +253,32 @@ process SplitVcf {
       """
 }
 
+process ExpandVcfChannel {
+    tag {ExpandVcfChannel}
+
+    input:
+      file(input_vcf) from ( vcf_contig_count.value > 1 ? vcffile_ch : Channel.empty())
+
+    output:
+      tuple env(chr), file(input_vcf) into ext_vcf_ch
+
+    when:
+      vcf_contig_count.value > 1
+
+    script:
+      """
+      bcftools index ${input_vcf}
+      tabix -l ${input_vcf} > chr.txt
+      chr=`cat chr.txt | tr -d '\n'`
+      """      
+}
+
 process WgsNorm {
 
     tag {WgsNorm}
 
     input:
-      tuple val(chr), file(input_vcf) from split_vcf
+      tuple val(chr), file(input_vcf) from ( vcf_contig_count.value == 1 ? split_vcf : ext_vcf_ch )
 
     output:
       tuple val(chr), file("norm.vcf.gz") into vcf_normalised
@@ -234,6 +287,7 @@ process WgsNorm {
 
     script:
       """
+      echo "chromosome ${chr}"
       bcftools norm -m -any ${input_vcf} -Oz -o "norm.vcf.gz"
       """
 }
@@ -296,7 +350,7 @@ process VcfToPlink {
     script:
       """
       # Make plink file
-      plink2 --vcf ${vcf} --split-x 'hg38' --make-bed --out "${chr}_converted_vcf"
+      plink2 --vcf ${vcf} --const-fid --split-x 'hg38' --make-bed --out "${chr}_converted_vcf"
       """
 }
 
@@ -375,6 +429,9 @@ process GenotypeQC {
       path ExclusionList from params.ExclusionList
       path InclusionList from params.InclusionList
       val genome_build from params.genome_build
+      file(plink_executable) from plink_executable_ch.ifEmpty { 'EMPTY' }
+      file(plink2_executable) from plink2_executable_ch.ifEmpty { 'EMPTY' }
+      file(reference_1000g_folder) from reference_1000g_ch.ifEmpty { 'EMPTY' }
 
     output:
       path ('outputfolder_gen') into output_ch_genotypes
@@ -384,39 +441,34 @@ process GenotypeQC {
       file 'target.afreq.gz' into target_allele_frequencies
 
     script:
-    if (params.fam == '')
-      """
-      Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
-      --target_bed ${bfile} \
-      --genome_build ${genome_build} \
-      --gen_exp ${gte} \
-      --sample_list $baseDir/data/unrelated_reference_samples_ids.txt \
-      --pops $baseDir/data/1000G_pops.txt \
-      --S_threshold ${s_stat} \
-      --SD_threshold ${sd_thresh} \
-      --inclusion_list "${InclusionList}" \
-      --exclusion_list "${ExclusionList}" \
-      --output outputfolder_gen \
-      --pruned_variants_sex_check "${optional_pruned_variants_sex_check}" \
-      --liftover_path $baseDir/bin/liftOver
-      """
+    if (params.reference_1000g_folder == '')
+      reference_1000g_prefix_arg = "--ref_1000g data/1000G_phase3_common_norel"
     else
-      """
-      Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
-      --target_bed ${bfile} \
-      --fam ${fam_annot} \
-      --genome_build ${genome_build} \
-      --gen_exp ${gte} \
-      --sample_list $baseDir/data/unrelated_reference_samples_ids.txt \
-      --pops $baseDir/data/1000G_pops.txt \
-      --S_threshold ${s_stat} \
-      --SD_threshold ${sd_thresh} \
-      --inclusion_list "${InclusionList}" \
-      --exclusion_list "${ExclusionList}" \
-      --output outputfolder_gen \
-      --pruned_variants_sex_check "${optional_pruned_variants_sex_check}" \
-      --liftover_path $baseDir/bin/liftOver
-      """
+      reference_1000g_prefix_arg = "--ref_1000g $reference_1000g_folder/1000G_phase3_common_norel"
+
+    fam_arg = (params.fam != '') ? "--fam $fam_annot" : ""
+    plink_arg = (params.plink_executable != '') ? "--plink_executable $plink_executable" : ""
+    plink2_arg = (params.plink2_executable != '') ? "--plink2_executable $plink2_executable" : ""
+
+    """
+    Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
+    --target_bed ${bfile} \
+    $fam_arg \
+    --genome_build ${genome_build} \
+    --gen_exp ${gte} \
+    --sample_list $baseDir/data/unrelated_reference_samples_ids.txt \
+    --pops $baseDir/data/1000G_pops.txt \
+    --S_threshold ${s_stat} \
+    --SD_threshold ${sd_thresh} \
+    --inclusion_list "${InclusionList}" \
+    --exclusion_list "${ExclusionList}" \
+    --output outputfolder_gen \
+    --pruned_variants_sex_check "${optional_pruned_variants_sex_check}" \
+    --liftover_path $baseDir/bin/liftOver \
+    $plink_arg \
+    $plink2_arg \
+    $reference_1000g_prefix_arg
+    """
     
 }
 
