@@ -159,13 +159,13 @@ RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE){
     gene_variance <- data.frame(gene = rownames(exp), gene_variance = apply(exp, 1, var))
     exp <- exp[!rownames(exp) %in% gene_variance[gene_variance$gene_variance == 0, ]$gene, ]
 
-    # Remove genes with CPM<0.5 in less than 1% of samples
+    # Remove genes with CPM>0.5 in less than 1% of samples
     exp_keep <- DGEList(counts = exp)
     keep <- rowSums(cpm(exp_keep, log = FALSE) > 0.5) >= round(ncol(exp) / 100, 0)
 
     exp <- exp[rownames(exp) %in% names(keep[keep == TRUE]), ]
 
-    message(paste(nrow(exp), "genes has CPM>1 in more than 1% of samples."))
+    message(paste(nrow(exp), "genes has CPM>0.5 in more than 1% of samples."))
 
     if (normalize == TRUE){
     # TMM-normalized counts
