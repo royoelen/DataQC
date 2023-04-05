@@ -126,7 +126,7 @@ illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
     return(exp_n)
 }
 
-RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE){
+RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE, gene_inclusion=NULL){
     colnames(exp)[1] <- "Probe"
 
     exp$Probe <- as.character(exp$Probe)
@@ -161,11 +161,35 @@ RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE){
 
     # Remove genes with CPM<0.5 in less than 1% of samples
     exp_keep <- DGEList(counts = exp)
-    keep <- rowSums(cpm(exp_keep, log = FALSE) > 0.5) >= round(ncol(exp) / 100, 0)
+    n_samples_with_cpm_threshold_passed <- rowSums(cpm(exp_keep, log = FALSE) > 0.5)
+    keep <- n_samples_with_cpm_threshold_passed >= round(ncol(exp) / 100, 0)
+
+    message(paste(sum(keep), "genes has CPM>0.5 in more than 1% of samples."))
+
+    print(gene_inclusion)
+    print(all(!is.null(gene_inclusion)))
+    print(length(gene_inclusion) > 0)
+    if (all(!is.null(gene_inclusion)) && length(gene_inclusion) > 0) {
+      missed_genes <- gene_inclusion[(gene_inclusion %in% names(keep[keep == FALSE]))]
+      print(n_samples_with_cpm_threshold_passed["ENSG00000198692"])
+      print(keep["ENSG00000198692"])
+
+      print((gene_inclusion %in% names(keep[keep == FALSE])))
+
+      if (length(missed_genes) > 0) {
+        warning(sprintf(
+          "Including %d genes that do not pass cpm cutoff. printing number of samples passing cpm cutoff below.",
+          length(missed_genes)))
+
+        print(n_samples_with_cpm_threshold_passed[missed_genes])
+
+      }
+      keep[missed_genes] <- TRUE
+    }
 
     exp <- exp[rownames(exp) %in% names(keep[keep == TRUE]), ]
 
-    message(paste(nrow(exp), "genes has CPM>1 in more than 1% of samples."))
+    message(sprintf("Total number of genes that are included: %d", nrow(exp)))
 
     if (normalize == TRUE){
     # TMM-normalized counts
@@ -253,7 +277,11 @@ exp_summary <- function(x){
     return(gene_summary)
 }
 
-IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c("HT12v3", "HT12v4", "HuRef8", "RNAseq", "AffyU291", "AffyHuEx")) {
+IterativeOutlierDetection <- function(
+  input_exp, sd_threshold = 1,
+  platform = c("HT12v3", "HT12v4", "HuRef8", "RNAseq", "AffyU291", "AffyHuEx"),
+  gene_inclusion = NULL) {
+
   and <- input_exp
   list_ggplots <- list()
   summary_pcs <- list()
@@ -278,7 +306,8 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
       #and_p <- apply(and_p, 1, center_data)
       #and_p <- t(and_p)
     } else if(platform %in% c("RNAseq")){
-      and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+      and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples,
+                                 gene_inclusion=gene_inclusion)
       and_p <- log2(and_p + 0.25)
       #and_p <- apply(and_p, 1, INT_transform)
       #and_p <- t(and_p)
@@ -404,7 +433,17 @@ summary_table <- rbind(summary_table, summary_table_temp)
 
 if (!args$platform %in% c("HT12v3", "HT12v4", "HuRef8", "RNAseq", "AffyU219", "AffyHumanExon")){stop("Platform has to be one of HT12v3, HT12v4, HuRef8, RNAseq, AffyU291, AffyHuEx")}
 
-iterative_outliers <- IterativeOutlierDetection(and, sd_threshold = args$sd, platform = args$platform) 
+# Visualise the expression of X-specific and Y-specific genes
+# Read in emp probe mapping file with chr information
+emp_probe_mapping <- fread(args$emp_probe_mapping, keepLeadingZeros = TRUE)
+
+sex_specific_genes <- c(
+  "ENSG00000229807",
+  emp_probe_mapping[emp_probe_mapping$chromosome_name == "Y", ]$Ensembl)
+
+iterative_outliers <- IterativeOutlierDetection(
+  and, sd_threshold = args$sd, platform = args$platform,
+  gene_inclusion=sex_specific_genes)
 
 # Keep in the original data only non-outlier samples
 exp_non_outliers <- colnames(iterative_outliers$exp_mat)
@@ -481,10 +520,6 @@ and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genot
 } else if (args$platform %in% c("AffyU219", "AffyHumanExon")){
 and_pp <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
 }
-
-# Visualise the expression of X-specific and Y-specific genes
-# Read in emp probe mapping file with chr information
-emp_probe_mapping <- fread(args$emp_probe_mapping, keepLeadingZeros = TRUE)
 
 xist <- and_pp[rownames(and_pp) == "ENSG00000229807", ]
 y_genes <- emp_probe_mapping[emp_probe_mapping$chromosome_name == "Y", ]$Ensembl
