@@ -273,7 +273,7 @@ exp_summary <- function(x){
 }
 
 
-rnaseq_cpm_summary <- function(exp){
+rnaseq_cpm_summary <- function(exp, gte){
   colnames(exp)[1] <- "Probe"
 
   exp$Probe <- as.character(exp$Probe)
@@ -691,7 +691,7 @@ summary_table <- rbind(summary_table, summary_table_temp)
 
 expression_based_sample_swap_out <- ExpressionBasedSampleSwapIdentification(and, summary_table)
 
-sample_non_outliers <- colnames(expression_based_sample_swap_out$and_pp)
+exp_non_outliers <- colnames(expression_based_sample_swap_out$and_pp)
 exp_non_outliers <- gte[gte$V1 %in% exp_non_outliers, ]$V2
 and <- and[, colnames(and) %in% c("Feature", exp_non_outliers), with = FALSE]
 
@@ -701,8 +701,8 @@ summary_table <- expression_based_sample_swap_out$summary_table
 if (args$platform %in% c("HT12v3", "HT12v4", "HuRef8")){
   and_pp <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
 } else if (args$platform %in% c("RNAseq")){
-  gene_cpm_summary <- rnaseq_cpm_summary(and, args$genotype_to_expression_linking, args$genotype_samples)
-  fwrite(gene_cpm_summary, paste0(args$output, "/exp_data_summary/", "cpm_summary.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
+  gene_cpm_summary <- rnaseq_cpm_summary(and, args$genotype_to_expression_linking)
+  fwrite(gene_cpm_summary, paste0(args$output, "/exp_data_summary/", "cpm_summary.txt"), sep = "\t", quote = FALSE, row.names = TRUE)
   and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
 } else if (args$platform %in% c("AffyU219", "AffyHumanExon")){
   and_pp <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
