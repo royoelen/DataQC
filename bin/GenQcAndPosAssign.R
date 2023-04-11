@@ -324,7 +324,7 @@ target_bed <- bed(args$target_bed)
 target_bed$.fam <- read_fam(args$target_bed)
 
 ## Calculate AFs for target data
-system(paste0(PLINK2, " --bfile ", str_replace(args$target_bed, "\\..*", ""), " --threads 4 --freq 'cols=+pos' --out target"))
+system(paste0(PLINK2, " --bfile ", bed_simplepath, " --threads 4 --freq 'cols=+pos' --out target"))
 system("gzip target.afreq --force")
 
 # eQTL samples

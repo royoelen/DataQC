@@ -160,21 +160,16 @@ RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE, gene_inclusion=NU
     exp <- exp[!rownames(exp) %in% gene_variance[gene_variance$gene_variance == 0, ]$gene, ]
 
     # Remove genes with CPM<0.5 in less than 1% of samples
+    print(str(exp))
     exp_keep <- DGEList(counts = exp)
+    exp_keep <- calcNormFactors(exp_keep)
     n_samples_with_cpm_threshold_passed <- rowSums(cpm(exp_keep, log = FALSE) > 0.5)
     keep <- n_samples_with_cpm_threshold_passed >= round(ncol(exp) / 100, 0)
 
     message(paste(sum(keep), "genes has CPM>0.5 in more than 1% of samples."))
 
-    print(gene_inclusion)
-    print(all(!is.null(gene_inclusion)))
-    print(length(gene_inclusion) > 0)
     if (all(!is.null(gene_inclusion)) && length(gene_inclusion) > 0) {
       missed_genes <- gene_inclusion[(gene_inclusion %in% names(keep[keep == FALSE]))]
-      print(n_samples_with_cpm_threshold_passed["ENSG00000198692"])
-      print(keep["ENSG00000198692"])
-
-      print((gene_inclusion %in% names(keep[keep == FALSE])))
 
       if (length(missed_genes) > 0) {
         warning(sprintf(
@@ -516,7 +511,7 @@ summary_table <- rbind(summary_table, summary_table_temp)
 if (args$platform %in% c("HT12v3", "HT12v4", "HuRef8")){
 and_pp <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
 } else if (args$platform %in% c("RNAseq")){
-and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, gene_inclusion=sex_specific_genes)
 } else if (args$platform %in% c("AffyU219", "AffyHumanExon")){
 and_pp <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
 }
