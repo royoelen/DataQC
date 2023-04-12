@@ -162,7 +162,6 @@ RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE, gene_inclusion=NU
     # Remove genes with CPM<0.5 in less than 1% of samples
     print(str(exp))
     exp_keep <- DGEList(counts = exp)
-    exp_keep <- calcNormFactors(exp_keep)
     n_samples_with_cpm_threshold_passed <- rowSums(cpm(exp_keep, log = FALSE) > 0.5)
     keep <- n_samples_with_cpm_threshold_passed >= round(ncol(exp) / 100, 0)
 
