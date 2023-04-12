@@ -707,7 +707,7 @@ if (args$platform %in% c("HT12v3", "HT12v4", "HuRef8")){
   and_pp <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
 }
 
-summary_table_temp <- data.table(Stage = "Samples after filtering genes (CPM>0.5 in >= 1% of samples)", Nr_of_features = nrow(and_pp), Nr_of_samples = ncol(and_pp))
+summary_table_temp <- data.table(Stage = "After filtering genes (CPM>0.5 in >= 1% of samples)", Nr_of_features = nrow(and_pp), Nr_of_samples = ncol(and_pp))
 summary_table <- rbind(summary_table, summary_table_temp)
 
 # Apply inverse normal transformation to normalised data.
