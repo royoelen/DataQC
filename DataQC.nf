@@ -609,6 +609,7 @@ process RenderReport {
     R -e 'library(rmarkdown);rmarkdown::render("notebook.Rmd", "html_document", 
     output_file = "Report_DataQc_${params.cohort_name}.html", 
     params = list(
+    dataqc_version = "${workflow.manifest.version}",
     dataset_name = "${params.cohort_name}", 
     platform = "${exp_platform}", 
     N = "${output_exp}/exp_data_QCd/exp_data_preprocessed.txt",
