@@ -41,7 +41,8 @@ library(knitr)
 library(ggplot2)
 library(stringr)
 
-cov <- fread("CovariatePCs.txt", keepLeadingZeros = TRUE)
+cov <- fread("CovariatePCs.txt", keepLeadingZeros = TRUE, colClasses = list(character = c(1)))
+nr_add_cov <- 0
 ```
 
 `DataQC` pipeline has prepared `r ncol(cov) - 1` covariates: 10 first genetic PCs`r if (ncol(cov) > 111){ab <- ','}else{ab <- ' and'}; ab` 100 first expression PCs`r if (ncol(cov)> 111){outp <- paste0(' and ', ncol(cov) - 111, ' additional covariate(s).')} else {outp <- '.'}; outp`
@@ -54,6 +55,8 @@ colnames(cov_specific) <- c("SampleID", "covariate", "value")
 cov_specific <- cov_specific[!(str_detect(cov_specific$covariate, "GenPC") | str_detect(cov_specific$covariate, "ExpPC")), ]
 
 cov_specific$covariate <- as.character(cov_specific$covariate)
+warning("COV SPECIFIC!!!")
+warning(cov_specific)
 nr_add_cov <- length(unique(cov_specific$covariate))
 ```
 

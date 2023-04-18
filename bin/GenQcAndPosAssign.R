@@ -324,7 +324,7 @@ target_bed <- bed(args$target_bed)
 target_bed$.fam <- read_fam(args$target_bed)
 
 ## Calculate AFs for target data
-system(paste0(PLINK2, " --bfile ", str_replace(args$target_bed, "\\..*", ""), " --threads 4 --freq 'cols=+pos' --out target"))
+system(paste0(PLINK2, " --bfile ", bed_simplepath, " --threads 4 --freq 'cols=+pos' --out target"))
 system("gzip target.afreq --force")
 
 # eQTL samples
@@ -548,6 +548,7 @@ if (23 %in% sex_check_data_set_chromosomes) {
   ## Pruning
   system(paste0(PLINK2, " --bfile ", bed_simplepath, "_split",
                 " --rm-dup 'exclude-mismatch' --indep-pairwise 20000 200 0.2 --out check_sex_x --threads 4"))
+
   ## Sex check
   system(paste0(PLINK, " --bfile ", bed_simplepath, "_split --extract check_sex_x.prune.in --check-sex --threads 4"))
 
@@ -887,10 +888,12 @@ if (length(related_individuals) > 0) {
     # Get the vertex with the least amount of degrees (edges)
     least_vertex_samples <- names(degrees_named)[min(degrees_named) == degrees_named]
 
-    # Prioritize vertexes which are in genotype-to-expression file
+    # Prioritize vertices which are in genotype-to-expression file
     if (length(least_vertex_samples[least_vertex_samples %in% gte$V1]) > 0){
-      curr_vertex <- least_vertex_samples[least_vertex_samples %in% gte$V1][1] # if there are multiple related sample IDs from GTE, then take just first 
+      # if there are multiple related sample IDs from GTE, then take just first
+      curr_vertex <- least_vertex_samples[least_vertex_samples %in% gte$V1][1]
     } else {
+      # if there are multiple related sample IDs (not in GTEs), then take just first
       curr_vertex <- least_vertex_samples[1]
     }
 

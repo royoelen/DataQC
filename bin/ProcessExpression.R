@@ -126,7 +126,7 @@ illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
     return(exp_n)
 }
 
-RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE){
+RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE, gene_inclusion=NULL){
     colnames(exp)[1] <- "Probe"
 
     exp$Probe <- as.character(exp$Probe)
@@ -161,11 +161,28 @@ RNAseq_preprocess <- function(exp, gte, gen, normalize = TRUE){
 
     # Remove genes with CPM>0.5 in less than 1% of samples
     exp_keep <- DGEList(counts = exp)
-    keep <- rowSums(cpm(exp_keep, log = FALSE) > 0.5) >= round(ncol(exp) / 100, 0)
+    n_samples_with_cpm_threshold_passed <- rowSums(cpm(exp_keep, log = FALSE) > 0.5)
+    keep <- n_samples_with_cpm_threshold_passed >= round(ncol(exp) / 100, 0)
+
+    message(paste(sum(keep), "genes has CPM>0.5 in at least 1% of samples."))
+
+    if (all(!is.null(gene_inclusion)) && length(gene_inclusion) > 0) {
+      missed_genes <- gene_inclusion[(gene_inclusion %in% names(keep[keep == FALSE]))]
+
+      if (length(missed_genes) > 0) {
+        warning(sprintf(
+          "Including %d genes that do not pass cpm cutoff. printing number of samples passing cpm cutoff below.",
+          length(missed_genes)))
+
+        print(n_samples_with_cpm_threshold_passed[missed_genes])
+
+      }
+      keep[missed_genes] <- TRUE
+    }
 
     exp <- exp[rownames(exp) %in% names(keep[keep == TRUE]), ]
 
-    message(paste(nrow(exp), "genes has CPM>0.5 in more than 1% of samples."))
+    message(sprintf("Total number of genes that are included: %d", nrow(exp)))
 
     if (normalize == TRUE){
     # TMM-normalized counts
@@ -253,7 +270,62 @@ exp_summary <- function(x){
     return(gene_summary)
 }
 
-IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c("HT12v3", "HT12v4", "HuRef8", "RNAseq", "AffyU291", "AffyHuEx")) {
+
+rnaseq_cpm_summary <- function(exp, gte){
+  colnames(exp)[1] <- "Probe"
+
+  exp$Probe <- as.character(exp$Probe)
+
+  exp <- as.data.frame(exp)
+  rownames(exp) <- exp[, 1]
+  exp <- exp[, -1]
+  exp <- abs(as.matrix(exp))
+
+  # Remove samples which are not in the gte or in genotype data
+  gte <- fread(args$genotype_to_expression_linking, header = FALSE, colClasses = "character")
+  gte$V1 <- as.character(gte$V1)
+  gte$V2 <- as.character(gte$V2)
+
+  geno_fam <- fread(args$sex_info, header = TRUE, keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
+  gte <- gte[gte$V1 %in% geno_fam$IID,]
+  gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
+
+  message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
+
+  exp <- exp[, colnames(exp) %in% gte$V2]
+  exp <- exp[, base::order(colnames(exp))]
+  gte <- gte[base::order(gte$V2), ]
+
+  if(!all(colnames(exp) == gte$V2)){stop("Something went wrong in matching genotype and expression IDs. Please debug!")}
+
+  colnames(exp) <- gte$V1
+
+  # Remove genes with no variance
+  gene_variance <- data.frame(gene = rownames(exp), gene_variance = apply(exp, 1, var))
+  exp <- exp[!rownames(exp) %in% gene_variance[gene_variance$gene_variance == 0, ]$gene, ]
+
+  # Remove genes with CPM<0.5 in less than 1% of samples
+  exp_keep <- DGEList(counts = exp)
+  n_samples_with_cpm_threshold_passed <- rowSums(cpm(exp_keep, log = FALSE) > 0.5)
+  exp_keep <- calcNormFactors(exp_keep)
+  n_samples_with_cpm_threshold_passed_normalized <- rowSums(cpm(exp_keep, log = FALSE) > 0.5)
+  threshold <- round(ncol(exp) / 100, 0)
+
+  genes_cpm_summary <-
+    data.frame(n_samples_with_cpm_threshold_passed=n_samples_with_cpm_threshold_passed,
+               n_samples_with_cpm_threshold_passed_normalized=n_samples_with_cpm_threshold_passed_normalized)
+
+  genes_cpm_summary$n_samples_threshold <- threshold
+
+  return(genes_cpm_summary)
+}
+
+
+IterativeOutlierDetection <- function(
+  input_exp, sd_threshold = 1,
+  platform = c("HT12v3", "HT12v4", "HuRef8", "RNAseq", "AffyU291", "AffyHuEx"),
+  gene_inclusion = NULL) {
+
   and <- input_exp
   list_ggplots <- list()
   summary_pcs <- list()
@@ -278,7 +350,8 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
       #and_p <- apply(and_p, 1, center_data)
       #and_p <- t(and_p)
     } else if(platform %in% c("RNAseq")){
-      and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+      and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples,
+                                 gene_inclusion=gene_inclusion)
       and_p <- log2(and_p + 0.25)
       #and_p <- apply(and_p, 1, INT_transform)
       #and_p <- t(and_p)
@@ -366,6 +439,146 @@ IterativeOutlierDetection <- function(input_exp, sd_threshold = 1, platform = c(
   return(list(exp_mat = and_p, plots = list_ggplots, summary_pcs = summary_pcs, PCs_first = PCs_it1))
 }
 
+ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
+  # Visualise the expression of X-specific and Y-specific genes
+  # Read in emp probe mapping file with chr information
+  emp_probe_mapping <- fread(args$emp_probe_mapping, keepLeadingZeros = TRUE)
+
+  sex_specific_genes <- c(
+    "ENSG00000229807",
+    emp_probe_mapping[emp_probe_mapping$chromosome_name == "Y", ]$Ensembl)
+
+  # Final re-process, re-calculate PCs, re-visualise and write out
+  if (args$platform %in% c("HT12v3", "HT12v4", "HuRef8")){
+    and_pp <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+  } else if (args$platform %in% c("RNAseq")){
+    and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, gene_inclusion=sex_specific_genes)
+  } else if (args$platform %in% c("AffyU219", "AffyHumanExon")){
+    and_pp <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+  }
+
+  xist <- and_pp[rownames(and_pp) == "ENSG00000229807", ]
+  y_genes <- emp_probe_mapping[emp_probe_mapping$chromosome_name == "Y", ]$Ensembl
+  y_genes <- and_pp[rownames(and_pp) %in% y_genes, ]
+
+  nr_of_y_genes <- nrow(y_genes)
+
+  if (nrow(y_genes) > 0){
+
+    y_mean <- apply(y_genes, 2, mean)
+    min_y_mean <- min(y_mean)
+
+    message(print(min_y_mean))
+
+    if (length(xist) == 0){
+      message("XIST not detected, plotting the mean of X chr genes instead!")
+      xist <- and_pp[rownames(and_pp) %in% emp_probe_mapping[emp_probe_mapping$chromosome_name == "X", ]$Ensembl, ]
+      xist_mean <- apply(xist, 2, mean)
+      min_xist <- min(xist_mean)
+      nr_of_x_genes <- nrow(xist)
+      y_genes <- data.frame(sample = colnames(y_genes), xist = xist_mean - min_xist, y_genes = y_mean - min_y_mean)
+      xist_missing <- TRUE
+    } else {
+      min_xist <- min(xist)
+      y_genes <- data.frame(sample = colnames(y_genes), xist = xist - min_xist, y_genes = y_mean - min_y_mean)
+      xist_missing <- FALSE
+    }
+
+    geno_fam_f <- geno_fam[, c(2, 4), with = FALSE]
+    colnames(geno_fam_f) <- c("sample", "Sex")
+    geno_fam_f$Sex <- as.character(geno_fam_f$Sex)
+
+    y_genes <- merge(y_genes, geno_fam_f, by = "sample")
+    max_exp <- max(y_genes$y_genes, y_genes$xist)
+
+    y_genes$expressionSex <- case_when(
+      y_genes$y_genes > y_genes$xist ~ 1,
+      y_genes$y_genes < y_genes$xist ~ 2
+    )
+
+    y_genes$mismatch <- case_when(
+      y_genes$Sex == 0 ~ "unknown",
+      y_genes$expressionSex == y_genes$Sex ~ "no",
+      y_genes$expressionSex != y_genes$Sex ~ "yes"
+    )
+
+    x_expression_median <- median(y_genes[y_genes$Sex == 1 & y_genes$expressionSex == 1, "xist"])
+    y_expression_median <- median(y_genes[y_genes$Sex == 2 & y_genes$expressionSex == 2, "y_genes"])
+
+    lower_slope <- tan((45 - args$contamination_area / 2) / 180*pi)
+    upper_slope <- tan((45 + args$contamination_area / 2) / 180*pi)
+
+    y_genes$contaminated <- case_when(
+      (y_genes$y_genes > ((y_genes$xist - x_expression_median) * lower_slope + y_expression_median)
+        & y_genes$y_genes < ((y_genes$xist - x_expression_median) * upper_slope + y_expression_median)) ~ "yes",
+      TRUE ~ "no"
+    )
+
+    y_genes$status <- case_when(
+      y_genes$contaminated == "yes" & y_genes$mismatch == "yes" ~ "Contaminated and\nsex mismatch",
+      y_genes$contaminated == "yes" ~ "Likely contaminated",
+      y_genes$mismatch == "yes" ~ "Sex mismatch",
+      TRUE ~ "Passed"
+    )
+
+    exclusion_zone <- tibble(x = c(x_expression_median, max_exp)) %>%
+      mutate(lower_bound = (x - x_expression_median) * lower_slope + y_expression_median,
+             upper_bound = (x - x_expression_median) * upper_slope + y_expression_median)
+
+    if (xist_missing == FALSE){
+      base_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
+        geom_ribbon(alpha = 0.2) +
+        geom_segment(aes(x = x_expression_median, y = y_expression_median, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
+        geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
+        scale_colour_manual(
+          values = alpha(c("Passed" = "black",
+                           "Likely contaminated" = "red",
+                           "Sex mismatch" = "#d79393",
+                           "Contaminated and\nsex mismatch" = "firebrick"),
+                         0.5),
+          name = "Passed checks") +
+        coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
+        theme_bw() + ylab(paste0("mean of Y genes - min(mean of Y genes)\n(n=", nr_of_y_genes, ")")) + xlab("XIST - min(XIST)")
+    } else {
+      base_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
+        geom_ribbon(alpha = 0.2) +
+        geom_segment(aes(x = x_expression_median, y = y_expression_median, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
+        geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
+        scale_colour_manual(
+          values = alpha(c("Passed" = "black",
+                           "Likely contaminated" = "red",
+                           "Sex mismatch" = "#d79393",
+                           "Contaminated and\nsex mismatch" = "firebrick"),
+                         0.5),
+          name = "Passed checks") +
+        coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
+        theme_bw() + ylab(paste0("mean of Y genes - min(mean of Y genes)\n(n=", nr_of_y_genes, ")")) + xlab(paste0("mean of X genes - min(mean of X genes)\n(n=", nr_of_x_genes, ")"))
+    }
+
+    if (xist_missing == FALSE){
+      ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
+      ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST.pdf"), height = 5, width = 7, units = "in", dpi = 300)
+    } else if (xist_missing == TRUE){
+      ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
+      ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.pdf"), height = 5, width = 7, units = "in", dpi = 300)
+    }
+    # Filter out potential sex mismatches
+    and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$mismatch != "yes", ]$sample]
+
+    summary_table_temp <- data.table(Stage = "Samples after removal of sex errors", Nr_of_features = nrow(and_pp), Nr_of_samples = ncol(and_pp))
+    summary_table <- rbind(summary_table, summary_table_temp)
+
+    and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$contaminated != "yes", ]$sample]
+
+    summary_table_temp <- data.table(Stage = "Samples after removal of likely contaminated samples", Nr_of_features = nrow(and_pp), Nr_of_samples = ncol(and_pp))
+    summary_table <- rbind(summary_table, summary_table_temp)
+
+  } else {
+    message("There is no Y chromosome genes in the expression data, omitting sex check.")
+  }
+  return(list(and_pp=and_pp, summary_table=summary_table))
+}
+
 ############
 # Analysis #
 ############
@@ -404,7 +617,8 @@ summary_table <- rbind(summary_table, summary_table_temp)
 
 if (!args$platform %in% c("HT12v3", "HT12v4", "HuRef8", "RNAseq", "AffyU219", "AffyHumanExon")){stop("Platform has to be one of HT12v3, HT12v4, HuRef8, RNAseq, AffyU291, AffyHuEx")}
 
-iterative_outliers <- IterativeOutlierDetection(and, sd_threshold = args$sd, platform = args$platform) 
+iterative_outliers <- IterativeOutlierDetection(
+  and, sd_threshold = args$sd, platform = args$platform)
 
 # Keep in the original data only non-outlier samples
 exp_non_outliers <- colnames(iterative_outliers$exp_mat)
@@ -421,7 +635,7 @@ if (args$platform %in% c("HT12v3", "HT12v4", "HuRef8")){
   and_p <- log2(and_p)
 }
 if (args$platform %in% c("RNAseq")){
-  and_p <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+  and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
   and_p <- log2(and_p + 0.25)
 }
 if (args$platform %in% c("AffyU219", "AffyHumanExon")){
@@ -473,138 +687,27 @@ and <- and[, colnames(and) %in% c("Feature", exp_non_outliers), with = FALSE]
 summary_table_temp <- data.table(Stage = "After removal of all expression outliers (MDS)", Nr_of_features = nrow(and), Nr_of_samples = ncol(and) - 1)
 summary_table <- rbind(summary_table, summary_table_temp)
 
+expression_based_sample_swap_out <- ExpressionBasedSampleSwapIdentification(and, summary_table)
+
+exp_non_outliers <- colnames(expression_based_sample_swap_out$and_pp)
+exp_non_outliers <- gte[gte$V1 %in% exp_non_outliers, ]$V2
+and <- and[, colnames(and) %in% c("Feature", exp_non_outliers), with = FALSE]
+
+summary_table <- expression_based_sample_swap_out$summary_table
+
 # Final re-process, re-calculate PCs, re-visualise and write out
 if (args$platform %in% c("HT12v3", "HT12v4", "HuRef8")){
-and_pp <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+  and_pp <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
 } else if (args$platform %in% c("RNAseq")){
-and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+  gene_cpm_summary <- rnaseq_cpm_summary(and, args$genotype_to_expression_linking)
+  fwrite(gene_cpm_summary, paste0(args$output, "/exp_data_summary/", "cpm_summary.txt"), sep = "\t", quote = FALSE, row.names = TRUE)
+  and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
 } else if (args$platform %in% c("AffyU219", "AffyHumanExon")){
-and_pp <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+  and_pp <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
 }
 
-# Visualise the expression of X-specific and Y-specific genes
-# Read in emp probe mapping file with chr information
-emp_probe_mapping <- fread(args$emp_probe_mapping, keepLeadingZeros = TRUE)
-
-xist <- and_pp[rownames(and_pp) == "ENSG00000229807", ]
-y_genes <- emp_probe_mapping[emp_probe_mapping$chromosome_name == "Y", ]$Ensembl
-y_genes <- and_pp[rownames(and_pp) %in% y_genes, ]
-
-nr_of_y_genes <- nrow(y_genes)
-
-if (nrow(y_genes) > 0){
-
-  y_mean <- apply(y_genes, 2, mean)
-  min_y_mean <- min(y_mean)
-
-  message(print(min_y_mean))
-  
-  if (length(xist) == 0){
-    message("XIST not detected, plotting the mean of X chr genes instead!")
-    xist <- and_pp[rownames(and_pp) %in% emp_probe_mapping[emp_probe_mapping$chromosome_name == "X", ]$Ensembl, ]
-    xist_mean <- apply(xist, 2, mean)
-    min_xist <- min(xist_mean)
-    nr_of_x_genes <- nrow(xist)
-    y_genes <- data.frame(sample = colnames(y_genes), xist = xist_mean - min_xist, y_genes = y_mean - min_y_mean)
-    xist_missing <- TRUE
-    } else {
-    min_xist <- min(xist)
-    y_genes <- data.frame(sample = colnames(y_genes), xist = xist - min_xist, y_genes = y_mean - min_y_mean)
-    xist_missing <- FALSE
-    }
-
-  geno_fam_f <- geno_fam[, c(2, 4), with = FALSE]
-  colnames(geno_fam_f) <- c("sample", "Sex")
-  geno_fam_f$Sex <- as.character(geno_fam_f$Sex)
-
-  y_genes <- merge(y_genes, geno_fam_f, by = "sample")
-  max_exp <- max(y_genes$y_genes, y_genes$xist)
-
-  y_genes$expressionSex <- case_when(
-    y_genes$y_genes > y_genes$xist ~ 1,
-    y_genes$y_genes < y_genes$xist ~ 2
-  )
-
-  y_genes$mismatch <- case_when(
-    y_genes$Sex == 0 ~ "unknown",
-    y_genes$expressionSex == y_genes$Sex ~ "no",
-    y_genes$expressionSex != y_genes$Sex ~ "yes"
-  )
-
-  x_expression_median <- median(y_genes[y_genes$Sex == 1 & y_genes$expressionSex == 1, "xist"])
-  y_expression_median <- median(y_genes[y_genes$Sex == 2 & y_genes$expressionSex == 2, "y_genes"])
-
-  lower_slope <- tan((45 - args$contamination_area / 2) / 180*pi)
-  upper_slope <- tan((45 + args$contamination_area / 2) / 180*pi)
-
-  y_genes$contaminated <- case_when(
-    (y_genes$y_genes > ((y_genes$xist - x_expression_median) * lower_slope + y_expression_median)
-      & y_genes$y_genes < ((y_genes$xist - x_expression_median) * upper_slope + y_expression_median)) ~ "yes",
-    TRUE ~ "no"
-  )
-
-  y_genes$status <- case_when(
-    y_genes$contaminated == "yes" & y_genes$mismatch == "yes" ~ "Contaminated and\nsex mismatch",
-    y_genes$contaminated == "yes" ~ "Likely contaminated",
-    y_genes$mismatch == "yes" ~ "Sex mismatch",
-    TRUE ~ "Passed"
-  )
-
-  exclusion_zone <- tibble(x = c(x_expression_median, max_exp)) %>%
-    mutate(lower_bound = (x - x_expression_median) * lower_slope + y_expression_median,
-          upper_bound = (x - x_expression_median) * upper_slope + y_expression_median)
-
-  if (xist_missing == FALSE){
-  base_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
-    geom_ribbon(alpha = 0.2) +
-    geom_segment(aes(x = x_expression_median, y = y_expression_median, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
-    geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
-    scale_colour_manual(
-      values = alpha(c("Passed" = "black", 
-      "Likely contaminated" = "red",
-      "Sex mismatch" = "#d79393", 
-      "Contaminated and\nsex mismatch" = "firebrick"), 
-      0.5),
-      name = "Passed checks") +
-    coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
-    theme_bw() + ylab(paste0("mean of Y genes - min(mean of Y genes)\n(n=", nr_of_y_genes, ")")) + xlab("XIST - min(XIST)")
-  } else {
-    base_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
-    geom_ribbon(alpha = 0.2) +
-    geom_segment(aes(x = x_expression_median, y = y_expression_median, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
-    geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
-    scale_colour_manual(
-      values = alpha(c("Passed" = "black", 
-      "Likely contaminated" = "red",
-      "Sex mismatch" = "#d79393", 
-      "Contaminated and\nsex mismatch" = "firebrick"), 
-      0.5),
-      name = "Passed checks") +
-    coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
-    theme_bw() + ylab(paste0("mean of Y genes - min(mean of Y genes)\n(n=", nr_of_y_genes, ")")) + xlab(paste0("mean of X genes - min(mean of X genes)\n(n=", nr_of_x_genes, ")"))
-  }
-
-  if (xist_missing == FALSE){
-    ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
-    ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST.pdf"), height = 5, width = 7, units = "in", dpi = 300)
-  } else if (xist_missing == TRUE){
-    ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
-    ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.pdf"), height = 5, width = 7, units = "in", dpi = 300)
-  }
-  # Filter out potential sex mismatches
-  and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$mismatch != "yes", ]$sample]
-
-  summary_table_temp <- data.table(Stage = "Samples after removal of sex errors", Nr_of_features = nrow(and_pp), Nr_of_samples = ncol(and_pp))
-  summary_table <- rbind(summary_table, summary_table_temp)
-
-  and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$contaminated != "yes", ]$sample]
-
-  summary_table_temp <- data.table(Stage = "Samples after removal of likely contaminated samples", Nr_of_features = nrow(and_pp), Nr_of_samples = ncol(and_pp))
-  summary_table <- rbind(summary_table, summary_table_temp)
-
-} else {
-  message("There is no Y chromosome genes in the expression data, omitting sex check.")
-  }
+summary_table_temp <- data.table(Stage = "After filtering genes (CPM>0.5 in >= 1% of samples)", Nr_of_features = nrow(and_pp), Nr_of_samples = ncol(and_pp))
+summary_table <- rbind(summary_table, summary_table_temp)
 
 # Apply inverse normal transformation to normalised data.
 #and_p <- apply(and_p, 1, Z_transform) # No Z-transform as data will be forced to normal distribution anyway
