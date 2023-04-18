@@ -1,6 +1,6 @@
 ---
 title: "Data QC report"
-tags: "DataQC v`r params$dataqc_version`"
+subtitle: "DataQC v`r params$dataqc_version`"
 date: "`r format(Sys.time(), '%d/%m/%y')`"
 output: 
   html_document:
