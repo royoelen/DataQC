@@ -527,6 +527,10 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
       TRUE ~ "Passed"
     )
 
+    y_genes_zoom <- max(y_genes %>% ungroup() %>%
+      filter(contaminated == "yes" | mismatch == "yes") %>%
+      summarise(max_y = max(y_genes), max_x = max(xist)))
+
     exclusion_zone <- tibble(x = c(x_expression_median, max_exp)) %>%
       mutate(lower_bound = (x - x_expression_median) * lower_slope + y_expression_median,
              upper_bound = (x - x_expression_median) * upper_slope + y_expression_median,
@@ -546,6 +550,27 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
           name = "Passed checks") +
         coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
         theme_bw() + ylab(paste0("mean of Y genes - min(mean of Y genes)\n(n=", nr_of_y_genes, ")")) + xlab("XIST - min(XIST)")
+
+      ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
+      ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST.pdf"), height = 5, width = 7, units = "in", dpi = 300)
+
+      zoomed_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
+        geom_ribbon(alpha = 0.2) +
+        geom_line(aes(x = x, y = middle_line), linetype = 2, colour = "blue") +
+        geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
+        scale_colour_manual(
+          values = alpha(c("Passed" = "black",
+                           "Likely contaminated" = "red",
+                           "Sex mismatch" = "#d79393",
+                           "Contaminated and\nsex mismatch" = "firebrick"),
+                         0.5),
+          name = "Passed checks") +
+        coord_cartesian(ylim = c(0, y_genes_zoom), xlim = c(0, y_genes_zoom)) +
+        theme_bw() + ylab(paste0("mean of Y genes - min(mean of Y genes)\n(n=", nr_of_y_genes, ")")) + xlab("XIST - min(XIST)")
+
+      ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST_zoomed.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
+      ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST_zoomed.pdf"), height = 5, width = 7, units = "in", dpi = 300)
+
     } else {
       base_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
         geom_ribbon(alpha = 0.2) +
@@ -560,15 +585,28 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
           name = "Passed checks") +
         coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
         theme_bw() + ylab(paste0("mean of Y genes - min(mean of Y genes)\n(n=", nr_of_y_genes, ")")) + xlab(paste0("mean of X genes - min(mean of X genes)\n(n=", nr_of_x_genes, ")"))
-    }
 
-    if (xist_missing == FALSE){
-      ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
-      ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST.pdf"), height = 5, width = 7, units = "in", dpi = 300)
-    } else if (xist_missing == TRUE){
       ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
       ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes.pdf"), height = 5, width = 7, units = "in", dpi = 300)
+
+      zoomed_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
+        geom_ribbon(alpha = 0.2) +
+        geom_line(aes(x = x, y = middle_line), linetype = 2, colour = "blue") +
+        geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
+        scale_colour_manual(
+          values = alpha(c("Passed" = "black",
+                           "Likely contaminated" = "red",
+                           "Sex mismatch" = "#d79393",
+                           "Contaminated and\nsex mismatch" = "firebrick"),
+                         0.5),
+          name = "Passed checks") +
+        coord_cartesian(ylim = c(0, y_genes_zoom), xlim = c(0, y_genes_zoom)) +
+        theme_bw() + ylab(paste0("mean of Y genes - min(mean of Y genes)\n(n=", nr_of_y_genes, ")")) + xlab("XIST - min(XIST)")
+
+      ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes_zoomed.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
+      ggsave(paste0(args$output, "/exp_plots/SexSpecificGenes_zoomed.pdf"), height = 5, width = 7, units = "in", dpi = 300)
     }
+
     # Filter out potential sex mismatches
     and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$mismatch != "yes", ]$sample]
 
