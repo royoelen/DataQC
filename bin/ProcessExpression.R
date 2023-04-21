@@ -22,7 +22,9 @@ option_list <- list(
     make_option(c("-s", "--sd"), type = "double", default = 4,
     help = "Standard deviation threshold for removing expression samples. By default, samples away 4 SDs from the median of PC1 are removed."),
     make_option(c("-c", "--contamination_area"), type = "double", default = 0.3,
-                help = "Area that marks likely contaminated samples based on sex-chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function."),
+    help = "Area that marks likely contaminated samples based on sex-chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function."),
+    make_option(c("-a", "--expression_balance_angle"), type = "double", default = 45,
+    help = "Angle that is used to discriminate based on expression inferred sex. Increase to make it less steep, decrease to make it steeper"),
     make_option(c("-i", "--sex_info"), type = "character",
     help = "File with sex information. Plink2 --check-sex filtered output."),
     make_option(c("-f", "--geno_filter"), type = "character",
@@ -492,27 +494,30 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
     y_genes <- merge(y_genes, geno_fam_f, by = "sample")
     max_exp <- max(y_genes$y_genes, y_genes$xist)
 
+    x_expression_median <- median(y_genes[y_genes$Sex == 1 & y_genes$expressionSex == 1, "xist"])
+    y_expression_median <- median(y_genes[y_genes$Sex == 2 & y_genes$expressionSex == 2, "y_genes"])
+
+    y_genes$xist_corrected <- y_genes$xist - x_expression_median
+
+    lower_slope <- tan((args$degrees - args$contamination_area / 2) / 180*pi)
+    upper_slope <- tan((args$degrees + args$contamination_area / 2) / 180*pi)
+    middle_slope <- tan(args$degrees / 180*pi)
+
+    y_genes$contaminated <- case_when(
+      (y_genes$y_genes > ((y_genes$xist_corrected) * lower_slope + y_expression_median)
+        & y_genes$y_genes < ((y_genes$xist_corrected) * upper_slope + y_expression_median)) ~ "yes",
+      TRUE ~ "no"
+    )
+
     y_genes$expressionSex <- case_when(
-      y_genes$y_genes > y_genes$xist ~ 1,
-      y_genes$y_genes < y_genes$xist ~ 2
+      (y_genes$y_genes < ((y_genes$xist_corrected) * middle_slope + y_expression_median)) ~ 2,
+      (y_genes$y_genes > ((y_genes$xist_corrected) * middle_slope + y_expression_median)) ~ 1
     )
 
     y_genes$mismatch <- case_when(
       y_genes$Sex == 0 ~ "unknown",
       y_genes$expressionSex == y_genes$Sex ~ "no",
       y_genes$expressionSex != y_genes$Sex ~ "yes"
-    )
-
-    x_expression_median <- median(y_genes[y_genes$Sex == 1 & y_genes$expressionSex == 1, "xist"])
-    y_expression_median <- median(y_genes[y_genes$Sex == 2 & y_genes$expressionSex == 2, "y_genes"])
-
-    lower_slope <- tan((45 - args$contamination_area / 2) / 180*pi)
-    upper_slope <- tan((45 + args$contamination_area / 2) / 180*pi)
-
-    y_genes$contaminated <- case_when(
-      (y_genes$y_genes > ((y_genes$xist - x_expression_median) * lower_slope + y_expression_median)
-        & y_genes$y_genes < ((y_genes$xist - x_expression_median) * upper_slope + y_expression_median)) ~ "yes",
-      TRUE ~ "no"
     )
 
     y_genes$status <- case_when(
@@ -524,12 +529,13 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
 
     exclusion_zone <- tibble(x = c(x_expression_median, max_exp)) %>%
       mutate(lower_bound = (x - x_expression_median) * lower_slope + y_expression_median,
-             upper_bound = (x - x_expression_median) * upper_slope + y_expression_median)
+             upper_bound = (x - x_expression_median) * upper_slope + y_expression_median,
+             middle_line = (x - x_expression_median) * middle_slope + y_expression_median)
 
     if (xist_missing == FALSE){
       base_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
         geom_ribbon(alpha = 0.2) +
-        geom_segment(aes(x = x_expression_median, y = y_expression_median, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
+        geom_line(aes(x = x, y = middle_line), linetype = 2, colour = "blue") +
         geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
         scale_colour_manual(
           values = alpha(c("Passed" = "black",
@@ -543,7 +549,7 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
     } else {
       base_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
         geom_ribbon(alpha = 0.2) +
-        geom_segment(aes(x = x_expression_median, y = y_expression_median, xend = max_exp, yend = max_exp), linetype = 2, colour = "blue") +
+        geom_line(aes(x = x, y = middle_line), linetype = 2, colour = "blue") +
         geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
         scale_colour_manual(
           values = alpha(c("Passed" = "black",
