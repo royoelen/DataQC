@@ -23,7 +23,7 @@ option_list <- list(
     help = "Standard deviation threshold for removing expression samples. By default, samples away 4 SDs from the median of PC1 are removed."),
     make_option(c("-c", "--contamination_area"), type = "double", default = 0.3,
     help = "Area that marks likely contaminated samples based on sex-chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function."),
-    make_option(c("-a", "--expression_balance_angle"), type = "double", default = 45,
+    make_option(c("-a", "--expression_division_angle"), type = "double", default = 45,
     help = "Angle that is used to discriminate based on expression inferred sex. Increase to make it less steep, decrease to make it steeper"),
     make_option(c("-i", "--sex_info"), type = "character",
     help = "File with sex information. Plink2 --check-sex filtered output."),
@@ -499,9 +499,9 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
 
     y_genes$xist_corrected <- y_genes$xist - x_expression_median
 
-    lower_slope <- tan((args$degrees - args$contamination_area / 2) / 180*pi)
-    upper_slope <- tan((args$degrees + args$contamination_area / 2) / 180*pi)
-    middle_slope <- tan(args$degrees / 180*pi)
+    lower_slope <- tan((args$expression_division_angle - args$contamination_area / 2) / 180*pi)
+    upper_slope <- tan((args$expression_division_angle + args$contamination_area / 2) / 180*pi)
+    middle_slope <- tan(args$expression_division_angle / 180*pi)
 
     y_genes$contaminated <- case_when(
       (y_genes$y_genes > ((y_genes$xist_corrected) * lower_slope + y_expression_median)
