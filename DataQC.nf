@@ -487,7 +487,7 @@ process GeneExpressionQC {
       val exp_platform from params.exp_platform
       val sd from params.ExpSdThresh
       val contamination_area from params.ContaminationArea
-      val contamination_slope from params.contaminationSlope
+      val contamination_slope from params.ContaminationSlope
 
     output:
       path ('outputfolder_exp') into output_ch_geneexpression
