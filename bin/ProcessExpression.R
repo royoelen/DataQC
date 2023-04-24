@@ -23,7 +23,7 @@ option_list <- list(
     help = "Standard deviation threshold for removing expression samples. By default, samples away 4 SDs from the median of PC1 are removed."),
     make_option(c("-c", "--contamination_area"), type = "double", default = 0.3,
     help = "Area that marks likely contaminated samples based on sex-chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function."),
-    make_option(c("-a", "--expression_division_angle"), type = "double", default = 45,
+    make_option(c("-a", "--contamination_slope"), type = "double", default = 45,
     help = "Angle that is used to discriminate based on expression inferred sex. Increase to make it less steep, decrease to make it steeper"),
     make_option(c("-i", "--sex_info"), type = "character",
     help = "File with sex information. Plink2 --check-sex filtered output."),
@@ -494,19 +494,19 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
     y_genes <- merge(y_genes, geno_fam_f, by = "sample")
     max_exp <- max(y_genes$y_genes, y_genes$xist)
 
+    lower_slope <- tan((args$expression_division_angle - args$contamination_area / 2) / 180*pi)
+    upper_slope <- tan((args$expression_division_angle + args$contamination_area / 2) / 180*pi)
+    middle_slope <- tan(args$expression_division_angle / 180*pi)
+
     y_genes$expressionSexNaive <- case_when(
-      y_genes$y_genes > y_genes$xist ~ 1,
-      y_genes$y_genes < y_genes$xist ~ 2
+      y_genes$y_genes > y_genes$xist * middle_slope ~ 1,
+      y_genes$y_genes < y_genes$xist * middle_slope ~ 2
     )
 
     x_expression_median <- median(y_genes[y_genes$Sex == 1 & y_genes$expressionSexNaive == 1, "xist"])
     y_expression_median <- median(y_genes[y_genes$Sex == 2 & y_genes$expressionSexNaive == 2, "y_genes"])
 
     y_genes$xist_corrected <- y_genes$xist - x_expression_median
-
-    lower_slope <- tan((args$expression_division_angle - args$contamination_area / 2) / 180*pi)
-    upper_slope <- tan((args$expression_division_angle + args$contamination_area / 2) / 180*pi)
-    middle_slope <- tan(args$expression_division_angle / 180*pi)
 
     y_genes$contaminated <- case_when(
       (y_genes$y_genes > ((y_genes$xist_corrected) * lower_slope + y_expression_median)
@@ -558,6 +558,17 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
 
       ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
       ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST.pdf"), height = 5, width = 7, units = "in", dpi = 300)
+
+      naive_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
+        geom_ribbon(alpha = 0.2) +
+        geom_line(aes(x = x, y = middle_line), linetype = 2, colour = "blue") +
+        geom_point(data = y_genes, inherit.aes = F, aes(col = expressionSexNaive, shape = Sex, x = xist, y = y_genes)) +
+        coord_cartesian(ylim = c(0, y_genes_zoom), xlim = c(0, y_genes_zoom)) +
+        theme_bw() + ylab(paste0("mean of Y genes - min(mean of Y genes)\n(n=", nr_of_y_genes, ")")) + xlab("XIST - min(XIST)")
+
+      ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST_naive.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
+      ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST_naive.pdf"), height = 5, width = 7, units = "in", dpi = 300)
+
 
       zoomed_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
         geom_ribbon(alpha = 0.2) +
