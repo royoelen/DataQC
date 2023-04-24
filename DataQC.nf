@@ -29,7 +29,8 @@ def helpMessage() {
       --GenOutThresh                "Outlierness" score threshold for excluding ethnic outliers. Defaults to 0.4 but it should be adjusted according to visual inspection.
       --GenSdThresh                 Threshold for declaring samples outliers based on genetic PC1 and PC2. Defaults to 3 SD from the mean of PC1 and PC2 but should be adjusted according to visual inspection.
       --ExpSdThresh                 Standard deviation threshold for excluding gene expression outliers. By default, samples away by 3 SDs from the mean of PC1 are removed.
-      --ContaminationArea           Area that marks likely contaminated samples based on sex chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function.
+      --ContaminationSlope          Slope (in degrees) that is used to draw a line separating females and males based on sex-specific genes. Must be between 0 (a completely horizontal line), and 90 (a completely vertical line). 45 by default
+      --ContaminationArea           Area that marks likely contaminated samples based on sex chromosome gene expression. Must be an angle between 0 and 90. The angle represents the total area around the y = x function (45 degrees, or any other slope depending on the --ContaminationSlope setting)
       --gen_qc_steps                Either generic, array-based, QC or including also WGS specific QC (only valid with VCF datasets). 'Array' (default) or 'WGS' (Generic + WGS qc).
 
     Optional arguments
@@ -150,6 +151,7 @@ if (params.reference_1000g_folder != '') {
 params.GenOutThresh = 0.4
 params.GenSdThresh = 3
 params.ExpSdThresh = 4
+params.ContaminationSlope = 45
 params.ContaminationArea = 30
 params.exp_platform = ''
 params.cohort_name = ''
@@ -187,6 +189,7 @@ summary['Genome Build']             = params.genome_build
 summary['S threshold']              = params.GenOutThresh
 summary['Gen SD threshold']         = params.GenSdThresh
 summary['Exp SD threshold']         = params.ExpSdThresh
+summary['Contamination slope']       = params.ContaminationSlope
 summary['Contamination area']       = params.ContaminationArea
 summary['Expression matrix']        = params.expfile
 summary['GTE file']                 = params.gte
@@ -499,6 +502,7 @@ process GeneExpressionQC {
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
       --sd ${sd} \
+      --contamination_slope ${contamination_slope} \
       --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_IlluminaHT12v3.txt \
       --output outputfolder_exp
@@ -511,6 +515,7 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
+      --contamination_slope ${contamination_slope} \
       --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_IlluminaHT12v4.txt \
       --output outputfolder_exp
@@ -523,6 +528,7 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
+      --contamination_slope ${contamination_slope} \
       --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_IlluminaHuRef8.txt \
       --output outputfolder_exp
@@ -535,6 +541,7 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
+      --contamination_slope ${contamination_slope} \
       --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_RNAseq.txt \
       --output outputfolder_exp
@@ -547,6 +554,7 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
+      --contamination_slope ${contamination_slope} \
       --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_AffyU219.txt \
       --output outputfolder_exp
@@ -559,6 +567,7 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
+      --contamination_slope ${contamination_slope} \
       --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt \
       --output outputfolder_exp
