@@ -494,9 +494,9 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
     y_genes <- merge(y_genes, geno_fam_f, by = "sample")
     max_exp <- max(y_genes$y_genes, y_genes$xist)
 
-    lower_slope <- tan((args$expression_division_angle - args$contamination_area / 2) / 180*pi)
-    upper_slope <- tan((args$expression_division_angle + args$contamination_area / 2) / 180*pi)
-    middle_slope <- tan(args$expression_division_angle / 180*pi)
+    lower_slope <- tan((args$contamination_slope - args$contamination_area / 2) / 180*pi)
+    upper_slope <- tan((args$contamination_slope + args$contamination_area / 2) / 180*pi)
+    middle_slope <- tan(args$contamination_slope / 180*pi)
 
     y_genes$expressionSexNaive <- case_when(
       y_genes$y_genes > y_genes$xist * middle_slope ~ 1,
