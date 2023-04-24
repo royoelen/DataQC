@@ -494,8 +494,13 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
     y_genes <- merge(y_genes, geno_fam_f, by = "sample")
     max_exp <- max(y_genes$y_genes, y_genes$xist)
 
-    x_expression_median <- median(y_genes[y_genes$Sex == 1 & y_genes$expressionSex == 1, "xist"])
-    y_expression_median <- median(y_genes[y_genes$Sex == 2 & y_genes$expressionSex == 2, "y_genes"])
+    y_genes$expressionSexNaive <- case_when(
+      y_genes$y_genes > y_genes$xist ~ 1,
+      y_genes$y_genes < y_genes$xist ~ 2
+    )
+
+    x_expression_median <- median(y_genes[y_genes$Sex == 1 & y_genes$expressionSexNaive == 1, "xist"])
+    y_expression_median <- median(y_genes[y_genes$Sex == 2 & y_genes$expressionSexNaive == 2, "y_genes"])
 
     y_genes$xist_corrected <- y_genes$xist - x_expression_median
 
