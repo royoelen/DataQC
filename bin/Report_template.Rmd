@@ -273,7 +273,7 @@ If you observe bimodal distribution on the histogram then it might indicate subs
 
 ![**Fig 7. Statistic of outlierness with threshold used to remove ethnic outliers.**](outputfolder_gen/gen_plots/PC_dist_outliers_S.png)  
 
-On the next two plots we visualise genetic principal components to check if genetic outliers were removed. If you observe unsolved sub-clusters on following PCA plots, this might indicate that you have different genotyping batches in the data, or large fraction of samples (e.g. >10%) from somewhat different ancestry. In this case, the algorithm migh not assign all deviating samples as outliers or remove unreasonably large fraction of samples. 
+On the next two plots we visualise genetic principal components to check if genetic outliers were removed. If you observe unsolved sub-clusters on following PCA plots, this might indicate that you have different genotyping batches in the data, or large fraction of samples (e.g. >10%) from somewhat different ancestry. In this case, the algorithm might not assign all deviating samples as outliers or remove unreasonably large fraction of samples. 
 
 If the pipline removes unreasonably large fraction of the samples, there are multiple courses of action to consider:
 
