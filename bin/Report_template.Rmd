@@ -203,13 +203,13 @@ Here we project your genotype samples into 1000G p3v5 superpopulations to check 
 
 The files `AssignedPopulations.txt` and `1000G_PC_projections.txt` have been written to the output folder under subfolder `gen_data_summary`. These can be used to extract the outlier samples based on their PC projections into 1000G superpopulations. Please use optional `--ExclusionList` and specify the file with the list of samples you want to withhold from this dataset.
 
-![(#fig:fig5)**Fig 5. Genotype samples projected into 1000G superpopulations.** First two plots show only target dataset in the 1000G PC space. Rest of the plots visualise target dataset, as well as samples from 1000G superpopulations by plotting first 10 genotype PCs.](outputfolder_gen/gen_plots/SamplesPCsProjectedTo1000G.png)  
+![**Fig 5. Genotype samples projected into 1000G superpopulations.** First two plots show only target dataset in the 1000G PC space. Rest of the plots visualise target dataset, as well as samples from 1000G superpopulations by plotting first 10 genotype PCs.](outputfolder_gen/gen_plots/SamplesPCsProjectedTo1000G.png)  
 
 #### Assign superpopulation for each sample
 
 Based on first 3 genotype PCs, here we assign the most likely population to each sample and outline those samples which are clearly different. Again, all the samples in the dataset should be the most similar to only one ancestry and samples resembling other ancestries should be removed or treated as a separate dataset (in case of N>100).
 
-```{r, fig.height = 7, fig.width = 7, fig.align = "center", echo = FALSE, message = FALSE, warning = FALSE, fig.cap = "fig6"}
+```{r, fig.height = 7, fig.width = 7, fig.align = "center", echo = FALSE, message = FALSE, warning = FALSE}
 library(dplyr)
 pops <- fread("outputfolder_gen/gen_data_summary/PopAssignResults.txt", keepLeadingZeros = TRUE)
 
