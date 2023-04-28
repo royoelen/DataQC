@@ -18,7 +18,7 @@ def helpMessage() {
 
     Mandatory arguments:
       --cohort_name                 Name of the cohort.
-      --genome_build                Genome build of the cohort. Either hg19, GRCh37, hg38 or GRCh38.
+      --genome_build                Genome build of the cohort. Either hg18, GRCh36, hg19, GRCh37, hg38 or GRCh38.
       --bfile                       Path to unimputed genotype files in plink bed/bim/fam format (without extensions bed/bim/fam).
       --vcf                         Path to a vcf file.
       --fam                         Path to a plink fam file. This is especially helpful for sex annotation of samples in VCF files.
@@ -49,7 +49,7 @@ def helpMessage() {
 params.report_template = "$baseDir/bin/Report_template.Rmd"
 
 // Define set of accepted genome builds:
-def genome_builds_accepted = ['hg19', 'GRCh37', 'hg38', 'GRCh38']
+def genome_builds_accepted = ['hg18', 'GRCh36', 'hg19', 'GRCh37', 'hg38', 'GRCh38']
 def genotyping_platforms_accepted = ['Array', 'WGS']
 
 // Define input channels

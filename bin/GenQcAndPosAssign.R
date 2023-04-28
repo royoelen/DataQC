@@ -221,6 +221,11 @@ if (args$genome_build %in% c("hg19", "GRCh37")) {
   variant_format <- r"(@:#[b38]\$r,\$a)"
   build_code <- "b38"
   ucsc_code <- "hg38"
+} else if (args$genome_build %in% c("hg18", "GRCh36")) {
+  message("Using genome build hg18/GRCh36")
+  variant_format <- r"(@:#[b36]\$r,\$a)"
+  build_code <- "b36"
+  ucsc_code <- "hg18"
 } else {
   stop(sprintf("Genome build %s is not recognized as an available genome build!", args$genome_build))
 }
