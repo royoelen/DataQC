@@ -13,6 +13,7 @@ params:
     SD: 3
     SD_exp: 4
     Cont: 30
+    ContSlope: 45
 ---
 
 # Dataset

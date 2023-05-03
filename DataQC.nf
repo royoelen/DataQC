@@ -595,6 +595,7 @@ process RenderReport {
       val sdtresh from params.GenSdThresh
       val expsdtresh from params.ExpSdThresh
       val contaminationarea from params.ContaminationArea
+      val contaminationslope from params.ContaminationSlope
       path additional_covariates from params.AdditionalCovariates
       path sexcheck from sexcheck_to_report
       file wgs_qc_stats_collected from wgs_qc_stats_file_ch
@@ -625,7 +626,8 @@ process RenderReport {
     S = ${stresh},
     SD = ${sdtresh},
     SD_exp = ${expsdtresh},
-    Cont = ${contaminationarea}))'
+    Cont = ${contaminationarea},
+    ContSlope = ${contaminationslope}))'
     """
 }
 
