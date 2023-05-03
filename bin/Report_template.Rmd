@@ -36,6 +36,8 @@ Threshold of SD difference from mean gene expression PC1 and PC2 is: `r params$S
 
 Angle of contamination area in sex chromosome gene expression plot: `r params$Cont`
 
+Slope in sex chromosome gene expression plot: `r params$ContSlope`
+
 ## Covariates
 
 ```{r, message = FALSE, warning = FALSE, echo = FALSE}
