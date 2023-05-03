@@ -46,6 +46,7 @@ output_path=../output # Output path
 # --GenSdThresh [numeric threshold]
 # --ExpSdThresh [numeric threshold]
 # --ContaminationArea [number between 0 and 90, default 30]
+# --ContaminationSlope [number between 0 and 90, default 45]
 # --AdditionalCovariates [file with additional covariates]
 # --InclusionList [file with the list of samples to restrict the analysis]
 # --ExclusionList [file with the list of samples to remove from the analysis]
