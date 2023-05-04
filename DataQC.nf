@@ -24,7 +24,7 @@ def helpMessage() {
       --fam                         Path to a plink fam file. This is especially helpful for sex annotation of samples in VCF files.
       --expfile                     Path to the un-preprocessed gene expression matrix (genes/probes in the rows, samples in the columns). Can be from RNA-seq experiment or from array. NB! For Affymetrix arrays (AffyU219, AffyExon) we assume that standard preprocessing and normalisation is already done.
       --gte                         Genotype-to-expression linking file. Tab-delimited, no header. First column: sample ID for genotype data. Second column: corresponding sample ID for gene expression data. Can be used to filter samples from the analysis.
-      --exp_platform                Indicator indicating the gene expression platform. HT12v3, HT12v4, HuRef8, RNAseq, AffyU219, AffyHumanExon.
+      --exp_platform                Indicator indicating the gene expression platform. HT12v3, HT12v4, HuRef8, RNAseq, AffyU219, AffyHumanExon, RNAseq_HGNC.
       --outdir                      Path to the output directory.
       --GenOutThresh                "Outlierness" score threshold for excluding ethnic outliers. Defaults to 0.4 but it should be adjusted according to visual inspection.
       --GenSdThresh                 Threshold for declaring samples outliers based on genetic PC1 and PC2. Defaults to 3 SD from the mean of PC1 and PC2 but should be adjusted according to visual inspection.
@@ -571,6 +571,19 @@ process GeneExpressionQC {
       --contamination_slope ${contamination_slope} \
       --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt \
+      --output outputfolder_exp
+      """
+      else if (exp_platform == 'RNAseq_HGNC')
+      """
+      Rscript --vanilla $baseDir/bin/ProcessExpression.R  \
+      --expression_matrix ${exp_mat} \
+      --genotype_to_expression_linking ${gte} \
+      --sex_info ${sexcheck} \
+      --geno_filter ${geno_filter} \
+      --platform ${exp_platform} \
+      --contamination_slope ${contamination_slope} \
+      --contamination_area ${contamination_area} \
+      --emp_probe_mapping $baseDir/data/HgncToEnsemblProbeMatching.txt \
       --output outputfolder_exp
       """
 }
