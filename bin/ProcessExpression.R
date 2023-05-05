@@ -625,6 +625,11 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
     # Filter out potential sex mismatches
     and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$mismatch != "yes", ]$sample]
 
+    # debug mismatched samples
+    comb <- merge(gte, y_genes, by.x = "V1", by.y = "sample")
+    colnames(comb)[c(1, 2)] <- c("Genotype_SampleID", "Expression_SampleID")
+    fwrite(comb, "SexMismatchStatus.txt", sep = "\t", quote = FALSE)
+
     summary_table_temp <- data.table(Stage = "Samples after removal of sex errors", Nr_of_features = nrow(and_pp), Nr_of_samples = ncol(and_pp))
     summary_table <- rbind(summary_table, summary_table_temp)
 
