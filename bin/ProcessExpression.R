@@ -565,6 +565,10 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
   y_genes <- emp_probe_mapping[emp_probe_mapping$chromosome_name == "Y", ]$Ensembl
   y_genes <- and_pp[rownames(and_pp) %in% y_genes, ]
 
+  fwrite(xist, "7_debug_xist_genes.txt")
+  fwrite(y_genes, "7_debug_y_chr_genes.txt")
+  message(paste("Nr. of Y genes:", nr_of_y_genes))
+
   nr_of_y_genes <- nrow(y_genes)
 
   if (nrow(y_genes) > 0){
@@ -916,7 +920,7 @@ and <- and[, colnames(and) %in% c("Feature", exp_non_outliers), with = FALSE]
 summary_table_temp <- data.table(Stage = "After removal of all expression outliers (MDS)", Nr_of_features = nrow(and), Nr_of_samples = ncol(and) - 1)
 summary_table <- rbind(summary_table, summary_table_temp)
 
-fwrite(exp, "7_debug_before_sampleswap.txt", sep = "\t", quote = FALSE)
+fwrite(and, "7_debug_before_sampleswap.txt", sep = "\t", quote = FALSE)
 
 expression_based_sample_swap_out <- ExpressionBasedSampleSwapIdentification(and, summary_table)
 
