@@ -41,6 +41,7 @@ def helpMessage() {
       --plink_executable            Path to plink executable. By default this is automatically downloaded from internet. Use this setting when you have to work offline.
       --plink2_executable           Path to plink2 executable. By default this is automatically downloaded from internet. Use this setting when you have to work offline.
       --reference_1000g_folder      Path to 1000g reference folder. By default this is automatically downloaded from internet. Use this setting when you have to work offline.
+      --chain_file                  Path to hg19 to hg38 chain file. By default this is automatically downloaded from internet. Use this setting when you have to work offline and your build is not hg19/GRCh37.
 
     """.stripIndent()
 }
@@ -147,6 +148,15 @@ if (params.reference_1000g_folder != '') {
 } else {
   Channel.empty().set {reference_1000g_ch}
 }
+if (params.chain_file != '') {
+  Channel
+    .fromPath(params.chain_file)
+    .ifEmpty('EMPTY')
+    .set { chain_file_ch }
+} else {
+  Channel.empty().set {chain_file_ch}
+}
+
 
 params.GenOutThresh = 0.4
 params.GenSdThresh = 3
@@ -202,6 +212,10 @@ if(params.InclusionList!="$baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt
 if(params.ExclusionList!="$baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt") summary['Exclusion list'] = params.ExclusionList
 if(params.preselected_sex_check_vars) summary['Pruned variants for sex check'] = params.preselected_sex_check_vars
 summary['Expression platform']      = params.exp_platform
+summary['Plink executable']         = params.plink_executable
+summary['Plink 2 executable']       = params.plink2_executable
+summary['Reference 1000G folder']   = params.reference_1000g_folder
+summary['Chain file']               = params.chain_file
 summary['Output dir']               = params.outdir
 summary['Working dir']              = workflow.workDir
 summary['Container Engine']         = workflow.containerEngine
@@ -435,6 +449,7 @@ process GenotypeQC {
       file(plink_executable) from plink_executable_ch.ifEmpty { 'EMPTY' }
       file(plink2_executable) from plink2_executable_ch.ifEmpty { 'EMPTY' }
       file(reference_1000g_folder) from reference_1000g_ch.ifEmpty { 'EMPTY' }
+      file(chain_file) from chain_file_ch.ifEmpty { 'EMPTY' }
 
     output:
       path ('outputfolder_gen') into output_ch_genotypes
@@ -452,6 +467,7 @@ process GenotypeQC {
     fam_arg = (params.fam != '') ? "--fam $fam_annot" : ""
     plink_arg = (params.plink_executable != '') ? "--plink_executable $plink_executable" : ""
     plink2_arg = (params.plink2_executable != '') ? "--plink2_executable $plink2_executable" : ""
+    chain_file_arg = (params.chain_file != '') ? "--chain_file $chain_file" : ""
 
     """
     Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
@@ -470,7 +486,8 @@ process GenotypeQC {
     --liftover_path $baseDir/bin/liftOver \
     $plink_arg \
     $plink2_arg \
-    $reference_1000g_prefix_arg
+    $reference_1000g_prefix_arg \
+    $chain_file_arg
     """
     
 }
