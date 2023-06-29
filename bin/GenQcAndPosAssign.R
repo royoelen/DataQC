@@ -145,19 +145,20 @@ read_fam <- function(path) {
   return(fam)
 }
 
-
+# Function modified from bigsnpr to work with offline chain files
 snp_modifyBuild2 <- function(info_snp,
                              liftOver,
                              from = "hg18",
                              to = "hg19",
                              check_reverse = TRUE,
-                             chain_file = NULL) {
+                             chain_path = NULL) {
 
   if (!all(c("chr", "pos") %in% names(info_snp)))
     stop2("Expecting variables 'chr' and 'pos' in input 'info_snp'.")
 
   # Make sure liftOver is executable
-  liftOver <- make_executable(normalizePath(liftOver))
+  # comment out, not working in HPC
+  #liftOver <- make_executable(normalizePath(liftOver))
 
   # Need BED UCSC file for liftOver
   info_BED <- with(info_snp, data.frame(
@@ -173,15 +174,17 @@ snp_modifyBuild2 <- function(info_snp,
   # Need chain file
   # url <- paste0("ftp://hgdownload.cse.ucsc.edu/goldenPath/", from, "/liftOver/",
   #               from, "To", tools::toTitleCase(to), ".over.chain.gz")
-  # chain <- tempfile(fileext = ".over.chain.gz")
-  # utils::download.file(url, destfile = chain, quiet = TRUE)
-
-  chain <- chain_file
+  chain <- tempfile(fileext = ".over.chain.gz")
+  chain_file <- paste0(chain_path, "/", from, "To", tools::toTitleCase(to), ".over.chain.gz")
+  message(chain_file)
+  #utils::download.file(url, destfile = chain, quiet = TRUE)
+  file.copy(chain_file, chain)
 
   # Run liftOver (usage: liftOver oldFile map.chain newFile unMapped)
   lifted <- tempfile(fileext = ".BED")
-  system2(liftOver, c(BED, chain, lifted, tempfile(fileext = ".txt")))
 
+  system2(liftOver, c(BED, chain, lifted, tempfile(fileext = ".txt")))
+  message("Liftover done")
   # Read the ones lifter + some QC
   new_pos <- bigreadr::fread2(lifted, nThread = 1)
   is_bad <- vctrs::vec_duplicate_detect(new_pos$V4) |
@@ -193,12 +196,11 @@ snp_modifyBuild2 <- function(info_snp,
   info_snp$pos[new_pos$V4] <- new_pos$V3
 
   if (check_reverse) {
-    pos2 <- suppressMessages(
-      Recall(info_snp, liftOver, from = to, to = from, check_reverse = FALSE)$pos)
+    pos2 <- Recall(info_snp, liftOver, from = to, to = from, check_reverse = FALSE, chain_path = chain_path)$pos
     info_snp$pos[pos2 != pos0] <- NA_integer_
   }
 
-  message2("%d variants have not been mapped.", sum(is.na(info_snp$pos)))
+  bigassertr::message2("%d variants have not been mapped.", sum(is.na(info_snp$pos)))
 
   info_snp
 }
@@ -238,8 +240,8 @@ option_list <- list(
                 help = "Plink2 executable."),
     make_option(c("--ref_1000g"), type = "character", default = NULL,
                 help = "reference 1000g prefix."),
-    make_option(c("--chain_file"), type = "character", default = NULL,
-                help = "LiftOver chain file.")
+    make_option(c("--chain_path"), type = "character", default = NULL,
+                help = "Folder with liftOver chain files.")
     )
 
 parser <- OptionParser(usage = "%prog [options] file", option_list = option_list)
@@ -263,7 +265,7 @@ print(args$exclusion_list)
 print(args$liftover_path)
 print(args$plink_executable)
 print(args$plink2_executable)
-print(args$chain_file)
+print(args$chain_path)
 
 if (!is.numeric(args$S_threshold) | !is.numeric(args$SD_threshold) | !is.numeric(args$SD_threshold)){
   message("Some of the QC thresholds is not numeric!")
@@ -363,8 +365,10 @@ if (file.exists(paste0(ref_1000g_prefix, ".bed"))
   bedfile <- download_1000G(dirname(ref_1000g_prefix))
 }
 
-## Chain file for LiftOver
-chain_file <- args$chain_file
+## Chain files for LiftOver
+chain_path <- args$chain_path
+if (file.exists(paste0(chain_path, "/hg19ToHg38.over.chain.gz")) & 
+file.exists(paste0(chain_path, "/hg38ToHg19.over.chain.gz"))){message(paste0("Found liftOver chain files at ", chain_path))}
 
 ## Calculate AFs for reference data
 system(paste0(PLINK2, " --bfile ", ref_1000g_prefix, " --threads 4 --freq 'cols=+pos' --out 1000Gref"))
@@ -373,10 +377,10 @@ if ("hg19" != ucsc_code) {
   target_frequencies <- fread("1000Gref.afreq", sep="\t", data.table=F, header=T,
                  col.names=c("chr", "pos", "ID", "REF", "ALT", "ALT_FREQS", "OBS_CT"))
 
-if (!is.null(args$chain_file) && args$chain_file != "") {
+if (!is.null(args$chain_path) && args$chain_path != "") {
   target_frequencies_mapped <- snp_modifyBuild2(
     target_frequencies, file.path(".", R.utils::getRelativePath(args$liftover_path)),
-    from = "hg19", to = ucsc_code, chain_file = chain_file)
+    from = "hg19", to = ucsc_code, chain_path = chain_path)
 }else{
   target_frequencies_mapped <- snp_modifyBuild(
     target_frequencies, file.path(".", R.utils::getRelativePath(args$liftover_path)),
@@ -589,10 +593,10 @@ if (23 %in% sex_check_data_set_chromosomes) {
 
       variants_sex_check$chr <- "X"
 
-    if (!is.null(args$chain_file) && args$chain_file != "") {
+    if (!is.null(args$chain_path) && args$chain_path != "") {
         variants_sex_check_new <- snp_modifyBuild2(
         variants_sex_check, file.path(".", R.utils::getRelativePath(args$liftover_path)),
-        from = "hg19", to = ucsc_code, chain_file = chain_file)
+        from = "hg19", to = ucsc_code, chain_path = chain_path)
     }else{
         variants_sex_check_new <- snp_modifyBuild(
         variants_sex_check, file.path(".", R.utils::getRelativePath(args$liftover_path)),
