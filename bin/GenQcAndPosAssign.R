@@ -774,6 +774,48 @@ message("Projecting samples to 1000G reference.")
 unrelated_ref_samples <- fread(args$sample_list, keepLeadingZeros = TRUE, colClasses = 'character')
 unrelated_ref_samples <- as.numeric(unrelated_ref_samples$ind.row)
 
+if (ucsc_code != "hg19" && !is.null(args$chain_path) && args$chain_path != "") {
+
+message("Using offline version of PCA sample projection function.")
+
+map_new <- setNames(target_bed$map[-3], c("chr", "rsid", "pos", "a1", "a0"))
+
+map_new_lifted <- snp_modifyBuild2(map_new, 
+liftOver = R.utils::getRelativePath(args$liftover_path), 
+from = "hg38", 
+to = "hg19", 
+chain_path = chain_path)
+
+lifted_bim <- data.table(chr = map_new_lifted$chr,
+rsid = map_new_lifted$rsid,
+seq = 0,
+pos = map_new_lifted$pos,
+a1 = map_new_lifted$a1,
+a0 = map_new_lifted$a0)
+
+fwrite(lifted_bim[!is.na(lifted_bim$pos), ], "lifted_map.bim", sep = "\t", col.names = FALSE, row.names = FALSE)
+
+system(paste0(PLINK,  " --bfile ",  bed_simplepath, "_QC --update-chr lifted_map.bim 1 2 --update-map lifted_map.bim 4 2 --make-bed --out temp_for_PCA"))
+
+proj_PCA <- bed_projectPCA(
+  obj.bed.ref = ref_bed,
+  ind.row.ref = unrelated_ref_samples,
+  obj.bed.new = bed("temp_for_PCA.bed"),
+  ind.row.new = indices_of_het_passed_samples,
+  k = 10,
+  strand_flip = TRUE,
+  join_by_pos = TRUE,
+  match.min.prop = 0.01,
+  build.new = "hg19",
+  build.ref = "hg19",
+  liftOver = R.utils::getRelativePath(args$liftover_path),
+  verbose = TRUE,
+  ncores = 4
+)
+
+system("rm temp_for_PCA*")
+
+} else {
 proj_PCA <- bed_projectPCA(
   obj.bed.ref = ref_bed,
   ind.row.ref = unrelated_ref_samples,
@@ -789,6 +831,7 @@ proj_PCA <- bed_projectPCA(
   verbose = TRUE,
   ncores = 4
 )
+}
 
 ## Visualise PCs
 abi <- as.data.frame(proj_PCA$OADP_proj)
