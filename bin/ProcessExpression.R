@@ -585,7 +585,7 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
           values = alpha(c("Passed" = "black",
                            "Likely contaminated" = "orange",
                            "Sex mismatch" = "red",
-                           "Contaminated and\nsex mismatch" = "firebrick"),
+                           "Contaminated and\nsex mismatch" = "darkmagenta"),
                          0.5),
           name = "Passed checks") +
         coord_cartesian(ylim = c(0, y_genes_zoom), xlim = c(0, y_genes_zoom)) +
@@ -603,7 +603,7 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
           values = alpha(c("Passed" = "black",
                            "Likely contaminated" = "orange",
                            "Sex mismatch" = "red",
-                           "Contaminated and\nsex mismatch" = "firebrick"),
+                           "Contaminated and\nsex mismatch" = "darkmagenta"),
                          0.5),
           name = "Passed checks") +
         coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
@@ -620,7 +620,7 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
           values = alpha(c("Passed" = "black",
                            "Likely contaminated" = "orange",
                            "Sex mismatch" = "red",
-                           "Contaminated and\nsex mismatch" = "firebrick"),
+                           "Contaminated and\nsex mismatch" = "darkmagenta"),
                          0.5),
           name = "Passed checks") +
         coord_cartesian(ylim = c(0, y_genes_zoom), xlim = c(0, y_genes_zoom)) +
