@@ -6,6 +6,7 @@ library(optparse)
 library(patchwork)
 library(MASS)
 library(dplyr)
+library(mclust)
 
 setDTthreads(8)
 
@@ -638,6 +639,56 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
     message("There is no Y chromosome genes in the expression data, omitting sex check.")
   }
   return(list(and_pp=and_pp, summary_table=summary_table))
+}
+
+ExpressionBasedSampleSwapIdentificationNb <- function(sex_specific_genes, xist_col="xist", y_col = "y_genes") {
+  # fit Gaussian mixture model
+  fit <- Mclust(sex_specific_genes[,c(y_col, xist_col)], G=2, modelNames="VVV")
+
+  # Get means from parameters
+  means <- fit$parameters$mean
+  sigmas <- fit$parameters$sigma
+
+  # Mean ratios
+  mean_ratios <- means['y_genes',] / means['xist',]
+
+  # Create factor of expression derived sex
+  expression_derived_sex <- factor(fit$classification, levels = c(1, 2), labels = c("F", "M")[order(mean_ratios)])
+
+  out <- tibble(sex_specific_genes)
+  out$uncertainty <- fit$uncertainty
+  out$expression_derived_sex <- expression_derived_sex
+  out$unconfident <- out$uncertainty > 0.01
+  out$Sex <- factor(out$Sex, levels = c(2, 1), labels = c("F", "M"))
+  out$mismatch <- out$Sex != out$expression_derived_sex
+  out$status <- case_when(out$mismatch & out$unconfident ~ "Contaminated and\nsex mismatch",
+                          out$mismatch ~ "Sex mismatch",
+                          out$unconfident ~ "Likely contaminated",
+                          TRUE ~ "Passed"
+  )
+
+  max_exp <- max(sex_specific_genes[,c(y_col, xist_col)])
+
+  base_plot <- ggplot(data = out, aes(x = xist, y = y_genes)) +
+    geom_point(aes(col = status, shape = Sex)) +
+    scale_colour_manual(
+      values = alpha(c("Passed" = "black",
+                       "Likely contaminated" = "yellow",
+                       "Sex mismatch" = "orange",
+                       "Contaminated and\nsex mismatch" = "red"),
+                     0.5),
+      name = "Passed checks") +
+    coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
+    theme_bw() + ylab(paste0("mean of Y genes - min(mean of Y genes)\n(n=", nr_of_y_genes, ")")) + xlab("XIST - min(XIST)")
+
+  ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST2.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
+  ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST2.pdf"), height = 5, width = 7, units = "in", dpi = 300)
+
+
+  # data.grid <- expand.grid(s.1 = seq(0, max_expression, length.out=100),
+  #                          s.2 = seq(0, max_expression, length.out=100))
+  #
+  # q.samp <- cbind(data.grid, prob = mvtnorm::dmvnorm(data.grid, mean = means, sigma = sigmas))
 }
 
 ############
