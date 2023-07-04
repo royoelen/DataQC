@@ -505,17 +505,26 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
     x_expression_median <- median(y_genes[y_genes$Sex == 1 & y_genes$expressionSexNaive == 1, "xist"])
     y_expression_median <- median(y_genes[y_genes$Sex == 2 & y_genes$expressionSexNaive == 2, "y_genes"])
 
-    y_genes$xist_corrected <- y_genes$xist - x_expression_median
+    x_expression_min <- min(y_genes[y_genes$Sex == 2 & y_genes$expressionSexNaive == 2, "xist"])
+    y_expression_min <- min(y_genes[y_genes$Sex == 1 & y_genes$expressionSexNaive == 1, "y_genes"])
+
+    y_max <- max(y_genes$y_genes)
+    x_max <- max(y_genes$xist)
+
+    x_anchor <- min(x_expression_median, x_expression_min - 0.01 * x_max)
+    y_anchor <- min(y_expression_median, y_expression_min - 0.01 * y_max)
+
+    y_genes$xist_corrected <- y_genes$xist - x_anchor
 
     y_genes$contaminated <- case_when(
-      (y_genes$y_genes > ((y_genes$xist_corrected) * lower_slope + y_expression_median)
-        & y_genes$y_genes < ((y_genes$xist_corrected) * upper_slope + y_expression_median)) ~ "yes",
+      (y_genes$y_genes > ((y_genes$xist_corrected) * lower_slope + y_anchor)
+        & y_genes$y_genes < ((y_genes$xist_corrected) * upper_slope + y_anchor)) ~ "yes",
       TRUE ~ "no"
     )
 
     y_genes$expressionSex <- case_when(
-      (y_genes$y_genes < ((y_genes$xist_corrected) * middle_slope + y_expression_median)) ~ 2,
-      (y_genes$y_genes > ((y_genes$xist_corrected) * middle_slope + y_expression_median)) ~ 1
+      (y_genes$y_genes < ((y_genes$xist_corrected) * middle_slope + y_anchor)) ~ 2,
+      (y_genes$y_genes > ((y_genes$xist_corrected) * middle_slope + y_anchor)) ~ 1
     )
 
     y_genes$mismatch <- case_when(
@@ -547,9 +556,9 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
         geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
         scale_colour_manual(
           values = alpha(c("Passed" = "black",
-                           "Likely contaminated" = "red",
-                           "Sex mismatch" = "#d79393",
-                           "Contaminated and\nsex mismatch" = "firebrick"),
+                           "Likely contaminated" = "orange",
+                           "Sex mismatch" = "red",
+                           "Contaminated and\nsex mismatch" = "darkmagenta"),
                          0.5),
           name = "Passed checks") +
         coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
@@ -568,15 +577,14 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
       ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST_naive.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
       ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST_naive.pdf"), height = 5, width = 7, units = "in", dpi = 300)
 
-
       zoomed_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
         geom_ribbon(alpha = 0.2) +
         geom_line(aes(x = x, y = middle_line), linetype = 2, colour = "blue") +
         geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
         scale_colour_manual(
           values = alpha(c("Passed" = "black",
-                           "Likely contaminated" = "red",
-                           "Sex mismatch" = "#d79393",
+                           "Likely contaminated" = "orange",
+                           "Sex mismatch" = "red",
                            "Contaminated and\nsex mismatch" = "firebrick"),
                          0.5),
           name = "Passed checks") +
@@ -593,8 +601,8 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
         geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
         scale_colour_manual(
           values = alpha(c("Passed" = "black",
-                           "Likely contaminated" = "red",
-                           "Sex mismatch" = "#d79393",
+                           "Likely contaminated" = "orange",
+                           "Sex mismatch" = "red",
                            "Contaminated and\nsex mismatch" = "firebrick"),
                          0.5),
           name = "Passed checks") +
@@ -610,8 +618,8 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
         geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
         scale_colour_manual(
           values = alpha(c("Passed" = "black",
-                           "Likely contaminated" = "red",
-                           "Sex mismatch" = "#d79393",
+                           "Likely contaminated" = "orange",
+                           "Sex mismatch" = "red",
                            "Contaminated and\nsex mismatch" = "firebrick"),
                          0.5),
           name = "Passed checks") +
