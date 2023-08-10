@@ -13,6 +13,7 @@ dependencies:
   - bioconda::bcftools=1.10.2
   - bioconda::plink2=1.90b3.35
   - conda-forge::r-igraph=1.2.6
+  - conda-forge::r-nloptr=1.2.2.2
   - conda-forge::cairo=1.16.0
   - conda-forge::r-data.table=1.14.0
   - conda-forge::r-dplyr=1.0.7
