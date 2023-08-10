@@ -6,6 +6,7 @@ library(optparse)
 library(patchwork)
 library(MASS)
 library(dplyr)
+library(mclust)
 
 setDTthreads(8)
 
@@ -16,7 +17,7 @@ option_list <- list(
     make_option(c("-l", "--genotype_to_expression_linking"), type = "character",
     help = "Genotype-to-expression linking file. No header. First column- sample IDs in the genotype file, second column- corresponding sample IDs in the gene expression matrix."),
     make_option(c("-p", "--platform"), type = "character",
-    help = "Gene expression platform. This determines the normalization method and replaces probes with best-matching genes based on empirical probe mapping. One of: HT12v3, HT12v4, HuRef8, RNAseq, AffyU219, AffyHumanExon."),
+    help = "Gene expression platform. This determines the normalization method and replaces probes with best-matching genes based on empirical probe mapping. One of: HT12v3, HT12v4, HuRef8, RNAseq, AffyU219, AffyHumanExon, RNAseq_HGNC."),
     make_option(c("-m", "--emp_probe_mapping"), type = "character",
     help = "Empirical probe matching file. Used to link the best array probe to each blood-expressed gene."),
     make_option(c("-s", "--sd"), type = "double", default = 4,
@@ -89,12 +90,16 @@ illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
     exp$Probe <- as.character(exp$Probe)
     emp$Probe <- as.character(emp$Probe)
 
+    fwrite(exp, "1_debug_raw_readin.txt", sep = "\t", quote = FALSE)
+
     exp <- merge(exp, emp, by = "Probe")
     exp <- as.data.frame(exp)
     rownames(exp) <- exp[, ncol(exp)]
     exp <- exp[, -ncol(exp)]
     exp <- exp[, -1]
     exp <- as.matrix(exp)
+
+    fwrite(exp, "2_debug_raw_ProbesReplaced.txt", sep = "\t", quote = FALSE)
 
     # Remove samples which are not in the gte or in genotype data
     gte <- fread(args$genotype_to_expression_linking, header = FALSE, keepLeadingZeros = TRUE, colClasses = "character")
@@ -108,6 +113,9 @@ illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
     message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
 
     exp <- exp[, colnames(exp) %in% gte$V2]
+
+    fwrite(exp, "3_debug_raw_ProbesReplaced_SamplesFilteredBasedOnGte.txt", sep = "\t", quote = FALSE)
+
     exp <- exp[, base::order(colnames(exp))]
     gte <- gte[base::order(gte$V2), ]
 
@@ -120,6 +128,9 @@ illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
     colnames(exp_n) <- colnames(exp)
     rownames(exp_n) <- rownames(exp)
     }else{exp_n <- exp}
+
+    fwrite(exp, "4_debug_raw_ProbesReplaced_SamplesFilteredBasedOnGteNormalised.txt", sep = "\t", quote = FALSE)
+
 
     # log2 transformation (not needed because INT is applied)
     # and_n <- log2(and_n)
@@ -246,6 +257,85 @@ Affy_preprocess <- function(exp, gte, gen){
     return(exp_n)
 }
 
+RNAseq_HGNC_preprocess <- function(exp, gte, gen, normalize = TRUE, gene_inclusion = NULL){
+
+      # Leave in only probes for which there is empirical probe mapping info and convert data into matrix
+    emp <- fread(args$emp_probe_mapping, keepLeadingZeros = TRUE)
+    emp <- emp[, c(1, 2), with = FALSE]
+    colnames(exp)[1] <- "Probe"
+
+    exp$Probe <- as.character(exp$Probe)
+    emp$Probe <- as.character(emp$Probe)
+
+    exp <- merge(exp, emp, by = "Probe")
+    exp <- as.data.frame(exp)
+    rownames(exp) <- exp[, ncol(exp)]
+    exp <- exp[, -ncol(exp)]
+    exp <- exp[, -1]
+    exp <- abs(as.matrix(exp))
+
+    # Remove samples which are not in the gte or in genotype data
+    gte <- fread(args$genotype_to_expression_linking, header = FALSE, colClasses = "character")
+    gte$V1 <- as.character(gte$V1)
+    gte$V2 <- as.character(gte$V2)
+
+    geno_fam <- fread(args$sex_info, header = TRUE, keepLeadingZeros = TRUE, colClasses = list(character = c(1,2)))
+    gte <- gte[gte$V1 %in% geno_fam$IID,]
+    gte <- gte[gte$V2 %in% as.character(colnames(exp)),]
+
+    message(paste(nrow(gte), "overlapping samples in the gte file AND genotype data."))
+
+    exp <- exp[, colnames(exp) %in% gte$V2]
+    exp <- exp[, base::order(colnames(exp))]
+    gte <- gte[base::order(gte$V2), ]
+
+    if(!all(colnames(exp) == gte$V2)){stop("Something went wrong in matching genotype and expression IDs. Please debug!")}
+
+    colnames(exp) <- gte$V1
+
+    # Remove genes with no variance
+    gene_variance <- data.frame(gene = rownames(exp), gene_variance = apply(exp, 1, var))
+    exp <- exp[!rownames(exp) %in% gene_variance[gene_variance$gene_variance == 0, ]$gene, ]
+
+    # Remove genes with CPM>0.5 in less than 1% of samples
+    exp_keep <- DGEList(counts = exp)
+    n_samples_with_cpm_threshold_passed <- rowSums(cpm(exp_keep, log = FALSE) > 0.5)
+    keep <- n_samples_with_cpm_threshold_passed >= round(ncol(exp) / 100, 0)
+
+    message(paste(sum(keep), "genes has CPM>0.5 in at least 1% of samples."))
+
+    if (all(!is.null(gene_inclusion)) && length(gene_inclusion) > 0) {
+      missed_genes <- gene_inclusion[(gene_inclusion %in% names(keep[keep == FALSE]))]
+
+      if (length(missed_genes) > 0) {
+        warning(sprintf(
+          "Including %d genes that do not pass cpm cutoff. printing number of samples passing cpm cutoff below.",
+          length(missed_genes)))
+
+        print(n_samples_with_cpm_threshold_passed[missed_genes])
+
+      }
+      keep[missed_genes] <- TRUE
+    }
+
+    exp <- exp[rownames(exp) %in% names(keep[keep == TRUE]), ]
+
+    message(sprintf("Total number of genes that are included: %d", nrow(exp)))
+
+    if (normalize == TRUE){
+    # TMM-normalized counts
+    exp_n <- DGEList(counts = exp)
+    exp_n <- calcNormFactors(exp_n, method = "TMM")
+    exp_n <- cpm(exp_n, log = FALSE)
+    }else{exp_n <- exp}
+
+    # log2 transformation (+ add 0.25 for solving issues with log2(0)) (not needed because INT will be applied)
+    # and_n <- log2(and_n + 0.25)
+    message(paste(ncol(exp_n), "samples in normalised expression matrix."))
+
+    return(exp_n)
+}
+
 exp_summary <- function(x){
 
     per_gene_mean <- apply(x, 1, mean)
@@ -325,7 +415,7 @@ rnaseq_cpm_summary <- function(exp, gte){
 
 IterativeOutlierDetection <- function(
   input_exp, sd_threshold = 1,
-  platform = c("HT12v3", "HT12v4", "HuRef8", "RNAseq", "AffyU291", "AffyHuEx"),
+  platform = c("HT12v3", "HT12v4", "HuRef8", "RNAseq", "AffyU291", "AffyHuEx", "RNAseq_HGNC"),
   gene_inclusion = NULL) {
 
   and <- input_exp
@@ -346,14 +436,24 @@ IterativeOutlierDetection <- function(
 
     if (platform %in% c("HT12v3", "HT12v4", "HuRef8")){
       and_p <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+      fwrite(and_p, "5_debug_normalised_exp.txt", sep = "\t", quote = FALSE)
       and_p <- log2(and_p)
+      fwrite(and_p, "6_debug_normalised_log2_exp.txt", sep = "\t", quote = FALSE)
       #and_p <- apply(and_p, 1, INT_transform)
       #and_p <- t(and_p)
       #and_p <- apply(and_p, 1, center_data)
       #and_p <- t(and_p)
     } else if(platform %in% c("RNAseq")){
       and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples,
-                                 gene_inclusion=gene_inclusion)
+                                 gene_inclusion = gene_inclusion)
+      and_p <- log2(and_p + 0.25)
+      #and_p <- apply(and_p, 1, INT_transform)
+      #and_p <- t(and_p)
+      #and_p <- apply(and_p, 1, center_data)
+      #and_p <- t(and_p)
+    } else if(platform %in% c("RNAseq_HGNC")){
+      and_p <- RNAseq_HGNC_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples,
+                                 gene_inclusion = gene_inclusion)
       and_p <- log2(and_p + 0.25)
       #and_p <- apply(and_p, 1, INT_transform)
       #and_p <- t(and_p)
@@ -454,7 +554,9 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
   if (args$platform %in% c("HT12v3", "HT12v4", "HuRef8")){
     and_pp <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
   } else if (args$platform %in% c("RNAseq")){
-    and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, gene_inclusion=sex_specific_genes)
+    and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, gene_inclusion = sex_specific_genes)
+  } else if (args$platform %in% c("RNAseq_HGNC")){
+    and_pp <- RNAseq_HGNC_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, gene_inclusion = sex_specific_genes)
   } else if (args$platform %in% c("AffyU219", "AffyHumanExon")){
     and_pp <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
   }
@@ -462,6 +564,10 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
   xist <- and_pp[rownames(and_pp) == "ENSG00000229807", ]
   y_genes <- emp_probe_mapping[emp_probe_mapping$chromosome_name == "Y", ]$Ensembl
   y_genes <- and_pp[rownames(and_pp) %in% y_genes, ]
+
+  fwrite(xist, "7_debug_xist_genes.txt")
+  fwrite(y_genes, "7_debug_y_chr_genes.txt")
+  message(paste("Nr. of Y genes:", nr_of_y_genes))
 
   nr_of_y_genes <- nrow(y_genes)
 
@@ -505,17 +611,26 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
     x_expression_median <- median(y_genes[y_genes$Sex == 1 & y_genes$expressionSexNaive == 1, "xist"])
     y_expression_median <- median(y_genes[y_genes$Sex == 2 & y_genes$expressionSexNaive == 2, "y_genes"])
 
-    y_genes$xist_corrected <- y_genes$xist - x_expression_median
+    x_expression_min <- min(y_genes[y_genes$Sex == 2 & y_genes$expressionSexNaive == 2, "xist"])
+    y_expression_min <- min(y_genes[y_genes$Sex == 1 & y_genes$expressionSexNaive == 1, "y_genes"])
+
+    y_max <- max(y_genes$y_genes)
+    x_max <- max(y_genes$xist)
+
+    x_anchor <- min(x_expression_median, x_expression_min - 0.01 * x_max)
+    y_anchor <- min(y_expression_median, y_expression_min - 0.01 * y_max)
+
+    y_genes$xist_corrected <- y_genes$xist - x_anchor
 
     y_genes$contaminated <- case_when(
-      (y_genes$y_genes > ((y_genes$xist_corrected) * lower_slope + y_expression_median)
-        & y_genes$y_genes < ((y_genes$xist_corrected) * upper_slope + y_expression_median)) ~ "yes",
+      (y_genes$y_genes > ((y_genes$xist_corrected) * lower_slope + y_anchor)
+        & y_genes$y_genes < ((y_genes$xist_corrected) * upper_slope + y_anchor)) ~ "yes",
       TRUE ~ "no"
     )
 
     y_genes$expressionSex <- case_when(
-      (y_genes$y_genes < ((y_genes$xist_corrected) * middle_slope + y_expression_median)) ~ 2,
-      (y_genes$y_genes > ((y_genes$xist_corrected) * middle_slope + y_expression_median)) ~ 1
+      (y_genes$y_genes < ((y_genes$xist_corrected) * middle_slope + y_anchor)) ~ 2,
+      (y_genes$y_genes > ((y_genes$xist_corrected) * middle_slope + y_anchor)) ~ 1
     )
 
     y_genes$mismatch <- case_when(
@@ -547,9 +662,9 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
         geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
         scale_colour_manual(
           values = alpha(c("Passed" = "black",
-                           "Likely contaminated" = "red",
-                           "Sex mismatch" = "#d79393",
-                           "Contaminated and\nsex mismatch" = "firebrick"),
+                           "Likely contaminated" = "orange",
+                           "Sex mismatch" = "red",
+                           "Contaminated and\nsex mismatch" = "darkmagenta"),
                          0.5),
           name = "Passed checks") +
         coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
@@ -568,16 +683,15 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
       ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST_naive.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
       ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST_naive.pdf"), height = 5, width = 7, units = "in", dpi = 300)
 
-
       zoomed_plot <- ggplot(data = exclusion_zone, aes(x = x, ymin = lower_bound, ymax = upper_bound)) +
         geom_ribbon(alpha = 0.2) +
         geom_line(aes(x = x, y = middle_line), linetype = 2, colour = "blue") +
         geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
         scale_colour_manual(
           values = alpha(c("Passed" = "black",
-                           "Likely contaminated" = "red",
-                           "Sex mismatch" = "#d79393",
-                           "Contaminated and\nsex mismatch" = "firebrick"),
+                           "Likely contaminated" = "orange",
+                           "Sex mismatch" = "red",
+                           "Contaminated and\nsex mismatch" = "darkmagenta"),
                          0.5),
           name = "Passed checks") +
         coord_cartesian(ylim = c(0, y_genes_zoom), xlim = c(0, y_genes_zoom)) +
@@ -593,9 +707,9 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
         geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
         scale_colour_manual(
           values = alpha(c("Passed" = "black",
-                           "Likely contaminated" = "red",
-                           "Sex mismatch" = "#d79393",
-                           "Contaminated and\nsex mismatch" = "firebrick"),
+                           "Likely contaminated" = "orange",
+                           "Sex mismatch" = "red",
+                           "Contaminated and\nsex mismatch" = "darkmagenta"),
                          0.5),
           name = "Passed checks") +
         coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
@@ -610,9 +724,9 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
         geom_point(data = y_genes, inherit.aes = F, aes(col = status, shape = Sex, x = xist, y = y_genes)) +
         scale_colour_manual(
           values = alpha(c("Passed" = "black",
-                           "Likely contaminated" = "red",
-                           "Sex mismatch" = "#d79393",
-                           "Contaminated and\nsex mismatch" = "firebrick"),
+                           "Likely contaminated" = "orange",
+                           "Sex mismatch" = "red",
+                           "Contaminated and\nsex mismatch" = "darkmagenta"),
                          0.5),
           name = "Passed checks") +
         coord_cartesian(ylim = c(0, y_genes_zoom), xlim = c(0, y_genes_zoom)) +
@@ -624,6 +738,11 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
 
     # Filter out potential sex mismatches
     and_pp <- and_pp[, colnames(and_pp) %in% y_genes[y_genes$mismatch != "yes", ]$sample]
+
+    # debug mismatched samples
+    comb <- merge(gte, y_genes, by.x = "V1", by.y = "sample")
+    colnames(comb)[c(1, 2)] <- c("Genotype_SampleID", "Expression_SampleID")
+    fwrite(comb, "SexMismatchStatus.txt", sep = "\t", quote = FALSE)
 
     summary_table_temp <- data.table(Stage = "Samples after removal of sex errors", Nr_of_features = nrow(and_pp), Nr_of_samples = ncol(and_pp))
     summary_table <- rbind(summary_table, summary_table_temp)
@@ -637,6 +756,56 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
     message("There is no Y chromosome genes in the expression data, omitting sex check.")
   }
   return(list(and_pp=and_pp, summary_table=summary_table))
+}
+
+ExpressionBasedSampleSwapIdentificationNb <- function(sex_specific_genes, xist_col="xist", y_col = "y_genes") {
+  # fit Gaussian mixture model
+  fit <- Mclust(sex_specific_genes[,c(y_col, xist_col)], G=2, modelNames="VVV")
+
+  # Get means from parameters
+  means <- fit$parameters$mean
+  sigmas <- fit$parameters$sigma
+
+  # Mean ratios
+  mean_ratios <- means['y_genes',] / means['xist',]
+
+  # Create factor of expression derived sex
+  expression_derived_sex <- factor(fit$classification, levels = c(1, 2), labels = c("F", "M")[order(mean_ratios)])
+
+  out <- tibble(sex_specific_genes)
+  out$uncertainty <- fit$uncertainty
+  out$expression_derived_sex <- expression_derived_sex
+  out$unconfident <- out$uncertainty > 0.01
+  out$Sex <- factor(out$Sex, levels = c(2, 1), labels = c("F", "M"))
+  out$mismatch <- out$Sex != out$expression_derived_sex
+  out$status <- case_when(out$mismatch & out$unconfident ~ "Contaminated and\nsex mismatch",
+                          out$mismatch ~ "Sex mismatch",
+                          out$unconfident ~ "Likely contaminated",
+                          TRUE ~ "Passed"
+  )
+
+  max_exp <- max(sex_specific_genes[,c(y_col, xist_col)])
+
+  base_plot <- ggplot(data = out, aes(x = xist, y = y_genes)) +
+    geom_point(aes(col = status, shape = Sex)) +
+    scale_colour_manual(
+      values = alpha(c("Passed" = "black",
+                       "Likely contaminated" = "yellow",
+                       "Sex mismatch" = "orange",
+                       "Contaminated and\nsex mismatch" = "red"),
+                     0.5),
+      name = "Passed checks") +
+    coord_cartesian(ylim = c(0, max_exp), xlim = c(0, max_exp)) +
+    theme_bw() + ylab(paste0("mean of Y genes - min(mean of Y genes)\n(n=", nr_of_y_genes, ")")) + xlab("XIST - min(XIST)")
+
+  ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST2.png"), height = 5, width = 7, units = "in", dpi = 300, type = "cairo")
+  ggsave(paste0(args$output, "/exp_plots/SexSpecificGenesXIST2.pdf"), height = 5, width = 7, units = "in", dpi = 300)
+
+
+  # data.grid <- expand.grid(s.1 = seq(0, max_expression, length.out=100),
+  #                          s.2 = seq(0, max_expression, length.out=100))
+  #
+  # q.samp <- cbind(data.grid, prob = mvtnorm::dmvnorm(data.grid, mean = means, sigma = sigmas))
 }
 
 ############
@@ -675,7 +844,7 @@ if (nrow(and) < 100){stop("Less than 100 samples overlap with QCd genotype data!
 summary_table_temp <- data.table(Stage = "Samples which overlap with QCd genotype info", Nr_of_features = nrow(and), Nr_of_samples = ncol(and) - 1)
 summary_table <- rbind(summary_table, summary_table_temp)
 
-if (!args$platform %in% c("HT12v3", "HT12v4", "HuRef8", "RNAseq", "AffyU219", "AffyHumanExon")){stop("Platform has to be one of HT12v3, HT12v4, HuRef8, RNAseq, AffyU291, AffyHuEx")}
+if (!args$platform %in% c("HT12v3", "HT12v4", "HuRef8", "RNAseq", "AffyU219", "AffyHumanExon", "RNAseq_HGNC")){stop("Platform has to be one of HT12v3, HT12v4, HuRef8, RNAseq, AffyU291, AffyHuEx, RNAseq_HGNC")}
 
 iterative_outliers <- IterativeOutlierDetection(
   and, sd_threshold = args$sd, platform = args$platform)
@@ -696,6 +865,10 @@ if (args$platform %in% c("HT12v3", "HT12v4", "HuRef8")){
 }
 if (args$platform %in% c("RNAseq")){
   and_p <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+  and_p <- log2(and_p + 0.25)
+}
+if (args$platform %in% c("RNAseq_HGNC")){
+  and_p <- RNAseq_HGNC_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
   and_p <- log2(and_p + 0.25)
 }
 if (args$platform %in% c("AffyU219", "AffyHumanExon")){
@@ -747,6 +920,8 @@ and <- and[, colnames(and) %in% c("Feature", exp_non_outliers), with = FALSE]
 summary_table_temp <- data.table(Stage = "After removal of all expression outliers (MDS)", Nr_of_features = nrow(and), Nr_of_samples = ncol(and) - 1)
 summary_table <- rbind(summary_table, summary_table_temp)
 
+fwrite(and, "7_debug_before_sampleswap.txt", sep = "\t", quote = FALSE)
+
 expression_based_sample_swap_out <- ExpressionBasedSampleSwapIdentification(and, summary_table)
 
 exp_non_outliers <- colnames(expression_based_sample_swap_out$and_pp)
@@ -762,6 +937,10 @@ if (args$platform %in% c("HT12v3", "HT12v4", "HuRef8")){
   gene_cpm_summary <- rnaseq_cpm_summary(and, args$genotype_to_expression_linking)
   fwrite(gene_cpm_summary, paste0(args$output, "/exp_data_summary/", "cpm_summary.txt"), sep = "\t", quote = FALSE, row.names = TRUE)
   and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
+} else if (args$platform %in% c("RNAseq_HGNC")){
+  gene_cpm_summary <- rnaseq_cpm_summary(and, args$genotype_to_expression_linking)
+  fwrite(gene_cpm_summary, paste0(args$output, "/exp_data_summary/", "cpm_summary.txt"), sep = "\t", quote = FALSE, row.names = TRUE)
+  and_pp <- RNAseq_HGNC_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
 } else if (args$platform %in% c("AffyU219", "AffyHumanExon")){
   and_pp <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
 }
@@ -855,6 +1034,8 @@ if (args$platform %in% c("HT12v3", "HT12v4", "HuRef8")){
 and_pp <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, normalize = FALSE)
 } else if (args$platform %in% c("RNAseq")){
 and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, normalize = FALSE)
+} else if (args$platform %in% c("RNAseq_HGNC")){
+and_pp <- RNAseq_HGNC_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, normalize = FALSE)
 } else if (args$platform %in% c("AffyU219", "AffyHumanExon")){
 and_pp <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
 }
@@ -870,6 +1051,9 @@ and_pp <- illumina_array_preprocess(and, args$genotype_to_expression_linking, ar
 and_pp <- log2(and_pp)
 } else if (args$platform %in% c("RNAseq")){
 and_pp <- RNAseq_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, normalize = TRUE)
+and_pp <- log2(and_pp + 0.25)
+} else if (args$platform %in% c("RNAseq_HGNC")){
+and_pp <- RNAseq_HGNC_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples, normalize = TRUE)
 and_pp <- log2(and_pp + 0.25)
 } else if (args$platform %in% c("AffyU291", "AffyHuEx")){
 and_pp <- Affy_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
