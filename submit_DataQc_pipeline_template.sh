@@ -57,6 +57,7 @@ output_path=../output # Output path
 # --plink_executable [path to plink executable (PLINK v1.90b6.26 64-bit)]
 # --plink2_executable [path to plink2 executable (PLINK v2.00a3.7LM 64-bit Intel)]
 # --reference_1000g_folder [path to folder with 1000G reference data]
+# --chain_path [folder with hg19->hg38 and hg38->hg19 chain files]
 
 # Command:
 NXF_VER=21.10.6 ${nextflow_path}/nextflow run DataQC.nf \
