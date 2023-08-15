@@ -450,7 +450,7 @@ process GenotypeQC {
       file(plink_executable) from plink_executable_ch.ifEmpty { 'EMPTY' }
       file(plink2_executable) from plink2_executable_ch.ifEmpty { 'EMPTY' }
       file(reference_1000g_folder) from reference_1000g_ch.ifEmpty { 'EMPTY' }
-      path chain_path from chain_path_ch.ifEmpty { 'EMPTY' }
+      file(chain_path) from chain_path_ch.ifEmpty { 'EMPTY' }
 
     output:
       path ('outputfolder_gen') into output_ch_genotypes
