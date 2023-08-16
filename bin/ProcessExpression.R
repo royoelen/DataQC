@@ -6,7 +6,6 @@ library(optparse)
 library(patchwork)
 library(MASS)
 library(dplyr)
-library(mclust)
 
 setDTthreads(8)
 
