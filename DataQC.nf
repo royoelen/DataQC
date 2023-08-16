@@ -41,6 +41,7 @@ def helpMessage() {
       --plink_executable            Path to plink executable. By default this is automatically downloaded from internet. Use this setting when you have to work offline.
       --plink2_executable           Path to plink2 executable. By default this is automatically downloaded from internet. Use this setting when you have to work offline.
       --reference_1000g_folder      Path to 1000g reference folder. By default this is automatically downloaded from internet. Use this setting when you have to work offline.
+      --chain_path                  Path to folder containing hg19ToHg38 and hg38ToHg19 chain files. By default these are automatically downloaded from internet. Use this setting when you have to work offline and your build is hg38.
 
     """.stripIndent()
 }
@@ -66,6 +67,7 @@ params.fam = ''
 params.plink_executable = ''
 params.plink2_executable = ''
 params.reference_1000g_folder = ''
+params.chain_path = ''
 
 if (params.vcf != '') {
 
@@ -147,6 +149,15 @@ if (params.reference_1000g_folder != '') {
 } else {
   Channel.empty().set {reference_1000g_ch}
 }
+if (params.chain_path != '') {
+  Channel
+    .fromPath(params.chain_path)
+    .ifEmpty('EMPTY')
+    .set { chain_path_ch }
+} else {
+  Channel.empty().set {chain_path_ch}
+}
+
 
 params.GenOutThresh = 0.4
 params.GenSdThresh = 3
@@ -202,6 +213,10 @@ if(params.InclusionList!="$baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt
 if(params.ExclusionList!="$baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt") summary['Exclusion list'] = params.ExclusionList
 if(params.preselected_sex_check_vars) summary['Pruned variants for sex check'] = params.preselected_sex_check_vars
 summary['Expression platform']      = params.exp_platform
+summary['Plink executable']         = params.plink_executable
+summary['Plink 2 executable']       = params.plink2_executable
+summary['Reference 1000G folder']   = params.reference_1000g_folder
+summary['Chain folder']             = params.chain_path
 summary['Output dir']               = params.outdir
 summary['Working dir']              = workflow.workDir
 summary['Container Engine']         = workflow.containerEngine
@@ -435,6 +450,7 @@ process GenotypeQC {
       file(plink_executable) from plink_executable_ch.ifEmpty { 'EMPTY' }
       file(plink2_executable) from plink2_executable_ch.ifEmpty { 'EMPTY' }
       file(reference_1000g_folder) from reference_1000g_ch.ifEmpty { 'EMPTY' }
+      file(chain_path) from chain_path_ch.ifEmpty { 'EMPTY' }
 
     output:
       path ('outputfolder_gen') into output_ch_genotypes
@@ -452,6 +468,7 @@ process GenotypeQC {
     fam_arg = (params.fam != '') ? "--fam $fam_annot" : ""
     plink_arg = (params.plink_executable != '') ? "--plink_executable $plink_executable" : ""
     plink2_arg = (params.plink2_executable != '') ? "--plink2_executable $plink2_executable" : ""
+    chain_path_arg = (params.chain_path != '') ? "--chain_path $chain_path" : ""
 
     """
     Rscript --vanilla $baseDir/bin/GenQcAndPosAssign.R  \
@@ -470,7 +487,8 @@ process GenotypeQC {
     --liftover_path $baseDir/bin/liftOver \
     $plink_arg \
     $plink2_arg \
-    $reference_1000g_prefix_arg
+    $reference_1000g_prefix_arg \
+    $chain_path_arg
     """
     
 }
