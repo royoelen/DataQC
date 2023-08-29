@@ -1065,4 +1065,3 @@ fwrite(gene_summary, paste0(args$output, "/exp_data_summary/", "processed_gene_s
 # Write out summary table about features and samples
 colnames(summary_table) <- c("Stage", "Nr. of features", "Nr. of samples")
 fwrite(summary_table, paste0(args$output, "/exp_data_summary/", "summary_table.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
- d
