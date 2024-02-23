@@ -89,7 +89,7 @@ illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
     exp$Probe <- as.character(exp$Probe)
     emp$Probe <- as.character(emp$Probe)
 
-    fwrite(exp, "1_debug_raw_readin.txt", sep = "\t", quote = FALSE)
+    #fwrite(exp, "1_debug_raw_readin.txt", sep = "\t", quote = FALSE)
 
     exp <- merge(exp, emp, by = "Probe")
     exp <- as.data.frame(exp)
@@ -98,7 +98,7 @@ illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
     exp <- exp[, -1]
     exp <- as.matrix(exp)
 
-    fwrite(exp, "2_debug_raw_ProbesReplaced.txt", sep = "\t", quote = FALSE)
+    #fwrite(exp, "2_debug_raw_ProbesReplaced.txt", sep = "\t", quote = FALSE)
 
     # Remove samples which are not in the gte or in genotype data
     gte <- fread(args$genotype_to_expression_linking, header = FALSE, keepLeadingZeros = TRUE, colClasses = "character")
@@ -113,7 +113,7 @@ illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
 
     exp <- exp[, colnames(exp) %in% gte$V2]
 
-    fwrite(exp, "3_debug_raw_ProbesReplaced_SamplesFilteredBasedOnGte.txt", sep = "\t", quote = FALSE)
+    #fwrite(exp, "3_debug_raw_ProbesReplaced_SamplesFilteredBasedOnGte.txt", sep = "\t", quote = FALSE)
 
     exp <- exp[, base::order(colnames(exp))]
     gte <- gte[base::order(gte$V2), ]
@@ -128,7 +128,7 @@ illumina_array_preprocess <- function(exp, gte, gen, normalize = TRUE){
     rownames(exp_n) <- rownames(exp)
     }else{exp_n <- exp}
 
-    fwrite(exp, "4_debug_raw_ProbesReplaced_SamplesFilteredBasedOnGteNormalised.txt", sep = "\t", quote = FALSE)
+    #fwrite(exp, "4_debug_raw_ProbesReplaced_SamplesFilteredBasedOnGteNormalised.txt", sep = "\t", quote = FALSE)
 
 
     # log2 transformation (not needed because INT is applied)
@@ -435,9 +435,9 @@ IterativeOutlierDetection <- function(
 
     if (platform %in% c("HT12v3", "HT12v4", "HuRef8")){
       and_p <- illumina_array_preprocess(and, args$genotype_to_expression_linking, args$genotype_samples)
-      fwrite(and_p, "5_debug_normalised_exp.txt", sep = "\t", quote = FALSE)
+      #fwrite(and_p, "5_debug_normalised_exp.txt", sep = "\t", quote = FALSE)
       and_p <- log2(and_p)
-      fwrite(and_p, "6_debug_normalised_log2_exp.txt", sep = "\t", quote = FALSE)
+      #fwrite(and_p, "6_debug_normalised_log2_exp.txt", sep = "\t", quote = FALSE)
       #and_p <- apply(and_p, 1, INT_transform)
       #and_p <- t(and_p)
       #and_p <- apply(and_p, 1, center_data)
@@ -564,11 +564,12 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
   y_genes <- emp_probe_mapping[emp_probe_mapping$chromosome_name == "Y", ]$Ensembl
   y_genes <- and_pp[rownames(and_pp) %in% y_genes, ]
 
-  fwrite(xist, "7_debug_xist_genes.txt")
-  fwrite(y_genes, "7_debug_y_chr_genes.txt")
-  message(paste("Nr. of Y genes:", nr_of_y_genes))
+  #fwrite(xist, "7_debug_xist_genes.txt")
+  #fwrite(y_genes, "7_debug_y_chr_genes.txt")
+
 
   nr_of_y_genes <- nrow(y_genes)
+  message(paste("Nr. of Y genes:", nr_of_y_genes))
 
   if (nrow(y_genes) > 0){
 
@@ -919,7 +920,7 @@ and <- and[, colnames(and) %in% c("Feature", exp_non_outliers), with = FALSE]
 summary_table_temp <- data.table(Stage = "After removal of all expression outliers (MDS)", Nr_of_features = nrow(and), Nr_of_samples = ncol(and) - 1)
 summary_table <- rbind(summary_table, summary_table_temp)
 
-fwrite(and, "7_debug_before_sampleswap.txt", sep = "\t", quote = FALSE)
+#fwrite(and, "7_debug_before_sampleswap.txt", sep = "\t", quote = FALSE)
 
 expression_based_sample_swap_out <- ExpressionBasedSampleSwapIdentification(and, summary_table)
 
