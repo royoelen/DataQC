@@ -173,7 +173,7 @@ snp_modifyBuild2 <- function(info_snp,
 
   # Need chain file
   # url <- paste0("ftp://hgdownload.cse.ucsc.edu/goldenPath/", from, "/liftOver/",
-  #               from, "To", tools::toTitleCase(to), ".over.chain.gz")
+  #                from, "To", tools::toTitleCase(to), ".over.chain.gz")
   chain <- tempfile(fileext = ".over.chain.gz")
   chain_file <- paste0(chain_path, "/", from, "To", tools::toTitleCase(to), ".over.chain.gz")
   message(chain_file)
@@ -782,7 +782,7 @@ map_new <- setNames(target_bed$map[-3], c("chr", "rsid", "pos", "a1", "a0"))
 
 map_new_lifted <- snp_modifyBuild2(map_new, 
 liftOver = R.utils::getRelativePath(args$liftover_path), 
-from = "hg38", 
+from = ucsc_code,
 to = "hg19", 
 chain_path = chain_path)
 
