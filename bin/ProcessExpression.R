@@ -607,13 +607,21 @@ ExpressionBasedSampleSwapIdentification <- function(and, summary_table) {
       y_genes$y_genes > y_genes$xist * middle_slope ~ 1,
       y_genes$y_genes < y_genes$xist * middle_slope ~ 2
     )
-
+    if (nrow(y_genes[y_genes$Sex == 1 & y_genes$expressionSexNaive == 1, ]) > 0){
     x_expression_median <- median(y_genes[y_genes$Sex == 1 & y_genes$expressionSexNaive == 1, "xist"])
+    } else {x_expression_median <- 0}
+    
+    if (nrow(y_genes[y_genes$Sex == 2 & y_genes$expressionSexNaive == 2, ]) > 0){
     y_expression_median <- median(y_genes[y_genes$Sex == 2 & y_genes$expressionSexNaive == 2, "y_genes"])
+    } else {y_expression_median <- 0}
 
+    if (nrow(y_genes[y_genes$Sex == 2 & y_genes$expressionSexNaive == 2, ]) > 0){
     x_expression_min <- min(y_genes[y_genes$Sex == 2 & y_genes$expressionSexNaive == 2, "xist"])
+    } else {x_expression_min <- 0}
+    if(nrow(y_genes[y_genes$Sex == 1 & y_genes$expressionSexNaive == 1, ]) > 0){
     y_expression_min <- min(y_genes[y_genes$Sex == 1 & y_genes$expressionSexNaive == 1, "y_genes"])
-
+    } else {y_expression_min <- 0}
+    
     y_max <- max(y_genes$y_genes)
     x_max <- max(y_genes$xist)
 
