@@ -534,6 +534,7 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
+      --sd ${sd} \
       --contamination_slope ${contamination_slope} \
       --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_IlluminaHT12v4.txt \
@@ -547,6 +548,7 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
+      --sd ${sd} \
       --contamination_slope ${contamination_slope} \
       --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_IlluminaHuRef8.txt \
@@ -560,6 +562,7 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
+      --sd ${sd} \
       --contamination_slope ${contamination_slope} \
       --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_RNAseq.txt \
@@ -573,6 +576,7 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
+      --sd ${sd} \
       --contamination_slope ${contamination_slope} \
       --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_AffyU219.txt \
@@ -586,6 +590,7 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
+      --sd ${sd} \
       --contamination_slope ${contamination_slope} \
       --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/EmpiricalProbeMatching_AffyHumanExon.txt \
@@ -599,6 +604,7 @@ process GeneExpressionQC {
       --sex_info ${sexcheck} \
       --geno_filter ${geno_filter} \
       --platform ${exp_platform} \
+      --sd ${sd} \
       --contamination_slope ${contamination_slope} \
       --contamination_area ${contamination_area} \
       --emp_probe_mapping $baseDir/data/HgncToEnsemblProbeMatching.txt \
